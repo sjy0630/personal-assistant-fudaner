@@ -1,6 +1,6 @@
 # Fudaner：复旦学生的主动型学业智能体 · 产品需求文档（PRD）
 
-> 版本：v0.3 · 日期：2026-11-03 · 状态：初赛开发中
+> 版本：v0.4 · 日期：2026-11-03 · 状态：初赛开发中
 > 暂定名：**Fudaner**（正式名称待定，备选：「旦旦」「旦小助」）
 > 参赛：**2026 复旦大学未来智造智能体大赛**
 > **初赛材料提交截止：2026-11-08（周日）23:59**
@@ -9,7 +9,14 @@
 
 ## 0. 版本说明与已定决策
 
-### 0.1 本版变更（v0.2 → v0.3）
+### 0.1 本版变更（v0.3 → v0.4）
+
+- 确定 **统一身份认证（UIS）登录是所有校内平台的唯一入口**，用户登录一次，各平台共用登录状态（§7.3）。
+- 新增 **课程总表**：以「课程代码 + 教学班」为主键，把 eLearning、iCourse、邮件、课表对应起来，作为跨平台串联的基础（§7.4）。
+- 新增 **MCP 连接层**：每个平台封装成一个 MCP 服务，初赛在应用内部运行，决赛后拆成可独立使用的 MCP 服务（§7.5）。
+- 相应调整目录结构、数据模型、分工和路线图。
+
+### v0.2 → v0.3 变更
 
 - 对齐比赛要求：赛道选择（§1.2）、评审标准对应关系（§1.3）、提交材料清单（§12）。
 - 增加 **现有方案调研（§2.4）**。结论：校园通知聚合已经有「旦旦活动簿」在做，eLearning、iCourse 也各有单点工具。因此本产品的差异化定位调整为 **「跨平台串联 + 主动提醒的个人学业智能体」**，通知雷达降为辅助功能。
@@ -33,6 +40,9 @@
 | D8 | 演示保障 | 内置「演示模式」（模拟数据） | 评审没有复旦账号；接入失败时也能完整演示；视频中不出现真实个人信息 |
 | D9 | 主赛道 | 智慧学习与科研助手 | 核心场景是课程、作业、学习 |
 | D10 | 企业专项 | 兼报英特尔「混合 AI Agent」赛道 | 桌面端 + 本地/云端模型协同，与该赛道要求天然契合；可以和综合奖兼得 |
+| D11 | 校内平台登录 | **统一走 UIS 统一身份认证**，在内嵌浏览器窗口中由用户自己登录，各平台共用登录状态 | 所有校内学习平台都接 UIS；用户只登录一次；不保存密码、不绕过验证码 |
+| D12 | 平台接入的组织方式 | **每个平台做成一个 MCP 服务**；初赛在应用内部运行，决赛后拆成独立服务 | 智能体通过统一的工具协议调用；4 人分头开发互不干扰；以后其他 AI 工具（Claude、TRAE、Cursor 等）也能直接使用 |
+| D13 | 跨平台关联的依据 | 课程总表，以「课程代码 + 教学班」为主键 | 各平台都能拿到课程代码，是最稳定的对应依据 |
 
 ---
 
@@ -58,7 +68,7 @@
 
 | 评审标准 | 我们怎么体现 |
 |---|---|
-| **技术实现** | 智能体能调用工具、规划多步任务；跨平台数据关联；本地 + 云端混合模型路由；用户自带模型（BYOK）适配多家厂商 |
+| **技术实现** | UIS 统一认证 + MCP 连接层，把复旦各平台变成智能体可调用的标准工具；智能体能规划多步任务；跨平台数据关联；本地 + 云端混合模型路由；用户自带模型（BYOK）适配多家厂商 |
 | **场景契合度** | 真实痛点：复旦已有多个开源项目分别解决 DDL 提醒、回放摘要等单点问题，说明需求真实存在（§2.4）；本产品把它们统一成一个智能体 |
 | **工程完成度** | 可安装的桌面应用；真实接入至少 2 个校内平台；完整的演示模式；有测试样例 |
 | **展示效果** | 系统弹窗主动推送、每日简报、对话中可见的工具调用过程，在视频里直观好懂 |
@@ -155,8 +165,9 @@
 |---|---|---|
 | 云端模型配置（BYOK） | OpenAI 兼容协议（Base URL + Key + 模型名）；内置 DeepSeek / 通义千问 / Kimi / 智谱 / OpenAI 预设；一键测试连通性 | **P0** |
 | 本地模型配置 | 连接本机的 OpenAI 兼容端点（Ollama 或 OpenVINO 方案，§6.3），自动检测是否可用 | **P0**（英特尔赛道必需） |
-| UIS 登录 | 在应用内弹出浏览器窗口，用户自己在复旦统一身份认证页面登录（验证码、二次验证都由用户自己处理）。应用只保存登录后的会话 Cookie，不读取、不保存密码 | **P0** |
-| eLearning 同步 | 使用 UIS 会话调用 Canvas REST API：课程、作业、提交状态、课程公告。会话过期时提示用户重新登录 | **P0** |
+| UIS 统一登录 | 所有校内平台的唯一登录入口。在应用内弹出浏览器窗口，用户自己在复旦统一身份认证页面登录（验证码、二次验证都由用户自己处理）；登录一次，各平台共用。应用只保存登录后的会话，不读取、不保存密码。设置页显示每个平台的连接状态（详见 §7.3） | **P0** |
+| eLearning 同步 | 使用 UIS 会话调用 Canvas REST API：课程（含课程代码）、作业、提交状态、课程公告。会话过期时提示用户重新登录 | **P0** |
+| 课程总表 | 首次同步后自动建立：以课程代码 + 教学班为主键，汇总课程名、教师、助教邮箱，以及该课程在各平台的编号；匹配不确定的由用户确认（详见 §7.4） | **P0** |
 | 学生邮箱同步 | IMAP 只读拉取近 14 天邮件。据开源项目推断，学生邮箱 @m.fudan.edu.cn 托管在腾讯企业邮（`imap.exmail.qq.com:993`），**待实测**；可能需要在网页邮箱里开启 IMAP 并生成客户端专用密码 | **P0** |
 | 演示模式 | 一键加载内置模拟数据，不需要任何账号 | **P0** |
 | iCourse 回放 | 用 UIS 会话获取已选课程的回放列表，在本地完成语音转写，再生成摘要 | P1 |
@@ -204,17 +215,16 @@
 
 ### 5.7 对话智能体 · P0
 
-模型可以调用以下工具（function calling）：
+智能体作为 **MCP 客户端**，调用平台连接层中各个 MCP 服务提供的工具（完整工具列表见 §7.5）。按用途归纳：
 
-| 工具 | 作用 | 优先级 |
+| 能力 | 来自哪个 MCP 服务 | 优先级 |
 |---|---|---|
-| `search_items` | 按关键词、类型、课程、时间检索作业 / 公告 / 邮件 | P0 |
-| `list_deadlines` | 列出某个时间范围内的 DDL 及完成状态 | P0 |
-| `get_course_info` | 查询课程信息、相关作业和邮件 | P0 |
-| `create_todo` | 创建待办和提醒（执行前在界面上请用户确认） | P0 |
-| `make_study_plan` | 根据 DDL、工作量估计和用户偏好生成学习计划 | P0 |
-| `search_replay` | 检索课程回放转写 | P1 |
-| `draft_email` | 起草邮件（只出草稿） | P1 |
+| 查作业、公告、提交状态 | `fudan-elearning` | P0 |
+| 搜邮件、列出需要处理的邮件 | `fudan-mail` | P0 |
+| 查某门课在各平台的全部信息 | `fudan-courses` | P0 |
+| 列出 DDL、创建待办（执行前需用户确认）、读取画像、生成学习计划 | `fudaner-local` | P0 |
+| 检索课程回放转写 | `fudan-icourse` | P1 |
+| 起草邮件（只出草稿） | `fudaner-local` | P1 |
 
 - 界面上**显示工具调用过程**（例如「正在查询下周的 DDL…」），让评审直观看到智能体在做什么。
 - 通用能力：写作润色、翻译、总结。
@@ -316,34 +326,54 @@
 
 ### 7.1 架构
 
+整体分四层：**统一认证层 → 平台连接层（MCP）→ 数据与智能层 → 交互层**。
+
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph PC[用户电脑 · 英特尔酷睿 Ultra]
-    subgraph App[Fudaner 桌面端 · Electron]
-      subgraph Main[主进程 · Node.js]
-        SCH[定时调度器] --> S1[eLearning 同步<br/>Canvas API + UIS 会话]
-        SCH --> S2[邮箱同步<br/>IMAP 只读]
-        SCH -.P1.-> S3[iCourse 同步]
-        S1 --> DB[(SQLite 本地库)]
-        S2 --> DB
-        S3 -.-> DB
+    subgraph App[Fudaner 桌面端 · Electron 主进程]
+      subgraph L1[① 统一认证层]
+        LW[内嵌登录窗口<br/>UIS 统一身份认证] --> AM[认证管理器<br/>共享会话 persist:fudan]
+        MC[邮箱凭据<br/>safeStorage 加密]
+      end
+      subgraph L2[② 平台连接层 · MCP 服务]
+        M1[fudan-elearning]
+        M2[fudan-icourse · P1]
+        M3[fudan-mail]
+        M4[fudan-courses<br/>课程总表]
+        M5[fudaner-local<br/>待办 / 画像 / 计划]
+      end
+      AM --> M1
+      AM --> M2
+      MC --> M3
+      subgraph L3[③ 数据与智能层]
+        SCH[同步调度器] --> DB[(SQLite 本地库)]
         DB --> AI[AI 处理<br/>分类 / 抽取 / 关联]
-        AI --> DB
-        DB --> PE[主动推送引擎]
-        PE --> NT[系统通知]
-        AG[对话智能体<br/>工具调用] <--> DB
+        AG[对话智能体<br/>MCP 客户端]
+        PE[主动推送引擎]
         RT{模型路由}
         AI --> RT
         AG --> RT
+        DB --> PE
       end
-      UI[渲染进程 · React<br/>今日 / 收件箱 / 对话 / 设置] <-->|IPC| Main
-      LW[内嵌登录窗口<br/>UIS 统一身份认证] -->|会话 Cookie| S1
+      M1 --> SCH
+      M2 --> SCH
+      M3 --> SCH
+      M4 <--> DB
+      AG -->|MCP 工具调用| L2
     end
+    UI[④ 交互层 · React<br/>今日 / 收件箱 / 对话 / 设置] <-->|IPC| App
+    PE --> NT[系统通知]
     LOCAL[本地模型<br/>Ollama / OpenVINO<br/>iGPU / NPU]
   end
   RT -->|隐私任务| LOCAL
   RT -->|复杂推理<br/>用户自己的 Key| CLOUD[(云端模型 API)]
 ```
+
+**数据怎么流动：**
+
+- **后台同步**：调度器定时调用各连接器，把数据写进本地库；AI 处理分类、抽取、关联；推送引擎根据结果决定是否提醒。
+- **对话**：智能体作为 MCP 客户端调用各 MCP 服务的工具。工具默认读本地库（快，离线也能用），需要最新数据时再实时访问平台。
 
 ### 7.2 技术栈
 
@@ -355,64 +385,163 @@ flowchart LR
 | 定时任务 | node-cron | 够用 |
 | 邮件 | imapflow + mailparser | 主流 IMAP 库 |
 | 模型调用 | openai SDK（指定 baseURL） | 云端和本地统一接口 |
+| 连接层 | MCP 官方 TypeScript SDK（`@modelcontextprotocol/sdk`）+ zod | 工具定义标准化；初赛用进程内传输，之后切换到 stdio 即可独立运行 |
 | 本地模型 | Ollama / OpenVINO | 见 §6.3 |
 | 本地 ASR（P1） | sherpa-onnx + SenseVoice | 有 Node 绑定，CPU 可运行 |
 | 打包 | electron-builder | 产出 Windows .exe |
 
-### 7.3 UIS 登录与会话（关键设计）
+### 7.3 统一认证层：一次 UIS 登录，所有校内平台共用
 
-据开源项目实测，复旦 eLearning 的 Canvas Token 与 UIS 会话绑定，**约 1 小时就会失效**，不能长期使用。因此采用以下方案：
+**原则：所有校内平台都通过 UIS 统一身份认证登录，这是唯一入口。**
 
-1. 用户在设置页点击「登录复旦账号」，应用弹出一个独立的浏览器窗口（使用独立的持久化 session 分区），打开 eLearning 登录页，跳转到 UIS。
-2. **用户自己输入账号密码**，完成验证码等步骤。应用不注入脚本，也不读取表单内容。
-3. 登录成功并跳回 eLearning 后，窗口自动关闭，会话 Cookie 保存在这个 session 分区中。
-4. 同步时，主进程用这个 session 发起 Canvas API 请求（`session.fetch`）。
-5. 会话过期后，弹出系统通知「复旦账号登录已过期，点击重新登录」。
+据开源项目实测，eLearning 的 Canvas Token 与 UIS 会话绑定，约 1 小时就会失效，不能作为长期凭据；而 eLearning、iCourse、教务系统都接入了 UIS 单点登录。所以只要维护好一份 UIS 登录状态，就能访问所有校内平台。
 
-**好处**：不保存密码，安全性最高；验证码和二次验证都由用户处理，不需要做任何绕过；和用户自己用浏览器访问的行为完全一致。
-**代价**：会话过期后需要用户重新登录。实际有效时长需要实测；过期太快的话，P1 可以提供「记住密码自动重新登录」选项，必须由用户主动开启，密码用系统加密保存。
+**登录流程：**
 
-### 7.4 目录结构
+1. 用户在引导页或设置页点击「登录复旦账号」。
+2. 应用弹出一个内嵌浏览器窗口，使用独立的持久化会话分区 `persist:fudan`，打开 eLearning，页面自动跳转到 UIS 登录页。
+3. **用户自己输入账号密码**，完成验证码、二次验证等步骤。应用不注入脚本，也不读取表单内容。
+4. 跳回 eLearning 后，认证管理器判定登录成功，关闭窗口。UIS 和 eLearning 的会话都保存在 `persist:fudan` 分区中。
+5. 认证管理器随后**在后台依次「激活」其他平台**：在同一会话分区中访问 iCourse 等平台的入口，UIS 发现已经登录，会自动完成单点登录跳转，不需要用户再输一次密码。
+6. 设置页显示每个平台的状态：✅ 已连接 / ⚠️ 需要重新登录 / ❌ 不可用。
 
-```
-src/
-  main/                   # 主进程
-    auth/uis.ts           # 内嵌登录窗口与会话管理
-    sources/              # 数据源：elearning.ts / mail.ts / icourse.ts / demo.ts
-    ai/
-      router.ts           # 本地 / 云端路由
-      llm.ts              # OpenAI 兼容客户端
-      classify.ts / extract.ts / link.ts / brief.ts / plan.ts
-      agent.ts            # 对话智能体与工具
-    engine/               # scheduler.ts / notifier.ts
-    db/                   # schema.sql / repo.ts
-    ipc.ts
-  renderer/               # React 页面：Today / Inbox / Chat / Settings / Onboarding
-  shared/                 # 前后端共享类型
-demo/                     # 演示模式数据（JSON）
-tests/                    # 测试样例（分类、抽取、关联）
-```
-
-每个数据源实现同一个接口，方便 4 个人并行开发：
+**认证管理器（AuthManager）对外只提供一个接口**，连接器不关心登录细节：
 
 ```ts
-interface SourceAdapter {
-  id: string;
-  sync(since: Date): Promise<Item[]>;   // 返回统一格式的事项
-  test(): Promise<SourceStatus>;        // 连接状态：ok / need_login / error
+interface FudanAuth {
+  // 用共享的 UIS 会话发请求；会话失效时抛出 NeedLoginError
+  fetch(platform: 'elearning' | 'icourse' | 'jwfw', url: string, init?: RequestInit): Promise<Response>;
+  status(platform: string): Promise<'ok' | 'need_login' | 'unavailable'>;
+  requestLogin(): Promise<void>;   // 弹出登录窗口
 }
 ```
 
-### 7.5 数据模型
+**会话过期处理：**
+
+- 连接器收到 `NeedLoginError` 后，暂停该平台的同步，推送引擎弹出系统通知「复旦账号登录已过期，点击重新登录」。
+- 每次同步前先做一次轻量检查（例如请求 Canvas 的 `/api/v1/users/self`）。
+- 实际会话有效时长需要实测。如果过期太快，P1 提供「记住密码，自动重新登录」选项：必须由用户主动开启，密码用 safeStorage 加密保存；遇到验证码时仍然弹窗交给用户。
+
+**校外访问：** iCourse 等平台在校外可能需要经过 WebVPN（webvpn.fudan.edu.cn，同样走 UIS 登录）。认证管理器负责判断当前网络环境，必要时把平台地址转换为 WebVPN 地址，连接器不感知这一点。**待实测。**
+
+**邮箱是例外：** 学生邮箱不走 UIS，而是用 IMAP + 客户端专用密码，凭据单独加密保存。
+
+**为什么这样设计：**
+
+- 用户只登录一次；不保存密码，安全性最高。
+- 验证码、二次验证都由用户本人完成，不做任何绕过，访问行为和用户自己用浏览器完全一致。
+- 新增平台时只需要写连接器，不需要再处理登录。
+
+### 7.4 课程总表：跨平台串联的基础
+
+**主键：课程代码 + 教学班**（形如 `COMP130004.01`，具体格式待实测）。
+
+| 字段 | 来源 |
+|---|---|
+| 课程代码、教学班、课程名、学期 | eLearning 课程信息（主要来源） |
+| 教师、助教姓名和邮箱 | eLearning 课程成员列表 |
+| eLearning 课程 ID | eLearning |
+| iCourse 课程 ID | iCourse 课程列表，按课程代码 + 教学班匹配；匹配不上时按课程名 + 教师匹配 |
+| 上课时间、地点 | 教务课表（P2）或用户手动填写 |
+
+**匹配规则：**
+
+1. 课程代码 + 教学班完全一致 → 自动关联。
+2. 只有课程名 + 教师一致 → 标记为「待确认」，在设置页由用户一键确认。
+3. 都不一致 → 不关联，用户可以手动指定。
+
+**其他数据怎么挂到课程上：**
+
+- **作业、公告**：来自 eLearning，天然带课程 ID。
+- **回放**：来自 iCourse，通过课程总表对应。
+- **邮件**：没有课程代码。先按规则判断（发件人是不是该课程的教师或助教；主题里有没有课程名或课程代码），规则判断不出来的，再交给本地模型判断（附录 B）。
+
+### 7.5 平台连接层：MCP 服务
+
+**每个平台封装成一个 MCP 服务**，对外提供标准化的工具。智能体作为 MCP 客户端调用这些工具。
+
+| MCP 服务 | 工具（全部只读，除非另行注明） | 优先级 |
+|---|---|---|
+| `fudan-elearning` | `list_courses`、`list_assignments(course?, due_before?, status?)`、`get_assignment(id)`、`list_announcements(course?, since?)`、`get_submission_status(assignment_id)` | P0 |
+| `fudan-mail` | `search_mail(query, since?, category?)`、`get_mail(id)`、`list_action_required()` | P0 |
+| `fudan-courses` | `list_courses()`、`get_course(code)`：返回该课程在各平台的数据汇总（作业、公告、相关邮件、回放） | P0 |
+| `fudaner-local` | `list_deadlines(range)`、`create_todo(...)`（**写操作，需用户确认**）、`get_profile()`、`make_study_plan(range)` | P0 |
+| `fudan-icourse` | `list_replays(course?)`、`search_transcript(query, course?)`、`get_replay_summary(id)` | P1 |
+| `fudan-jwfw`（教务） | `get_timetable()`、`get_exams()` | P2 |
+
+**每个连接器分两层：**
 
 ```
+fudan-elearning/
+  client.ts     # 平台客户端：负责真正访问 eLearning，依赖 FudanAuth 接口
+  tools.ts      # MCP 工具定义：名称、说明、参数（zod）、返回格式
+  server.ts     # 创建 MCP 服务，注册工具
+```
+
+- 后台同步调度器直接调用 `client.ts`，把数据写进本地库。
+- 智能体通过 MCP 调用 `tools.ts` 中的工具。工具默认查本地库；参数带 `refresh: true` 时才实时访问平台。
+
+**初赛：应用内部运行**
+
+- 所有 MCP 服务和智能体都在 Electron 主进程里，用 MCP SDK 的进程内传输（InMemoryTransport）连接。
+- 好处：不需要额外进程，打包简单；但代码已经是标准 MCP 结构，演示时可以展示「智能体通过 MCP 调用复旦各平台」。
+
+**决赛后：拆成独立的 MCP 服务**
+
+- 把 `packages/mcp-fudan-*` 单独发布，传输方式从进程内改成 stdio，就能在 Claude Desktop、Claude Code、TRAE、Cursor 等支持 MCP 的工具中使用。
+- 独立运行时没有 Electron 的内嵌窗口，`FudanAuth` 改用其他实现：
+  - 方案一：一个独立的小登录工具（同样由用户自己在浏览器窗口中登录），会话加密保存在本机，供各个 MCP 服务读取；
+  - 方案二：独立 MCP 服务通过本地接口借用 Fudaner 桌面端的登录状态（桌面端需要在运行）。
+- 这也是 Fudaner 之后能给全校同学和其他开发者提供的一个**开放连接层**。
+
+**安全约束：**
+
+- 所有工具默认只读；写操作（目前只有 `create_todo`）必须经过用户在界面上确认。
+- 工具返回的邮件正文、公告内容等外部文本，统一标记为「外部数据」，智能体不得把其中的内容当作指令执行。
+- 独立发布后，MCP 服务只监听本机，不对外网开放。
+
+### 7.6 目录结构
+
+```
+packages/                      # 平台连接层，每个都是独立的 MCP 服务，以后可以单独发布
+  fudan-auth/                  # FudanAuth 接口定义（实现在桌面端）
+  mcp-fudan-elearning/         # client.ts / tools.ts / server.ts
+  mcp-fudan-mail/
+  mcp-fudan-courses/           # 课程总表与匹配逻辑
+  mcp-fudan-icourse/           # P1
+src/
+  main/                        # Electron 主进程
+    auth/                      # AuthManager：内嵌登录窗口、会话管理、平台激活、WebVPN
+    mcp/                       # 进程内启动各 MCP 服务，智能体的 MCP 客户端
+    local-tools/               # fudaner-local：待办、画像、学习计划
+    ai/
+      router.ts                # 本地 / 云端路由
+      llm.ts                   # OpenAI 兼容客户端
+      classify.ts / extract.ts / link.ts / brief.ts
+      agent.ts                 # 对话智能体：把 MCP 工具转换成模型的 function calling
+    engine/                    # scheduler.ts / notifier.ts
+    db/                        # schema.sql / repo.ts
+    demo/                      # 演示模式：用模拟数据实现同样的 client 接口
+    ipc.ts
+  renderer/                    # React 页面：Today / Inbox / Chat / Settings / Onboarding
+  shared/                      # 共享类型（Item、Course 等）
+tests/                         # 测试样例（分类、抽取、关联）
+```
+
+> 演示模式的实现方式：为每个连接器提供一个读取模拟数据的 `client`，接口和真实的完全一样。这样演示模式和真实模式走同一套同步、智能体和 MCP 流程。
+
+### 7.7 数据模型
+
+```
+courses        id, code, section, name, term, teachers(json: [{name, email, role}]),
+               elearning_id, icourse_id, match_status(auto|pending|manual), schedule(json)
 items          id, source(elearning|mail|icourse|notice|demo), kind(assignment|announcement|email|replay|notice),
-               title, body, url, published_at, due_at, course_id, status(new|read|done|dismissed),
+               source_id, title, body, url, published_at, due_at, course_id, status(new|read|done|dismissed),
                ai_category, ai_summary, ai_action, ai_model_used, raw(json)
-links          id, from_item_id, to_item_id, reason, confidence          # 跨平台关联
-courses        id, name, code, teachers(json), elearning_id, icourse_id, schedule(json)
+links          id, from_item_id, to_item_id, reason, confidence, confirmed     # 跨平台关联
 todos          id, item_id, title, due_at, done, reminders_sent(json)
 profile        school, major, grade, degree, preferences(json), free_text
+auth_status    platform, status(ok|need_login|unavailable), checked_at, message
 notifications  id, item_id, kind, title, reason, sent_at, clicked
 chat_messages  id, role, content, tool_calls(json), created_at
 settings       key, value
@@ -429,13 +558,15 @@ settings       key, value
 - [ ] Electron 项目骨架，可打包安装
 - [ ] 首次使用引导：云端模型 → 本地模型 → 登录复旦账号 / 邮箱（或选择演示模式）→ 个人画像
 - [ ] 演示模式：模拟课程 6 门、作业 12 份、邮件 20 封（含与作业相关的助教邮件）
-- [ ] UIS 内嵌登录 + eLearning 同步
+- [ ] 统一认证层：UIS 内嵌登录、共享会话、平台状态检查、过期提醒
+- [ ] MCP 连接层：`fudan-elearning`、`fudan-mail`、`fudan-courses`、`fudaner-local` 四个服务（进程内运行）
+- [ ] eLearning 同步
 - [ ] 学生邮箱 IMAP 同步 + 本地模型分类 + 摘要
-- [ ] 跨平台关联（邮件 ↔ 作业）
+- [ ] 课程总表 + 跨平台关联（邮件 ↔ 课程 / 作业）
 - [ ] 今日页 + 统一收件箱
 - [ ] DDL 提醒 + 撞车预警
 - [ ] 每日简报
-- [ ] 对话智能体（search_items / list_deadlines / get_course_info / create_todo / make_study_plan），并显示工具调用过程
+- [ ] 对话智能体：通过 MCP 调用各平台工具，并在界面上显示工具调用过程
 - [ ] 本地 / 云端模型路由
 - [ ] 系统通知 + 托盘常驻
 - [ ] 一键清除所有数据
@@ -450,18 +581,18 @@ settings       key, value
 | 角色 | 负责 | 交付物 |
 |---|---|---|
 | **A 前端 / 产品体验** | 所有页面、引导流程、对话界面（流式输出 + 工具调用展示）、托盘和通知交互 | 界面；演示视频录制 |
-| **B 数据接入** | UIS 内嵌登录、eLearning 同步、IMAP 同步、定时调度、（P1）iCourse | 数据源适配器；接入可行性记录 |
-| **C 智能体 / 模型** | 模型路由、本地模型部署、分类 / 抽取 / 关联 / 简报 / 规划的 prompt、对话智能体、测试样例与准确率 | AI 模块；本地推理性能数据 |
-| **D 队长 / 集成 / 材料** | 统一数据结构、演示数据、数据库、推送引擎、打包；报名问卷、项目说明书、代码运行说明、提交 | 安装包；全部提交材料 |
+| **B 认证与连接层** | 统一认证层（AuthManager）；`fudan-elearning`、`fudan-mail` 两个 MCP 服务的 client 和工具；课程总表的数据来源；定时同步；（P1）`fudan-icourse` | 认证层；平台 MCP 服务；接入可行性记录 |
+| **C 智能体 / 模型** | 模型路由、本地模型部署；分类 / 抽取 / 关联 / 简报 / 规划的 prompt；对话智能体（MCP 客户端、工具转 function calling）；测试样例与准确率 | AI 模块；本地推理性能数据 |
+| **D 队长 / 集成 / 材料** | 统一数据结构、数据库；`fudan-courses`（课程总表与匹配）和 `fudaner-local` 两个 MCP 服务；演示数据与演示 client；推送引擎；打包；报名问卷、项目说明书、代码运行说明、提交 | 安装包；全部提交材料 |
 
 ### 8.3 5 天日程
 
 | 日期 | A 前端 | B 数据接入 | C 智能体 | D 集成 / 材料 |
 |---|---|---|---|---|
-| **11/3（二）晚** | 搭建 Electron + React 骨架，跑通 IPC | **实测**：UIS 内嵌登录、Canvas API、学生邮箱 IMAP | **实测**：云端模型连通；在酷睿 Ultra 电脑上跑通本地模型 | 定义 Item 数据结构和数据库表；下载比赛材料模板；**完成报名问卷** |
-| **11/4（三）** | 页面框架：今日 / 收件箱 / 对话 / 设置 | eLearning 适配器入库 | 模型路由；邮件分类和抽取的 prompt（JSON 输出） | 编写演示数据；推送引擎骨架 |
-| **11/5（四）** | 收件箱、今日页接真实数据；引导流程 | 邮箱适配器；定时调度 | 跨平台关联；每日简报 | 推送引擎 + 托盘；第一次打包 |
-| **11/6（五）** | 对话页面 | （P1）iCourse；或协助修 bug | 对话智能体和工具；学习规划 | 全流程联调；开始写项目说明书 |
+| **11/3（二）晚** | 搭建 Electron + React 骨架，跑通 IPC | **实测**：UIS 内嵌登录、登录后能否直接访问 iCourse、Canvas API、课程代码格式、学生邮箱 IMAP | **实测**：云端模型连通；在酷睿 Ultra 电脑上跑通本地模型；跑通 MCP SDK 进程内传输的最小示例 | 定义 Item / Course 数据结构、`FudanAuth` 接口和数据库表；下载比赛材料模板；**完成报名问卷** |
+| **11/4（三）** | 页面框架：今日 / 收件箱 / 对话 / 设置 | AuthManager（登录窗口、共享会话、状态检查）；`fudan-elearning` 的 client，同步入库 | 模型路由；邮件分类和抽取的 prompt（JSON 输出） | 编写演示数据和演示 client；`fudan-courses` 课程总表与匹配 |
+| **11/5（四）** | 收件箱、今日页接真实数据；引导流程；平台连接状态页 | `fudan-mail` 的 client；定时调度；两个服务的 MCP 工具定义 | 跨平台关联；每日简报 | `fudaner-local`；推送引擎 + 托盘；第一次打包 |
+| **11/6（五）** | 对话页面（含工具调用展示） | （P1）`fudan-icourse`；或协助修 bug | 对话智能体（MCP 客户端）；学习规划 | 全流程联调；开始写项目说明书 |
 | **11/7（六）** | 界面打磨；**录制演示视频** | 修 bug；代码运行说明 | 测试样例与准确率统计；prompt 调优 | 说明书定稿；安装包测试 |
 | **11/8（日）** | 视频剪辑与字幕 | 修 bug | 修 bug | **18:00 前打包材料**，**22:00 前发送邮件**，留出缓冲 |
 
@@ -478,8 +609,8 @@ settings       key, value
 |---|---|
 | 11/8–11/17（评审期） | 修复问题；完成 iCourse 回放助手（如初赛未完成）；长期记忆 |
 | 11/20 决赛指导会 | 根据专家意见调整 |
-| 11/20–12/4 | 手机推送（Bark / 企业微信等）；邮件草稿；在酷睿 Ultra 上更多使用 NPU 加速；邀请同学试用并收集数据；准备路演 |
-| 远期 | 服务端统一采集公共通知；与学校相关部门沟通，争取官方授权 |
+| 11/20–12/4 | **把 MCP 服务拆成独立包**（stdio 传输 + 独立认证方案），演示在 Claude / TRAE 等工具中直接调用复旦平台；手机推送（Bark / 企业微信等）；邮件草稿；在酷睿 Ultra 上更多使用 NPU 加速；邀请同学试用并收集数据；准备路演 |
+| 远期 | 增加教务（课表、考试）MCP 服务；开放连接层，供其他同学和开发者使用；服务端统一采集公共通知；与学校相关部门沟通，争取官方授权 |
 
 ---
 
@@ -561,7 +692,7 @@ settings       key, value
 
 1. 项目目标：痛点、现有方案调研、我们的定位
 2. Agent Demo 功能：核心场景与截图
-3. 系统设计：架构图、云端 + 本地混合模型路由、UIS 会话方案、主动推送引擎、智能体工具设计
+3. 系统设计：四层架构图；UIS 统一认证；课程总表；MCP 连接层；云端 + 本地混合模型路由；主动推送引擎
 4. 当前进展：已完成功能、真实接入情况、测试结果、本地推理性能
 5. 后续计划：决赛前路线图
 6. 合规与隐私设计
@@ -570,20 +701,21 @@ settings       key, value
 ### 12.4 作品亮点
 
 1. **主动的学业智能体**：在对的时间主动开口，而不是等用户来刷。
-2. **跨平台串联**：把 eLearning、邮箱（以及 iCourse）里关于同一件事的信息关联起来。
-3. **云端 + 本地混合**：邮件等隐私数据由本地模型在酷睿 Ultra 上处理，复杂推理交给云端模型，兼顾隐私、成本和效果。
-4. **可解释**：每条提醒都说明来源和理由；对话中可以看到工具调用过程。
-5. **隐私优先、零运营成本**：不保存 UIS 密码、数据不出本机、用户自带模型，学生团队也能长期免费提供。
+2. **一次登录，全平台串联**：UIS 统一认证登录一次，eLearning、iCourse 等平台共用；以课程总表为纽带，把各平台、邮箱里关于同一门课、同一件事的信息关联起来。
+3. **MCP 连接层**：每个复旦平台都是一个标准 MCP 服务。智能体通过 MCP 调用它们；之后拆成独立服务，其他 AI 工具也能直接接入复旦平台。
+4. **云端 + 本地混合**：邮件等隐私数据由本地模型在酷睿 Ultra 上处理，复杂推理交给云端模型，兼顾隐私、成本和效果。
+5. **可解释**：每条提醒都说明来源和理由；对话中可以看到工具调用过程。
+6. **隐私优先、零运营成本**：不保存 UIS 密码、数据不出本机、用户自带模型，学生团队也能长期免费提供。
 
 ### 12.5 演示视频脚本（3–5 分钟）
 
 | 时间 | 画面 | 讲解要点 |
 |---|---|---|
 | 0:00–0:30 | 浏览器里开着 eLearning、邮箱、iCourse 等一排标签页 | 痛点：信息分散，靠人工刷总会漏；已有的工具各管一块 |
-| 0:30–1:00 | 首次使用引导：配置 DeepSeek、检测到本地模型、选择演示模式、填写作息偏好 | BYOK + 本地模型，一分钟完成配置 |
+| 0:30–1:00 | 首次使用引导：配置 DeepSeek、检测到本地模型、登录一次复旦账号后各平台依次显示「已连接」（演示时可用演示模式）、填写作息偏好 | 一次登录连通全部平台；BYOK + 本地模型 |
 | 1:00–1:40 | 右下角弹出「今日简报已生成」→ 今日页 | 主动简报：今日课程、DDL 撞车预警、需要回复的邮件 |
 | 1:40–2:20 | 弹出通知「助教补充了 Lab 5 的提交要求」→ 作业卡片上的关联邮件 | 跨平台关联 |
-| 2:20–3:10 | 对话：「下周 DDL 好多，帮我排个计划，周二晚上我有社团」→ 显示工具调用 → 生成计划 → 确认创建待办 | 多步规划、工具调用、理解个人偏好 |
+| 2:20–3:10 | 对话：「下周 DDL 好多，帮我排个计划，周二晚上我有社团」→ 显示 MCP 工具调用（fudan-elearning、fudan-mail、fudaner-local）→ 生成计划 → 确认创建待办 | 多步规划、工具调用、理解个人偏好 |
 | 3:10–3:40 | 设置页：每个任务使用的模型、本地推理耗时；断网后邮件分类仍正常 | 云端 + 本地混合架构 |
 | 3:40–4:10 | DDL 前 3 小时的系统通知；作业提交后提醒自动消失 | DDL 守护 |
 | 4:10–4:30 | 隐私设计与路线图 | 不保存 UIS 密码、数据不出本机；决赛前的计划 |
