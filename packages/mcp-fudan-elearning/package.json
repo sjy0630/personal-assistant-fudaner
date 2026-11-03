@@ -1,0 +1,14 @@
+{
+  "name": "@fudaner/mcp-fudan-elearning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "description": "复旦 eLearning（Canvas）MCP 服务",
+  "dependencies": {
+    "@fudaner/fudan-auth": "*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}

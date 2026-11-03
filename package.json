@@ -1,0 +1,49 @@
+{
+  "name": "fudaner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fudaner：懂复旦的 AI 私人助理（学生自制，非官方产品）",
+  "main": "out/main/index.js",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:demo": "cross-env FUDANER_DEMO=1 electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "dist": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@fudaner/fudan-auth": "*",
+    "@fudaner/mcp-fudan-courses": "*",
+    "@fudaner/mcp-fudan-elearning": "*",
+    "@fudaner/mcp-fudan-mail": "*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "imapflow": "1.7.8",
+    "mailparser": "3.14.1",
+    "mammoth": "1.13.0",
+    "openai": "5.23.2",
+    "pdf-parse": "1.1.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/mailparser": "3.9.0",
+    "@types/node": "22.20.5",
+    "@types/pdf-parse": "1.1.5",
+    "@types/react": "19.1.17",
+    "@types/react-dom": "19.1.11",
+    "@vitejs/plugin-react": "5.2.0",
+    "cross-env": "10.1.0",
+    "electron": "38.8.6",
+    "electron-builder": "26.18.1",
+    "electron-vite": "4.0.1",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  }
+}

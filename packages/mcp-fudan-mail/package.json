@@ -1,0 +1,15 @@
+{
+  "name": "@fudaner/mcp-fudan-mail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "description": "复旦学生邮箱（IMAP，只读）MCP 服务",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7",
+    "imapflow": "1.7.8",
+    "mailparser": "3.14.1"
+  }
+}

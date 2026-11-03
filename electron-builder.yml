@@ -1,0 +1,16 @@
+appId: cn.fudaner.app
+productName: Fudaner
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - "**/*.node"
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target: dmg
