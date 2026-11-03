@@ -2,12 +2,13 @@
 
 住在你电脑里、懂复旦的 AI 私人助理（复旦版 Muse / Dots）。主对话为中心，配合动态、目标、资源库、搜索四个副页面；通过 MCP 连接 eLearning、复旦学生邮箱（之后还有 iCourse）；主动引擎参考 DeepSeek 开源的 dsh-superagent，做到「有依据、可验证、懂学期节奏、不浪费注意力」。隐私任务交给本地模型，复杂推理交给你自己接入的云端模型。
 
-参赛作品：2026 复旦大学未来智造智能体大赛（智慧学习与科研助手赛道 + 英特尔混合 AI Agent 专项）。
+参赛作品：2026 复旦大学未来智造智能体大赛（智慧学习与科研助手赛道）。
 
 > 学生自制，非官方产品。对所有校内平台只读，不保存 UIS 密码。
 
 - 产品需求文档：[docs/PRD.md](docs/PRD.md)
 - 开发说明与分工：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- 材料工作手册：[docs/MATERIALS.md](docs/MATERIALS.md)
 
 ## 快速开始
 
@@ -29,7 +30,7 @@ npm run dev:demo
 npm run dev
 ```
 
-然后在「设置 → 模型」填写云端模型（DeepSeek / 通义 / Kimi / 智谱等 OpenAI 兼容接口）和本地模型（Ollama），在「设置 → 复旦账号」登录 UIS、配置学生邮箱。
+然后在「设置 → 模型」填写云端模型（DeepSeek / 通义 / Kimi / 智谱等 OpenAI 兼容接口）和可选的本地模型（Ollama），在「设置 → 复旦账号」登录 UIS、配置学生邮箱。
 
 ## 常用命令
 

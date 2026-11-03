@@ -24,7 +24,7 @@ export interface LlmClient {
   chat(messages: LlmMessage[], opts?: { tools?: LlmTool[]; json?: boolean; temperature?: number; maxTokens?: number }): Promise<LlmResult>;
 }
 
-/** OpenAI 兼容协议客户端：云端（DeepSeek、通义、Kimi…）和本地（Ollama、OpenVINO）共用。 */
+/** OpenAI 兼容协议客户端：云端（DeepSeek、通义、Kimi…）和本地（Ollama 等）共用。 */
 export class OpenAiCompatClient implements LlmClient {
   private readonly client: OpenAI;
   readonly label: string;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { EvalRecord, Memory, ModelConfig, PlatformState, Profile, Settings } from '../../../shared/types';
-import { api, fmtTime } from '../api';
+import type { Memory, ModelConfig, PlatformState, Profile, Settings } from '../../../shared/types';
+import { DecisionsTab } from './Decisions';
+import { api } from '../api';
 
 type Tab = 'model' | 'accounts' | 'me' | 'assistant' | 'decisions' | 'dev';
 const TABS: { key: Tab; label: string }[] = [
@@ -61,7 +62,7 @@ function ModelTab() {
         <button className="primary" onClick={() => void save('cloud')}>保存并测试</button> <span>{msg.cloud}</span>
       </section>
       <section className="card-box">
-        <h3>本地模型（Ollama / OpenVINO）</h3>
+        <h3>本地模型（可选，Ollama）</h3>
         <p className="muted">用于邮件分类、记忆提取、主动研判等隐私任务，内容不出本机。</p>
         <div className="filters"><button className="chip" onClick={() => edit('local', { baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b' })}>Ollama 默认</button></div>
         <label>Base URL<input value={s.local?.baseURL ?? ''} onChange={(e) => edit('local', { baseURL: e.target.value })} /></label>
@@ -157,37 +158,6 @@ function AssistantTab() {
       <h3>主动程度（每日注意力预算）</h3>
       <div className="filters">{([['low', '少'], ['medium', '中'], ['high', '多']] as const).map(([k, v]) => <button key={k} className={p.proactivity === k ? 'chip active' : 'chip'} onClick={() => set({ proactivity: k })}>{v}</button>)}</div>
     </section>
-  );
-}
-
-const DECISION: Record<EvalRecord['decision'], string> = { chat_notify: '🔔 对话 + 通知', chat: '💬 对话', card: '📰 动态', digest: '☀️ 并入早安', suggest_ticket: '🤝 建议工单', record: '📋 只记录' };
-
-/** 主动决策记录（PRD §5.7 第 8 步）：「今天 N 个事件，只打扰了你 M 次」 */
-function DecisionsTab() {
-  const [data, setData] = useState<{ evals: EvalRecord[]; budget: { budget: number; spent: number; phase: string } } | null>(null);
-  useEffect(() => void api.decisions(200).then(setData), []);
-  if (!data) return null;
-  const todayStr = new Date().toDateString();
-  const today = data.evals.filter((e) => new Date(e.createdAt).toDateString() === todayStr);
-  const events = today.reduce((n, e) => n + e.triggerIds.length, 0);
-  const interrupts = today.filter((e) => e.decision === 'chat_notify' || e.decision === 'chat').length;
-  return (
-    <>
-      <section className="card-box stats">
-        <div><strong>{events}</strong><span>今天的事件</span></div>
-        <div><strong>{interrupts}</strong><span>打扰你的次数</span></div>
-        <div><strong>{today.filter((e) => e.decision === 'card').length}</strong><span>放进动态</span></div>
-        <div><strong>{data.budget.spent.toFixed(1)}/{data.budget.budget}</strong><span>注意力预算</span></div>
-      </section>
-      {data.evals.map((e) => (
-        <div key={e.id} className="eval">
-          <div className="row"><span>{DECISION[e.decision]}</span><span className="muted">{fmtTime(e.createdAt)} · {e.threadKey} · {e.modelUsed}{e.ruleMode === 'observe' ? ' · 观察模式' : ''}</span></div>
-          <div>{e.reason}</div>
-          {e.assessment && <div className="muted small">价值 {e.assessment.value.toFixed(2)} · 紧急 {e.assessment.urgency.toFixed(2)} · 成本 {e.attentionCost}{e.assessment.messageDraft ? ` · 「${e.assessment.messageDraft.slice(0, 50)}」` : ''}</div>}
-          {e.gate.some((g) => !g.pass || g.rule) && <div className="muted small">准入：{e.gate.map((g) => g.note ?? (g.pass ? '通过' : g.rule)).join('；')}</div>}
-        </div>
-      ))}
-    </>
   );
 }
 
