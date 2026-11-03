@@ -1,0 +1,9 @@
+{
+  "name": "@fudaner/fudan-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "description": "复旦 UIS 统一认证接口定义（实现由宿主提供）"
+}
