@@ -60,12 +60,15 @@ const p = (t: Trigger, k: string) => String(t.payload[k] ?? '');
 const BASE: Record<Trigger['kind'], Rule> = {
   assignment_new: (t) => ({ value: 0.55, urgency: 0.4, action: 'card', draft: `${p(t, 'course')} 发布了新作业「${p(t, 'title')}」，${p(t, 'dueText')}截止。`, reason: '新作业，已加入课程目标' }),
   assignment_changed: (t) => ({ value: 0.7, urgency: 0.6, action: 'chat', draft: `注意：「${p(t, 'title')}」的截止时间改成了 ${p(t, 'dueText')}。`, reason: '截止时间变更' }),
-  assignment_submitted: (t) => ({ value: 0.3, urgency: 0.1, action: 'digest', draft: `看到「${p(t, 'title')}」已经交了 👍`, reason: '已提交，提醒自动结束' }),
+  // 之前提醒过（或约好跟进）的作业交了：马上在对话里确认一句，形成闭环；没提醒过的就攒到早安里
+  assignment_submitted: (t) => t.payload.wasReminded
+    ? { value: 0.5, urgency: 0.2, action: 'chat', draft: `看到「${p(t, 'title')}」已经交了 👍 相关提醒都取消了。`, reason: '之前提醒过的作业已提交，闭环确认' }
+    : { value: 0.3, urgency: 0.1, action: 'digest', draft: `看到「${p(t, 'title')}」已经交了 👍`, reason: '已提交，提醒自动结束' },
   announcement_new: (t) => ({ value: 0.45, urgency: 0.3, action: 'card', draft: `${p(t, 'course')} 有新公告：「${p(t, 'title')}」。`, reason: '你选的课发了公告' }),
   mail_new: (t, ctx) => {
     const cat = p(t, 'category');
     if (cat === 'reply') return { value: 0.65, urgency: 0.5, action: 'chat', draft: `${p(t, 'from')} 来信「${p(t, 'subject')}」，需要你回复。`, reason: '需要回复的邮件' };
-    if (t.payload.linkedTitle) return { value: 0.7, urgency: 0.55, action: 'chat', draft: `关于「${p(t, 'linkedTitle')}」：${p(t, 'summary') || p(t, 'subject')}`, reason: `已关联到作业「${p(t, 'linkedTitle')}」` };
+    if (t.payload.linkedTitle) return { value: 0.7, urgency: 0.55, action: 'chat', draft: `关于「${p(t, 'linkedTitle')}」：${p(t, 'summary') || p(t, 'subject')}`, reason: `${p(t, 'course') ? `「${p(t, 'course')}」` : ''}课程邮件，涉及你还没交的作业` };
     if (cat === 'course' || cat === 'action') return { value: 0.5, urgency: 0.4, action: 'card', draft: `${p(t, 'subject')}：${p(t, 'summary')}`, reason: cat === 'course' ? '课程相关邮件' : '需要处理的邮件' };
     if (cat === 'notice') {
       const text = `${p(t, 'subject')} ${p(t, 'summary')}`;
@@ -98,6 +101,7 @@ const BASE: Record<Trigger['kind'], Rule> = {
     ticket: ctx.phase === 'pre_exam' ? { title: '考试周复习计划', request: '根据各门课的考试安排和作业情况，制定考试周前两周的复习计划' } : undefined,
   }),
   user_commitment: (t) => ({ value: 0.4, urgency: 0.2, action: 'record', draft: '', reason: `用户计划：${p(t, 'text')}` }),
+  auth_expired: () => ({ value: 0.8, urgency: 0.6, action: 'chat_notify', draft: '复旦账号的登录过期了，eLearning 暂时同步不了。点下面的按钮重新登录一下就好。', reason: 'UIS 登录过期，无法同步' }),
 };
 
 /** 「还剩约 9 小时」/「还剩约 2 天」 */

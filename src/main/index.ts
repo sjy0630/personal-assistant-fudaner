@@ -7,6 +7,8 @@ import { AuthManager } from './auth/auth-manager';
 import { DemoElearningClient, DemoMailClient, seedDemoProfile } from './demo/demo';
 import type { Channels } from './engine/channels';
 import { registerIpc } from './ipc';
+// electron-vite 的 ?asset：开发时指向 resources/，打包后指向 app.asar.unpacked/resources/
+import iconPath from '../../resources/icon.png?asset&asarUnpack';
 
 /**
  * Electron 主进程入口：窗口、托盘、通知、定时调度。
@@ -56,7 +58,7 @@ function showWindow() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1240, height: 820, minWidth: 900, minHeight: 600, title: 'Fudaner', show: false, autoHideMenuBar: true,
+    width: 1240, height: 820, minWidth: 900, minHeight: 600, title: 'Fudaner', show: false, autoHideMenuBar: true, icon: iconPath,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false },
   });
   win.on('ready-to-show', () => win?.show());
@@ -68,7 +70,7 @@ function createWindow() {
 }
 
 function createTray(ctx: AppContext, pause: () => void) {
-  tray = new Tray(nativeImage.createEmpty());
+  tray = new Tray(nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 }));
   tray.setToolTip('Fudaner');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `打开${ctx.repo.getProfile().assistantName}`, click: showWindow },

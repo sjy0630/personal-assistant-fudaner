@@ -49,7 +49,7 @@ export interface FudanerApi {
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;
   tickets(): Promise<Ticket[]>;
-  dev: { setDemoPhase(phase: string): Promise<void>; tick(): Promise<void>; wipe(): Promise<void>; demoSubmitNext(): Promise<void>; demoNewMail(): Promise<void> };
+  dev: { setDemoPhase(phase: string): Promise<void>; tick(): Promise<void>; wipe(): Promise<void>; demoSubmitNext(): Promise<void>; demoNewMail(): Promise<void>; resetDemo(): Promise<void> };
   /** 主进程推送的事件 */
   on(channel: FudanerEvent, cb: (payload: unknown) => void): () => void;
 }

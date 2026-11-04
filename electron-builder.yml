@@ -2,15 +2,24 @@ appId: cn.fudaner.app
 productName: Fudaner
 directories:
   output: release
+  buildResources: resources
 files:
   - out/**
+  - resources/**
   - package.json
 asarUnpack:
-  - "**/*.node"
+  - resources/**
 win:
   target: nsis
+  icon: resources/icon.png
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  shortcutName: Fudaner
 mac:
   target: dmg
+  icon: resources/icon.png
+linux:
+  target: dir
+  icon: resources/icon.png
+  category: Utility

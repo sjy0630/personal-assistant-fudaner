@@ -4,7 +4,7 @@ import type { PlatformState } from '../shared/types';
 import type { AppContext } from './app-context';
 import type { AuthManager } from './auth/auth-manager';
 import type { DemoElearningClient, DemoMailClient } from './demo/demo';
-import { demoLateMail } from './demo/demo';
+import { demoLateMail, seedDemoProfile } from './demo/demo';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
@@ -30,6 +30,8 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<Parameters<Api['chat']['quickAction']>, void>('chat.quickAction', async (_messageId, action, payload) => {
     if (action === 'forget_memory' && payload?.id) { repo.removeMemory(String(payload.id)); return; }
     if (action === 'accept_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'queued'); void ctx.executor.runNext(); return; }
+    if (action === 'decline_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'dropped'); return; }
+    if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
     if (action === 'say' && payload?.text) { void ctx.agent.handleUserMessage(String(payload.text)); return; }
   });
   handle('today', async () => buildToday(repo));
@@ -128,6 +130,17 @@ export function registerIpc(ctx: AppContext, opts: {
     if (next) opts.demo.elearning.submit(next.sourceId);
     await ctx.syncAll();
     await ctx.engine.tick();
+  });
+  // 一键重置演示：清空数据 → 重新写入演示画像 → 首次同步 → 运行一次引擎 → 刷新界面（录视频前用）
+  handle('dev.resetDemo', async () => {
+    repo.wipe();
+    opts.demo.elearning.reset();
+    opts.demo.mail.reset();
+    repo.setSettings({ demoMode: true });
+    seedDemoProfile(repo);
+    await ctx.syncAll();
+    await ctx.engine.tick();
+    opts.window()?.webContents.reload();
   });
   handle('dev.demoNewMail', async () => {
     opts.demo.mail.inject(demoLateMail(new Date()));

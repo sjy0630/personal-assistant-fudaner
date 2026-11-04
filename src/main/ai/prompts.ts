@@ -33,7 +33,9 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '',
     `用户画像：昵称 ${profile.nickname ?? '未填'}；${[profile.school, profile.major, profile.grade, profile.degree].filter(Boolean).join(' / ') || '院系年级未填'}。${profile.freeText ?? ''}`,
     `关于用户的记忆：\n${mem}`,
-    `今天：${today.date}${today.weekNo ? `，第 ${today.weekNo} 周` : ''}，学期阶段 ${today.phase}。近期 DDL：\n${dl}`,
+    `今天：${today.date}${today.weekNo ? `，第 ${today.weekNo} 周` : ''}，学期阶段 ${today.phase}。`,
+    `今天的课：${today.courses.map((c) => `${c.time} ${c.name}${c.location ? `（${c.location}）` : ''}`).join('；') || '没有课或未导入课表'}。空闲时段：${today.freeSlots.map((f) => `${f.start}–${f.end}`).join('、') || '未知'}。`,
+    `近期 DDL：\n${dl}`,
     `当前时间：${p.nowIso}`,
   ].join('\n');
 }
