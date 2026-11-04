@@ -49,7 +49,8 @@ export function applyBudget(
     const d = DOWNGRADE[idx];
     const cost = ATTENTION_COST[d];
     const worth = value >= cost * VALUE_PER_COST * factor;
-    const affordable = cost <= remaining;
+    // 并入早安消息不占用今天的注意力（攒到明天早上一起说），预算用完时它是最后一道兜底
+    const affordable = d === 'digest' || cost <= remaining;
     if (worth && affordable) break;
     note = !affordable ? '今日注意力预算不足，已降级' : '价值不足以打扰，已降级';
     idx++;

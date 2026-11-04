@@ -18,10 +18,12 @@ const THRESHOLDS = [
  * 时钟来源（参考 dsh-superagent：需要等待的条件本身就是一个 Source）。
  * 每次 tick 检查一遍，生成到点的事件；事件按 sourceRef 去重，重复调用是安全的。
  */
-export function emitClockTriggers(repo: Repo, now: Date, opts: { morningAt?: string } = {}): void {
+export function emitClockTriggers(repo: Repo, now: Date, opts: { morningAt?: string; morningUntil?: string } = {}): void {
   const date = localDate(now);
-  const [mh, mm] = (opts.morningAt ?? '07:30').split(':').map(Number);
-  if (now.getHours() * 60 + now.getMinutes() >= mh * 60 + mm) {
+  const toMin = (s: string) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  const mins = now.getHours() * 60 + now.getMinutes();
+  // 早安只在早上到中午之间发：下午或深夜第一次打开电脑时不说「早安」，当天重点看右侧「今天」栏
+  if (mins >= toMin(opts.morningAt ?? '07:30') && mins < toMin(opts.morningUntil ?? '14:00')) {
     repo.addTrigger({ source: 'clock', kind: 'morning', sourceRef: date, threadKey: 'daily', payload: { date } });
   }
 
