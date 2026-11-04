@@ -8,6 +8,7 @@ import { LibraryPage } from './pages/Library';
 import { SearchPage } from './pages/Search';
 import { SettingsPage } from './pages/Settings';
 import { OnboardingPage } from './pages/Onboarding';
+import { NavIcon } from './theme/NavIcon';
 
 export type Page = 'chat' | 'feed' | 'goals' | 'library' | 'search' | 'settings';
 
@@ -72,15 +73,17 @@ export function App() {
   return (
     <div className="app">
       <nav className="nav">
+        <div className="nav-brand">Fudaner</div>
+        <p className="nav-caption">懂复旦，也慢慢懂你。</p>
         {NAV.map((n) => (
           <button key={n.page} className={page === n.page ? 'nav-item active' : 'nav-item'} onClick={() => navigate(n.page)} title={n.label}>
-            <span className="nav-icon">{n.icon}</span>
+            <span className="nav-icon"><NavIcon name={n.page} /></span>
             <span className="nav-label">{n.label}</span>
           </button>
         ))}
         <div className="nav-spacer" />
         <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => navigate('settings')} title="设置">
-          <span className="nav-icon">⚙️</span>
+          <span className="nav-icon"><NavIcon name="settings" /></span>
           <span className="nav-label">设置</span>
         </button>
       </nav>
