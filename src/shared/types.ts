@@ -43,7 +43,12 @@ export interface Course {
   matchStatus: 'auto' | 'pending' | 'manual';
   /** 考核安排，例如 [{ kind: 'midterm', date: '2026-11-20' }]，用于学期节奏感知 */
   assessments?: { kind: 'midterm' | 'final' | 'quiz'; date: string }[];
+  /** 每周上课时间（来自课表导入或手动填写；演示模式由演示数据提供） */
+  schedule?: CourseSlot[];
 }
+
+/** weekday：1 = 周一 … 7 = 周日；时间为 HH:MM */
+export interface CourseSlot { weekday: number; start: string; end: string; location?: string }
 
 export interface Link { id: string; fromItemId: string; toItemId: string; reason: string; confidence: number; confirmed: boolean }
 
@@ -166,7 +171,8 @@ export type TriggerKind =
   | 'mail_new'
   | 'deadline_72h' | 'deadline_24h' | 'deadline_3h'
   | 'morning' | 'weekly_plan' | 'followup_due' | 'phase_change'
-  | 'user_commitment';
+  | 'user_commitment'
+  | 'auth_expired';
 
 export interface Trigger {
   id: string;
@@ -257,6 +263,8 @@ export interface TodayOverview {
   weekNo?: number;
   phase: SemesterPhase;
   courses: { name: string; time?: string; location?: string }[];
+  /** 今天 08:00–22:00 之间不少于 1 小时的空闲时段（按课表计算） */
+  freeSlots: { start: string; end: string }[];
   deadlines: { itemId: string; title: string; course?: string; dueAt: string; done: boolean }[];
   mailToReply: number;
   weekProgress: { done: number; total: number };

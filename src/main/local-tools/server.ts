@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
+import { buildToday } from '../today';
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -23,6 +24,11 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
   }, async ({ query }) => json(repo.recallMemories(query)));
 
   server.registerTool('get_profile', { description: '读取用户画像', inputSchema: {}, annotations: ro }, async () => json(repo.getProfile()));
+
+  server.registerTool('get_today', {
+    description: '查询某一天的概况：当天课程（时间、地点）、空闲时段、7 天内的 DDL、待回复邮件数、本周任务进度。安排时间、问「今天/明天有什么课」时使用',
+    inputSchema: { date: z.string().optional().describe('ISO 日期，默认今天') }, annotations: ro,
+  }, async ({ date }) => json(buildToday(repo, date ? new Date(date) : new Date())));
 
   if (chatOnly) {
     server.registerTool('remember', {

@@ -240,3 +240,55 @@ describe('线程归并', () => {
     expect(evalMessages().filter((m) => m.content.includes('Lab 5'))).toHaveLength(1);
   });
 });
+
+describe('可验证的闭环', () => {
+  it('提醒过的作业交了：马上在对话里确认一句；没提醒过的：并入早安', async () => {
+    const { repo, engine, evalMessages } = setup();
+    const reminded = addAssignment(repo, 'Lab 5：链表与栈', at('2026-11-10T22:00:00'));
+    const quiet = addAssignment(repo, '线代 HW 7', at('2026-11-14T23:59:00'));
+    await engine.tick(at('2026-11-10T12:00:00')); // Lab 5 进入 24 小时窗口，发出提醒
+
+    for (const it of [reminded, quiet]) {
+      repo.upsertItem({ ...it, done: true });
+      repo.addTrigger({ source: 'elearning', kind: 'assignment_submitted', sourceRef: it.sourceId, threadKey: `course:${it.title}`, payload: { itemId: it.id, title: it.title } });
+    }
+    engine.verifyAfterSync();
+    const evals = await engine.evaluatePending(at('2026-11-10T13:00:00'));
+
+    expect(evals.find((e) => e.assessment?.messageDraft.includes('Lab 5'))?.decision).toBe('chat');
+    expect(evals.find((e) => e.assessment?.messageDraft.includes('线代'))?.decision).toBe('digest');
+    expect(evalMessages().some((m) => m.content.includes('看到「Lab 5：链表与栈」已经交了'))).toBe(true);
+    expect(repo.taskForItem(reminded.id)?.status).toBe('done');
+  });
+});
+
+describe('写回', () => {
+  it('来自平台的重要事件进对话的同时也留在动态里，且不额外占用预算', async () => {
+    const { repo, engine, evalMessages, budgetOf } = setup();
+    const noon = at('2026-11-10T12:00:00');
+    addReplyMail(repo, 'm1', '关于下周组会时间调整', noon);
+    await engine.evaluatePending(noon);
+    expect(evalMessages()).toHaveLength(1);
+    expect(repo.listFeed().map((c) => c.title)).toContain('关于下周组会时间调整');
+    expect(budgetOf(noon).spent).toBe(1.5);
+  });
+
+  it('UIS 登录过期：主动提醒，并带「重新登录」按钮', async () => {
+    const { repo, engine, evalMessages, notified } = setup();
+    repo.addTrigger({ source: 'elearning', kind: 'auth_expired', sourceRef: '2026-11-10:elearning', threadKey: 'auth', payload: { platform: 'elearning' } });
+    await engine.evaluatePending(at('2026-11-10T12:00:00'));
+    expect(evalMessages()[0].content).toContain('登录过期');
+    expect(evalMessages()[0].actions.map((a) => a.action)).toEqual(['login']);
+    expect(notified).toHaveLength(1);
+    expect(repo.listFeed()).toHaveLength(0);
+  });
+
+  it('价值很高的建议（考试周前的复习计划）除了动态卡片，还会在对话里直接问', async () => {
+    const { repo, engine, evalMessages } = setup();
+    await engine.tick(at('2026-12-11T10:00:00'));
+    await engine.tick(at('2026-12-14T10:00:00'));
+    const ask = evalMessages().find((m) => m.content.includes('复习计划'))!;
+    expect(ask.actions.map((a) => a.action)).toEqual(['accept_ticket', 'decline_ticket']);
+    expect(ask.actions[0].payload?.ticketId).toBe(repo.listTickets()[0].id);
+  });
+});

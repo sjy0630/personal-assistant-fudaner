@@ -172,6 +172,7 @@ function DevTab() {
       <label className="check"><input type="checkbox" checked={!!s?.demoMode} onChange={async (e) => { await api.settings.set({ demoMode: e.target.checked }); setS(await api.settings.get()); }} />
         演示模式（使用内置的虚构数据，不需要复旦账号；切换后重启应用生效最佳）</label>
       <div className="dev-buttons">
+        <button className="primary" onClick={() => window.confirm('重置演示：清空当前数据，重新加载演示数据（录视频前用）。继续？') && void run('reset', api.dev.resetDemo)}>重置演示（录视频前用）</button>
         <button onClick={() => void run('tick', api.dev.tick)}>同步 + 运行一次主动引擎</button>
         <button onClick={() => void run('mail', api.dev.demoNewMail)}>演示：助教发来 Lab 5 补充邮件</button>
         <button onClick={() => void run('submit', api.dev.demoSubmitNext)}>演示：在 eLearning 上交掉最近的作业</button>

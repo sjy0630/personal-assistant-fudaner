@@ -19,7 +19,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   tickets: call('tickets') as FudanerApi['tickets'],
   dev: {
     setDemoPhase: call('dev.setDemoPhase'), tick: call('dev.tick'), wipe: call('dev.wipe'),
-    demoSubmitNext: call('dev.demoSubmitNext'), demoNewMail: call('dev.demoNewMail'),
+    demoSubmitNext: call('dev.demoSubmitNext'), demoNewMail: call('dev.demoNewMail'), resetDemo: call('dev.resetDemo'),
   } as FudanerApi['dev'],
   on(channel, cb) {
     const listener = (_e: unknown, ch: string, payload: unknown) => { if (ch === channel) cb(payload); };

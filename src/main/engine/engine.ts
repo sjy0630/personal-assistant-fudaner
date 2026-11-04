@@ -95,6 +95,16 @@ export class ProactiveEngine {
       return this.morning(threadKey, batch, gates, now, budget.date);
     }
 
+    // 研判前补充事实（确定性数据，不交给模型猜）：提交的作业之前有没有提醒过
+    for (const t of passed) {
+      if (t.kind === 'assignment_submitted' && t.payload.itemId) {
+        const itemId = String(t.payload.itemId);
+        const task = this.repo.taskForItem(itemId);
+        const followed = this.repo.listFollowupsForItem(itemId).length > 0;
+        t.payload.wasReminded = (task ? this.repo.remindersSent(task.id).length > 0 : false) || followed;
+      }
+    }
+
     // 2. 研判（本地模型；没有模型时用规则）
     const memories = this.repo.listMemories(['goal', 'interest', 'preference', 'schedule']);
     const { assessment, model } = await assess(passed, {
@@ -148,8 +158,13 @@ export class ProactiveEngine {
     switch (decision) {
       case 'chat_notify':
       case 'chat': {
-        const msg = this.post({ content: text, cards: refs, trigger: `eval:${ev.id}` });
+        const actions = batch.some((t) => t.kind === 'auth_expired') ? [{ label: '重新登录', action: 'login' }] : [];
+        const msg = this.post({ content: text, cards: refs, trigger: `eval:${ev.id}`, actions });
         if (decision === 'chat_notify') this.channels.notify(this.repo.getProfile().assistantName, text, msg.id);
+        // 来自校内平台的重要事件同时留在「动态」里：对话只放需要你注意的，动态是完整的记录（不额外占用注意力预算）
+        if (batch.some((t) => PLATFORM_SOURCES.includes(t.source) && t.kind !== 'auth_expired' && t.kind !== 'assignment_submitted')) {
+          this.addCard(batch, a, refs);
+        }
         break;
       }
       case 'card':
@@ -168,6 +183,14 @@ export class ProactiveEngine {
           score: a.value, dedupeKey: `ticket:${ticket.id}`,
         });
         this.channels.changed('feed');
+        // 价值很高的建议（如考试周前的复习计划）直接在对话里问一句，而不只是放在动态里
+        if (a.value >= HIGH_VALUE_SUGGESTION) {
+          this.post({
+            content: text, cards: refs, trigger: `eval:${ev.id}`,
+            actions: [{ label: '好，帮我做', action: 'accept_ticket', payload: { ticketId: ticket.id } }, { label: '先不用', action: 'decline_ticket', payload: { ticketId: ticket.id } }],
+          });
+          this.repo.spendBudget(localDate(new Date(ev.createdAt)), ATTENTION_COST.chat);
+        }
         break;
       }
       case 'record':
@@ -206,6 +229,8 @@ export class ProactiveEngine {
 
     const facts = [
       `日期：${today.date}${today.weekNo ? `，第 ${today.weekNo} 周` : ''}，阶段：${today.phase}`,
+      today.courses.length ? `今天的课：${today.courses.map((c) => `${c.time} ${c.name}${c.location ? `（${c.location}）` : ''}`).join('；')}` : '今天没有课（或未导入课表）',
+      today.freeSlots.length ? `空闲时段：${today.freeSlots.map((f) => `${f.start}–${f.end}`).join('、')}` : '',
       urgent.length ? `72 小时内未交的作业：\n${urgent.map((d) => `- ${d.title}（${d.course ?? ''}）截止 ${d.dueAt}`).join('\n')}` : '72 小时内没有未交的作业',
       replyMails.length ? `需要回复的邮件：\n${replyMails.map((m) => `- ${m.sender ?? ''}：${m.title}`).join('\n')}` : '',
       followups.length ? `要跟进的事：\n${followups.map((f) => `- ${f.topic}`).join('\n')}` : '',
@@ -224,7 +249,7 @@ export class ProactiveEngine {
         content = '';
       }
     }
-    if (!content) content = templateMorning(profile, today.weekNo, urgent, replyMails.length, digest.map((d) => d.text), followups.map((f) => f.topic));
+    if (!content) content = templateMorning(profile, today.weekNo, today.courses, urgent, replyMails.length, digest.map((d) => d.text), followups.map((f) => f.topic));
 
     const cards: CardRef[] = [
       ...urgent.slice(0, 3).map((d) => ({ type: 'item' as const, id: d.itemId, title: d.title, subtitle: `${d.course ?? ''} · 截止 ${fmt(d.dueAt)}` })),
@@ -266,6 +291,11 @@ export class ProactiveEngine {
   }
 }
 
+/** 来自校内平台的事件来源 */
+const PLATFORM_SOURCES: Trigger['source'][] = ['elearning', 'mail', 'icourse'];
+/** 建议工单的价值达到这个值时，除了动态卡片，还会在对话里直接问 */
+const HIGH_VALUE_SUGGESTION = 0.8;
+
 export function describeTrigger(t: Trigger): string {
   const p = t.payload as Record<string, string | undefined>;
   switch (t.kind) {
@@ -305,8 +335,12 @@ function styleHint(p: Profile): string {
   return { warm: '语气温和体贴。', concise: '语气简洁干练。', playful: '语气轻松幽默，可以用一个表情。' }[p.style];
 }
 
-function templateMorning(p: Profile, week: number | undefined, urgent: { title: string; dueAt: string }[], replies: number, digest: string[], followups: string[]): string {
-  const parts = [`早${p.nickname ? `，${p.nickname}` : ''}～${week ? `第 ${week} 周，` : ''}今天的重点：`];
+function templateMorning(
+  p: Profile, week: number | undefined, courses: { name: string; time?: string; location?: string }[],
+  urgent: { title: string; dueAt: string }[], replies: number, digest: string[], followups: string[],
+): string {
+  const parts = [`早${p.nickname ? `，${p.nickname}` : ''}～${week ? `第 ${week} 周，` : ''}今天${courses.length ? ` ${courses.length} 节课：${courses.map((c) => `${c.time?.split('–')[0]} ${c.name}${c.location ? `（${c.location}）` : ''}`).join('，')}` : '没有课'}。`];
+  parts.push('今天的重点：');
   if (urgent.length) parts.push(urgent.slice(0, 3).map((d) => `「${d.title}」${fmt(d.dueAt)} 截止还没交`).join('；') + '。');
   else parts.push('72 小时内没有要交的作业，可以喘口气。');
   if (replies) parts.push(`有 ${replies} 封邮件等你回复。`);

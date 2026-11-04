@@ -49,6 +49,11 @@ export class Repo {
     );
     return this.getCourse(id)!;
   }
+  /** 课表、考核安排等平台拿不到、需要单独导入的信息 */
+  setCourseExtras(id: string, extras: { schedule?: Course['schedule']; assessments?: Course['assessments'] }): void {
+    if (extras.schedule) this.db.run('UPDATE courses SET schedule=? WHERE id=?', toJson(extras.schedule), id);
+    if (extras.assessments) this.db.run('UPDATE courses SET assessments=? WHERE id=?', toJson(extras.assessments), id);
+  }
   getCourse(id: string): Course | undefined {
     const r = this.db.get<Row>('SELECT * FROM courses WHERE id = ?', id);
     return r ? mapCourse(r) : undefined;
@@ -261,6 +266,9 @@ export class Repo {
     const t = this.db.get<Row>('SELECT reminders_sent FROM tasks WHERE id=?', taskId);
     return !fromJson<string[]>(t?.reminders_sent, []).includes(tag);
   }
+  remindersSent(taskId: string): string[] {
+    return fromJson<string[]>(this.db.get<Row>('SELECT reminders_sent FROM tasks WHERE id=?', taskId)?.reminders_sent, []);
+  }
   markReminderSent(taskId: string, tag: string): boolean {
     const t = this.db.get<Row>('SELECT reminders_sent FROM tasks WHERE id=?', taskId);
     const sent = fromJson<string[]>(t?.reminders_sent, []);
@@ -278,6 +286,9 @@ export class Repo {
   }
   dueFollowups(now: string): Followup[] {
     return this.db.all<Row>("SELECT * FROM followups WHERE status = 'pending' AND due_at <= ?", now).map(mapFollowup);
+  }
+  listFollowupsForItem(itemId: string): Followup[] {
+    return this.db.all<Row>('SELECT * FROM followups WHERE item_id = ?', itemId).map(mapFollowup);
   }
   pendingFollowups(): Followup[] {
     return this.db.all<Row>("SELECT * FROM followups WHERE status = 'pending' ORDER BY due_at").map(mapFollowup);
@@ -444,11 +455,18 @@ export class Repo {
     this.db.run('INSERT INTO ticket_reports (id, ticket_id, kind, content, question, created_at) VALUES (?, ?, ?, ?, ?, ?)', newId(), ticketId, kind, content, toJson(question), nowIso());
   }
 
-  /** 清除所有个人数据（PRD：一键清除） */
+  /**
+   * 清除所有个人数据（PRD：一键清除）。
+   * 只保留应用设置（模型配置、演示模式开关）；同步进度、邮箱密码、画像等也一并清除，
+   * 这样清除后的下一次同步按「首次同步」处理，不会把整个学期的历史当成新事件。
+   */
   wipe(): void {
     const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups',
       'feed_cards', 'resources', 'resource_chunks', 'triggers', 'evals', 'digest_queue', 'tickets', 'ticket_reports', 'attention_budget', 'search_index'];
-    this.db.tx(() => tables.forEach((t) => this.db.run(`DELETE FROM ${t}`)));
+    this.db.tx(() => {
+      tables.forEach((t) => this.db.run(`DELETE FROM ${t}`));
+      this.db.run("DELETE FROM settings WHERE key != 'settings'");
+    });
   }
 }
 
@@ -459,6 +477,7 @@ function mapCourse(r: Row): Course {
   return {
     id: r.id, code: r.code, section: opt(r.section), name: r.name, term: opt(r.term), teachers: fromJson(r.teachers, []),
     elearningId: opt(r.elearning_id), icourseId: opt(r.icourse_id), matchStatus: r.match_status, assessments: fromJson(r.assessments, []),
+    schedule: fromJson(r.schedule, []),
   };
 }
 function mapItem(r: Row): Item {

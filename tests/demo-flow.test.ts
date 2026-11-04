@@ -35,6 +35,13 @@ describe('演示流程', () => {
     expect(ctx.repo.findCourse('COMP130004.01')?.name).toBe('数据结构');
   });
 
+  it('演示数据带课表：今天上午数分、下午数据结构，下午 3 点后空闲', async () => {
+    const { buildToday } = await import('../src/main/today');
+    const today = buildToday(ctx.repo, NOW);
+    expect(today.courses.map((c) => c.name)).toEqual(['数学分析 III', '数据结构']);
+    expect(today.freeSlots.at(-1)).toEqual({ start: '15:10', end: '22:00' });
+  });
+
   it('邮件分类（规则兜底）', () => {
     const wang = ctx.repo.listItems({ kind: 'email', query: '组会' })[0];
     expect(wang.aiCategory).toBe('reply');
@@ -93,6 +100,24 @@ describe('演示流程', () => {
     const res = ctx.repo.getResource(t!.resultResourceId!);
     expect(res?.text).toContain('交换');
     expect(ctx.repo.search('交换项目').some((h) => h.type === 'resource')).toBe(true);
+  });
+
+  it('早安消息提到今天的课', () => {
+    const morning = posted.find((m) => m.trigger === 'morning')!;
+    expect(morning.content).toContain('数学分析 III');
+    expect(morning.content).toContain('H2215');
+  });
+
+  it('一键清除后重新同步，按「首次同步」处理，不会把历史作业当成新作业', async () => {
+    ctx.repo.wipe();
+    elearning.reset();
+    mail.reset();
+    expect(ctx.repo.getKv('elearning_last_sync', null)).toBeNull();
+    expect(ctx.repo.getSettings().demoMode).toBe(true);
+    await ctx.syncAll(NOW);
+    const fresh = ctx.repo.pendingTriggers().filter((t) => t.kind === 'assignment_new');
+    // 只有最近 48 小时内发布的 2 份作业（Lab 6、物理习题 9）算新作业
+    expect(fresh.map((t) => t.payload.title).sort()).toEqual(['Lab 6：二叉树', '大学物理 习题 9']);
   });
 
   it('没有模型时，对话也能回答 DDL 问题', async () => {

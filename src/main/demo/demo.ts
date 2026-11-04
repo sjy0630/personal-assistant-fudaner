@@ -1,6 +1,7 @@
 import type { CanvasAnnouncement, CanvasAssignment, CanvasCourse, ElearningClient } from '@fudaner/mcp-fudan-elearning';
 import type { MailClient, MailMessage } from '@fudaner/mcp-fudan-mail';
 import type { Repo } from '../db/repo';
+import type { Course, CourseSlot } from '../../shared/types';
 
 /**
  * 演示模式（PRD D8）：用模拟数据实现和真实客户端完全一样的接口，
@@ -56,9 +57,15 @@ export function demoAssignments(now: Date): CanvasAssignment[] {
   ];
 }
 
+/** 数据结构期中考试：演示时间往后 16 天（与公告、考核安排保持一致） */
+export function demoMidterm(now: Date): Date {
+  return new Date(at(now, 16 * D, '14:00'));
+}
+
 export function demoAnnouncements(now: Date): CanvasAnnouncement[] {
+  const mid = demoMidterm(now);
   return [
-    { id: '7001', courseId: '1001', title: '期中考试范围说明', message: '期中考试范围为第 1–6 章，考试时间 11 月 20 日。', postedAt: at(now, -20 * H), htmlUrl: 'https://elearning.fudan.edu.cn/courses/1001/discussion_topics/7001' },
+    { id: '7001', courseId: '1001', title: '期中考试范围说明', message: `期中考试范围为第 1–6 章，考试时间 ${mid.getMonth() + 1} 月 ${mid.getDate()} 日 14:00。`, postedAt: at(now, -20 * H), htmlUrl: 'https://elearning.fudan.edu.cn/courses/1001/discussion_topics/7001' },
     { id: '7002', courseId: '1003', title: '本周四习题课改到 H3208', message: '本周四习题课教室调整为 H3208。', postedAt: at(now, -30 * H), htmlUrl: 'https://elearning.fudan.edu.cn/courses/1003/discussion_topics/7002' },
   ];
 }
@@ -101,6 +108,7 @@ export class DemoElearningClient implements ElearningClient {
   async listAnnouncements(courseIds: string[]) { return demoAnnouncements(this.now()).filter((a) => courseIds.includes(a.courseId)); }
   /** 演示「闭环」：模拟用户在 eLearning 上交了作业 */
   submit(assignmentId: string) { this.submitted.add(assignmentId); }
+  reset() { this.submitted.clear(); }
 }
 
 export class DemoMailClient implements MailClient {
@@ -111,12 +119,46 @@ export class DemoMailClient implements MailClient {
     return [...demoMails(this.now()), ...this.extra].filter((m) => Date.parse(m.date) >= since.getTime());
   }
   inject(m: MailMessage) { this.extra.push(m); }
+  reset() { this.extra = []; }
+}
+
+/**
+ * 演示用的课表和考核安排（Canvas 不提供这些，真实环境由课表导入补充）。
+ * 课表按「今天是星期几」生成，保证演示当天有课：上午数分、下午数据结构，15:10 之后空闲。
+ */
+export function applyDemoCourseExtras(repo: Repo, now: Date): void {
+  const wd = ((now.getDay() + 6) % 7) + 1;
+  const day = (k: number) => ((wd - 1 + k) % 7) + 1;
+  const final = (k: number) => at(now, (45 + k) * D, '08:30');
+  const extras: Record<string, { schedule: CourseSlot[]; assessments: NonNullable<Course['assessments']> }> = {
+    'COMP130004.01': {
+      schedule: [{ weekday: day(0), start: '13:30', end: '15:10', location: 'H2215' }, { weekday: day(3), start: '10:00', end: '11:40', location: 'H2215' }],
+      assessments: [{ kind: 'midterm', date: demoMidterm(now).toISOString() }, { kind: 'final', date: final(0) }],
+    },
+    'MATH120003.02': {
+      schedule: [{ weekday: day(0), start: '08:00', end: '09:40', location: 'H3109' }, { weekday: day(2), start: '08:00', end: '09:40', location: 'H3109' }],
+      assessments: [{ kind: 'final', date: final(2) }],
+    },
+    'PHYS120013.05': {
+      schedule: [{ weekday: day(1), start: '10:00', end: '11:40', location: 'H3208' }, { weekday: day(3), start: '08:00', end: '09:40', location: 'H3208' }],
+      assessments: [{ kind: 'final', date: final(4) }],
+    },
+    'MATH120044.01': { schedule: [{ weekday: day(1), start: '13:30', end: '15:10', location: 'HGX102' }], assessments: [{ kind: 'final', date: final(6) }] },
+    'ENGL110025.03': { schedule: [{ weekday: day(2), start: '15:25', end: '17:05', location: 'H4102' }], assessments: [] },
+    'PTSS110008.12': { schedule: [{ weekday: day(4), start: '18:30', end: '20:10', location: 'H2115' }], assessments: [{ kind: 'final', date: final(8) }] },
+  };
+  for (const c of repo.listCourses()) {
+    const e = extras[c.code];
+    if (e) repo.setCourseExtras(c.id, e);
+  }
 }
 
 /** 演示用的画像和记忆（PRD 演示脚本中的「周二晚上有社团」「想申请交换」） */
 export function seedDemoProfile(repo: Repo): void {
   if (repo.getKv('demo_seeded', false)) return;
-  repo.setProfile({ nickname: '小旦', school: '计算与智能创新学院', grade: '2024 级', degree: '本科', assistantName: '旦旦', style: 'playful', proactivity: 'medium' });
+  // 主动程度设为「多」：演示开始时首次同步会集中涌入一批事件，「中」档的预算会在演示后半段用完，
+  // 导致闭环确认等关键镜头被降级到动态里（这本身是预期行为，但不利于演示）
+  repo.setProfile({ nickname: '小旦', school: '计算与智能创新学院', grade: '2024 级', degree: '本科', assistantName: '旦旦', style: 'playful', proactivity: 'high' });
   repo.addMemory({ type: 'schedule', content: '周二晚上有社团活动', source: 'manual' });
   repo.addMemory({ type: 'goal', content: '想申请 2027 春季交换', source: 'manual' });
   repo.addMemory({ type: 'interest', content: '对 AI 方向的讲座感兴趣', source: 'manual' });
