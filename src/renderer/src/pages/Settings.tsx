@@ -13,11 +13,11 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'dev', label: '开发者' },
 ];
 
-export function SettingsPage() {
+export function SettingsPage({ onOpenOnboarding }: { onOpenOnboarding?: () => void }) {
   const [tab, setTab] = useState<Tab>('model');
   return (
     <div className="page">
-      <header className="page-header"><h1>设置</h1></header>
+      <header className="page-header"><h1>设置</h1>{onOpenOnboarding && <button onClick={onOpenOnboarding}>重新打开使用引导</button>}</header>
       <div className="filters">{TABS.map((t) => <button key={t.key} className={tab === t.key ? 'chip active' : 'chip'} onClick={() => setTab(t.key)}>{t.label}</button>)}</div>
       <div className="settings-body">
         {tab === 'model' && <ModelTab />}

@@ -244,6 +244,8 @@ export interface Followup {
 // ---------- 设置与连接 ----------
 export interface ModelConfig { baseURL: string; apiKey: string; model: string }
 export interface Settings {
+  /** 首次使用引导已完成；旧配置缺省时展示引导。 */
+  onboardingCompleted?: boolean;
   cloud?: ModelConfig;
   local?: ModelConfig;
   demoMode: boolean;
