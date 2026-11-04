@@ -39,7 +39,7 @@ export async function assess(
 const clamp = (n: number) => Math.max(0, Math.min(1, Number(n) || 0));
 
 /** 规则兜底：按事件类型给出基础价值和处理方式；多事件取最高值 */
-export function heuristic(batch: Trigger[], ctx: { memories: Memory[]; phase: SemesterPhase; describe: (t: Trigger) => string }): Assessment {
+export function heuristic(batch: Trigger[], ctx: { memories: Memory[]; phase: SemesterPhase; now?: Date; describe: (t: Trigger) => string }): Assessment {
   const scored = batch.map((t) => ({ t, ...BASE[t.kind](t, ctx) }));
   scored.sort((a, b) => b.value - a.value);
   const top = scored[0];
@@ -51,7 +51,7 @@ export function heuristic(batch: Trigger[], ctx: { memories: Memory[]; phase: Se
   };
 }
 
-type Rule = (t: Trigger, ctx: { memories: Memory[]; phase: SemesterPhase }) => {
+type Rule = (t: Trigger, ctx: { memories: Memory[]; phase: SemesterPhase; now?: Date }) => {
   value: number; urgency: number; action: Decision; draft: string; reason: string; ticket?: { title: string; request: string };
 };
 
@@ -85,8 +85,8 @@ const BASE: Record<Trigger['kind'], Rule> = {
     }
     return { value: 0.05, urgency: 0, action: 'record', draft: '', reason: '一般邮件' };
   },
-  deadline_72h: (t) => ({ value: 0.45, urgency: 0.4, action: 'card', draft: `「${p(t, 'title')}」${hoursLeft(t)}截止。`, reason: '距截止不到 72 小时' }),
-  deadline_24h: (t) => ({ value: 0.75, urgency: 0.75, action: 'chat', draft: `「${p(t, 'title')}」${hoursLeft(t)}截止，还没交。`, reason: '距截止不到 24 小时且未提交' }),
+  deadline_72h: (t, ctx) => ({ value: 0.45, urgency: 0.4, action: 'card', draft: `「${p(t, 'title')}」${hoursLeft(t, ctx.now)}截止。`, reason: '距截止不到 72 小时' }),
+  deadline_24h: (t, ctx) => ({ value: 0.75, urgency: 0.75, action: 'chat', draft: `「${p(t, 'title')}」${hoursLeft(t, ctx.now)}截止，还没交。`, reason: '距截止不到 24 小时且未提交' }),
   deadline_3h: (t) => ({ value: 0.95, urgency: 0.95, action: 'chat_notify', draft: `⏰「${p(t, 'title')}」3 小时后截止，还没交！`, reason: '距截止 3 小时且未提交' }),
   morning: () => ({ value: 1, urgency: 0.6, action: 'chat_notify', draft: '', reason: '每日早安' }),
   weekly_plan: () => ({ value: 0.8, urgency: 0.4, action: 'chat', draft: '新的一周开始了，要我帮你排一下本周安排吗？', reason: '每周一的本周安排' }),
@@ -101,10 +101,10 @@ const BASE: Record<Trigger['kind'], Rule> = {
 };
 
 /** 「还剩约 9 小时」/「还剩约 2 天」 */
-function hoursLeft(t: Trigger): string {
+function hoursLeft(t: Trigger, now = new Date()): string {
   const due = Date.parse(String(t.payload.dueAt ?? ''));
   if (!due) return '即将';
-  const h = Math.max(1, Math.round((due - Date.now()) / 3_600_000));
+  const h = Math.max(1, Math.round((due - now.getTime()) / 3_600_000));
   return h < 36 ? `还剩约 ${h} 小时` : `还剩约 ${Math.round(h / 24)} 天`;
 }
 

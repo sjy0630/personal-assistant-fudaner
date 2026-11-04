@@ -130,7 +130,7 @@ export class ProactiveEngine {
       }
       // 同一线程里分数最高的事件用这次的决定写回；其余事件各自生成动态卡片，避免被合并后「消失」
       const ranked = passed
-        .map((t) => ({ t, h: heuristic([t], { memories, phase: budget.phase, describe: describeTrigger }) }))
+        .map((t) => ({ t, h: heuristic([t], { memories, phase: budget.phase, now, describe: describeTrigger }) }))
         .sort((x, y) => y.h.value - x.h.value);
       this.writeBack(decision, assessment, [ranked[0].t], ev);
       for (const r of ranked.slice(1)) {
