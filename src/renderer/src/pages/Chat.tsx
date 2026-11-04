@@ -60,9 +60,8 @@ export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday
       <section className="chat" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <header className="page-header">
           <h1>{assistantName}</h1>
-          <button className="ghost today-toggle" type="button" onClick={toggleToday} aria-expanded={!todayCollapsed} aria-controls="today-sidebar" title={todayCollapsed ? '展开右侧栏' : '收起右侧栏'}>
+          <button className="ghost sidebar-toggle today-toggle" type="button" onClick={toggleToday} aria-label={todayCollapsed ? '展开右侧栏' : '收起右侧栏'} aria-expanded={!todayCollapsed} aria-controls="today-sidebar" title={todayCollapsed ? '展开右侧栏' : '收起右侧栏'}>
             <NavIcon name={todayCollapsed ? 'expand-right' : 'collapse-right'} />
-            <span>{todayCollapsed ? '展开今天' : '收起今天'}</span>
           </button>
         </header>
         <div className="messages">
