@@ -142,7 +142,8 @@ export class ProactiveEngine {
       const ranked = passed
         .map((t) => ({ t, h: heuristic([t], { memories, phase: budget.phase, now, describe: describeTrigger }) }))
         .sort((x, y) => y.h.value - x.h.value);
-      this.writeBack(decision, assessment, [ranked[0].t], ev);
+      // 写回时还要知道：是否在静默时段、扣掉这次成本后今天还剩多少预算（高价值建议是否值得额外在对话里问）
+      this.writeBack(decision, assessment, [ranked[0].t], ev, { quiet, remaining: budget.remaining - cost, date: budget.date });
       for (const r of ranked.slice(1)) {
         if (r.h.action === 'record' || r.h.action === 'digest') continue;
         this.addCard([r.t], r.h, refsOf([r.t], this.repo));
@@ -152,7 +153,7 @@ export class ProactiveEngine {
     return ev;
   }
 
-  private writeBack(decision: Decision, a: Assessment, batch: Trigger[], ev: EvalRecord): void {
+  private writeBack(decision: Decision, a: Assessment, batch: Trigger[], ev: EvalRecord, ctx: { quiet: boolean; remaining: number; date: string }): void {
     const refs = refsOf(batch, this.repo);
     const text = a.messageDraft || batch.map(describeTrigger).join('\n');
     switch (decision) {
@@ -184,12 +185,18 @@ export class ProactiveEngine {
         });
         this.channels.changed('feed');
         // 价值很高的建议（如考试周前的复习计划）直接在对话里问一句，而不只是放在动态里
+        // 这次额外的对话消息同样要遵守静默时段和当天剩余预算：
+        // 静默时段 → 攒到早安消息里说；预算不够 → 只留在动态里
         if (a.value >= HIGH_VALUE_SUGGESTION) {
-          this.post({
-            content: text, cards: refs, trigger: `eval:${ev.id}`,
-            actions: [{ label: '好，帮我做', action: 'accept_ticket', payload: { ticketId: ticket.id } }, { label: '先不用', action: 'decline_ticket', payload: { ticketId: ticket.id } }],
-          });
-          this.repo.spendBudget(localDate(new Date(ev.createdAt)), ATTENTION_COST.chat);
+          if (ctx.quiet) {
+            this.repo.addDigest(text, refs, ev.id);
+          } else if (ctx.remaining >= ATTENTION_COST.chat) {
+            this.post({
+              content: text, cards: refs, trigger: `eval:${ev.id}`,
+              actions: [{ label: '好，帮我做', action: 'accept_ticket', payload: { ticketId: ticket.id } }, { label: '先不用', action: 'decline_ticket', payload: { ticketId: ticket.id } }],
+            });
+            this.repo.spendBudget(ctx.date, ATTENTION_COST.chat);
+          }
         }
         break;
       }

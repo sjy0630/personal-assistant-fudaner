@@ -291,4 +291,26 @@ describe('写回', () => {
     expect(ask.actions.map((a) => a.action)).toEqual(['accept_ticket', 'decline_ticket']);
     expect(ask.actions[0].payload?.ticketId).toBe(repo.listTickets()[0].id);
   });
+
+  it('这类建议也遵守静默时段：深夜进入「考试周前」时不发消息，攒到早安里', async () => {
+    const { repo, engine, evalMessages } = setup();
+    await engine.tick(at('2026-12-11T10:00:00'));
+    await engine.tick(at('2026-12-14T23:45:00'));
+    expect(repo.listTickets()[0]).toMatchObject({ title: '考试周复习计划', status: 'suggested' });
+    expect(evalMessages().some((m) => m.content.includes('复习计划'))).toBe(false);
+    expect(repo.takeDigest().map((d) => d.text).join()).toContain('复习计划');
+  });
+
+  it('这类建议也遵守当天预算：剩余预算不够一条对话消息时，只留在动态里', async () => {
+    const { repo, engine, evalMessages } = setup();
+    await engine.tick(at('2026-12-11T10:00:00'));
+    const day = at('2026-12-14T14:30:00'); // 14:00 之后，不发早安
+    const date = '2026-12-14';
+    repo.getBudget(date, () => ({ budget: 15, phase: 'pre_exam' }));
+    repo.spendBudget(date, 14); // 只剩 1 点：够建议卡片（0.5），不够对话消息（1.5）
+    await engine.tick(day);
+    expect(repo.listFeed().some((c) => c.type === 'suggest_ticket')).toBe(true);
+    expect(evalMessages().some((m) => m.content.includes('复习计划'))).toBe(false);
+    expect(repo.getBudget(date, () => ({ budget: -1, phase: 'regular' })).spent).toBeLessThanOrEqual(15);
+  });
 });
