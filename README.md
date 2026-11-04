@@ -9,6 +9,7 @@
 - 产品需求文档：[docs/PRD.md](docs/PRD.md)
 - 开发说明与分工：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 材料工作手册：[docs/MATERIALS.md](docs/MATERIALS.md)
+- 演示剧本（录视频用）：[docs/DEMO.md](docs/DEMO.md)
 
 ## 快速开始
 
@@ -40,7 +41,8 @@ npm run dev
 | `npm test` | 运行测试（主动引擎、课程匹配、演示端到端流程） |
 | `npm run typecheck` | 类型检查 |
 | `npm run check` | 类型检查 + 测试 + 构建 |
-| `npm run dist` | 打包 Windows 安装包 |
+| `npm run dist` | 打包 Windows 安装包（需在 Windows 上运行） |
+| `npm run dist:dir` | 打包为当前系统的免安装目录（用于验证打包） |
 
 ## 目录结构
 
@@ -63,4 +65,6 @@ src/main/                     Electron 主进程
 src/renderer/                 React 界面：对话 / 动态 / 目标 / 资源 / 搜索 / 设置
 src/shared/                   前后端共享类型与 IPC 接口
 tests/                        测试
+resources/                    应用图标
+demo-assets/                  演示用的虚构材料（复习讲义）
 ```
