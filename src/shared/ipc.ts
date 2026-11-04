@@ -9,7 +9,8 @@ import type {
  */
 export interface FudanerApi {
   chat: {
-    history(limit?: number): Promise<ChatMessage[]>;
+    /** 指定 aroundId 时返回包含该消息的上下文；消息已清理则返回空数组。 */
+    history(limit?: number, aroundId?: string): Promise<ChatMessage[]>;
     send(text: string, refs?: CardRef[]): Promise<void>;
     quickAction(messageId: string, action: string, payload?: Record<string, unknown>): Promise<void>;
   };

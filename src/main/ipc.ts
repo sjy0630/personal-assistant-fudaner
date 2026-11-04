@@ -25,7 +25,7 @@ export function registerIpc(ctx: AppContext, opts: {
     ipcMain.handle(ch, (_e, ...args) => fn(...(args as T)));
 
   type Api = FudanerApi;
-  handle<[number?], ReturnType<Api['chat']['history']>>('chat.history', async (limit) => repo.recentMessages(limit ?? 100));
+  handle<Parameters<Api['chat']['history']>, ReturnType<Api['chat']['history']>>('chat.history', async (limit, aroundId) => aroundId ? repo.messagesAround(aroundId, limit ?? 100) : repo.recentMessages(limit ?? 100));
   handle<Parameters<Api['chat']['send']>, void>('chat.send', async (text, refs) => { void ctx.agent.handleUserMessage(text, refs); });
   handle<Parameters<Api['chat']['quickAction']>, void>('chat.quickAction', async (_messageId, action, payload) => {
     if (action === 'forget_memory' && payload?.id) { repo.removeMemory(String(payload.id)); return; }

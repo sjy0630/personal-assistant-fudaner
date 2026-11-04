@@ -17,15 +17,21 @@ import iconPath from '../../resources/icon.png?asset&asarUnpack';
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+let pendingNotificationMessage: string | null = null;
 
 const send = (channel: string, payload?: unknown) => win?.webContents.send('fudaner:event', channel, payload);
+function flushNotificationNavigation() {
+  if (!pendingNotificationMessage || !win || win.isDestroyed() || win.webContents.isLoadingMainFrame()) return;
+  send('navigate', { page: 'chat', id: pendingNotificationMessage });
+  pendingNotificationMessage = null;
+}
 
 const channels: Channels = {
   messagePosted: (msg) => send('chat:message', msg),
   notify: (title, body, messageId) => {
     if (!Notification.isSupported()) return;
     const n = new Notification({ title, body, silent: false });
-    n.on('click', () => { showWindow(); send('navigate', { page: 'chat', id: messageId }); });
+    n.on('click', () => { pendingNotificationMessage = messageId; showWindow(); flushNotificationNavigation(); });
     n.show();
   },
   changed: (what) => send(`${what}:changed`),
@@ -62,6 +68,8 @@ function createWindow() {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false },
   });
   win.on('ready-to-show', () => win?.show());
+  // did-finish-load 触发时 isLoadingMainFrame 仍可能为 true，等加载状态结束再送达。
+  win.webContents.on('did-stop-loading', flushNotificationNavigation);
   // 关闭窗口时最小化到托盘，后台继续同步和提醒
   win.on('close', (e) => { if (!quitting) { e.preventDefault(); win?.hide(); } });
   win.webContents.setWindowOpenHandler(({ url }) => { void shell.openExternal(url); return { action: 'deny' }; });

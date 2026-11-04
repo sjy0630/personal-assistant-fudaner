@@ -8,20 +8,49 @@ import { NavIcon } from '../theme/NavIcon';
 const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课周', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
 
 /** 主对话（PRD §5.1）：一条持续的对话流 + 右侧「今天」边栏 */
-export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday, quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; todayCollapsed: boolean; toggleToday: () => void; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
+export function ChatPage({ assistantName = '旦旦', location, returnToLatest, todayCollapsed, toggleToday, quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; location: { id: string } | null; returnToLatest: () => void; todayCollapsed: boolean; toggleToday: () => void; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [liveTools, setLiveTools] = useState<ToolCallView[]>([]);
   const [today, setToday] = useState<TodayOverview | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const focusedLocation = useRef<typeof location>(null);
+  const loadingHistory = useRef(true);
+  const duringLoad = useRef<ChatMessage[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    void api.chat.history(200).then(setMessages);
+    let active = true;
+    loadingHistory.current = true;
+    duringLoad.current = [];
+    focusedLocation.current = null;
+    setHistoryLoading(true); setHistoryError(false); setMessages([]);
+    void api.chat.history(200, location?.id).then((history) => {
+      if (!active) return;
+      const merged = new Map(history.map((m) => [m.id, m]));
+      for (const m of duringLoad.current) if (!location || merged.has(m.id)) merged.set(m.id, m);
+      setMessages([...merged.values()]);
+    }).catch(() => { if (active) setHistoryError(true); }).finally(() => {
+      if (active) { loadingHistory.current = false; setHistoryLoading(false); }
+    });
+    return () => { active = false; };
+  }, [location, retry]);
+
+  useEffect(() => {
     void api.today().then(setToday);
     const offs = [
       api.on('chat:message', (m) => {
-        setMessages((prev) => (prev.some((x) => x.id === (m as ChatMessage).id) ? prev : [...prev, m as ChatMessage]));
+        const message = m as ChatMessage;
+        if (loadingHistory.current) duringLoad.current.push(message);
+        else setMessages((prev) => {
+          const exists = prev.some((x) => x.id === message.id);
+          // 查看历史通知时保留上下文；新回复仍可通过“返回最新消息”查看。
+          return exists ? prev.map((x) => x.id === message.id ? message : x) : location ? prev : [...prev, message];
+        });
         setLiveTools([]);
         void api.today().then(setToday);
       }),
@@ -33,13 +62,24 @@ export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday
       api.on('goals:changed', () => void api.today().then(setToday)),
     ];
     return () => offs.forEach((off) => off());
-  }, []);
+  }, [location]);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, thinking, liveTools]);
+  useEffect(() => {
+    if (!location && !historyLoading) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, thinking, liveTools, location, historyLoading]);
+  useEffect(() => {
+    if (!location || historyLoading || loadingHistory.current || focusedLocation.current === location) return;
+    const target = Array.from(messagesRef.current?.querySelectorAll<HTMLElement>('[data-message-id]') ?? []).find((el) => el.dataset.messageId === location.id);
+    if (!target) return;
+    focusedLocation.current = location;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'center', behavior: 'auto' });
+  }, [messages, location, historyLoading]);
 
   const send = async () => {
     const text = input.trim();
     if (!text) return;
+    if (location) returnToLatest();
     setInput('');
     await api.chat.send(text, quoted);
     clearQuoted();
@@ -64,9 +104,15 @@ export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday
             <NavIcon name={todayCollapsed ? 'expand-right' : 'collapse-right'} />
           </button>
         </header>
-        <div className="messages">
-          {messages.length === 0 && <div className="empty">和{assistantName}打个招呼吧。可以问「这周有什么 DDL？」或「有哪些邮件要回？」。</div>}
-          {messages.map((m) => <Message key={m.id} m={m} assistantName={assistantName} />)}
+        {location && <div className="notification-location">
+          <span role="status">{historyLoading ? '正在定位通知消息…' : historyError ? '暂时无法读取通知消息，请重试。' : messages.some((m) => m.id === location.id) ? '已定位到通知消息' : '这条通知对应的消息已不存在，可能已被清理。'}</span>
+          {historyError && <button type="button" onClick={() => setRetry((n) => n + 1)}>重试</button>}
+          <button type="button" className="ghost" onClick={returnToLatest}>返回最新消息</button>
+        </div>}
+        <div className="messages" ref={messagesRef} aria-busy={historyLoading}>
+          {!location && historyError && <div role="alert">暂时无法读取对话。<button type="button" onClick={() => setRetry((n) => n + 1)}>重试</button></div>}
+          {!location && !historyLoading && !historyError && messages.length === 0 && <div className="empty">和{assistantName}打个招呼吧。可以问「这周有什么 DDL？」或「有哪些邮件要回？」。</div>}
+          {messages.map((m) => <Message key={m.id} m={m} assistantName={assistantName} highlighted={location?.id === m.id} />)}
           {thinking && (
             <div className="msg assistant">
               {liveTools.map((t, i) => <ToolLine key={i} t={t} />)}
@@ -96,9 +142,9 @@ export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday
   );
 }
 
-function Message({ m, assistantName }: { m: ChatMessage; assistantName: string }) {
+function Message({ m, assistantName, highlighted }: { m: ChatMessage; assistantName: string; highlighted?: boolean }) {
   return (
-    <div className={`msg ${m.role}`}>
+    <div className={`msg ${m.role}${highlighted ? ' msg--target' : ''}`} data-message-id={m.id} tabIndex={highlighted ? -1 : undefined} aria-label={highlighted ? '通知定位的消息' : undefined}>
       <div className="meta">{m.role === 'user' ? '你' : assistantName} · {fmtTime(m.createdAt)}{m.proactive && <span className="tag">主动</span>}</div>
       {m.toolCalls.map((t, i) => <ToolLine key={i} t={t} />)}
       {m.refs.length > 0 && <div className="refs">{m.refs.map((r) => <RefChip key={r.id} r={r} />)}</div>}
