@@ -108,7 +108,11 @@ export function registerIpc(ctx: AppContext, opts: {
     ];
   });
   handle('platforms.login', async () => opts.auth.requestLogin());
-  handle('platforms.syncNow', async () => { await ctx.syncAll(); await ctx.engine.tick(); });
+  handle('platforms.syncNow', async () => {
+    const result = await ctx.syncAll();
+    await ctx.engine.tick();
+    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+  });
 
   handle<[number?], unknown>('decisions', async (limit) => {
     const date = localDate(new Date());
@@ -123,7 +127,12 @@ export function registerIpc(ctx: AppContext, opts: {
     repo.resetBudget(localDate(new Date()));
     await ctx.engine.tick();
   });
-  handle('dev.tick', async () => { await ctx.syncAll(); await ctx.engine.tick(); await ctx.executor.runNext(); });
+  handle('dev.tick', async () => {
+    const result = await ctx.syncAll();
+    await ctx.engine.tick();
+    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+    await ctx.executor.runNext();
+  });
   handle('dev.wipe', async () => { repo.wipe(); });
   handle('dev.demoSubmitNext', async () => {
     const next = repo.listItems({ kind: 'assignment', done: false, dueAfter: new Date().toISOString(), limit: 1, dueBefore: new Date(Date.now() + 30 * 86_400_000).toISOString() })[0];
