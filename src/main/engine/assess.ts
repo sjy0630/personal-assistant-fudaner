@@ -1,6 +1,7 @@
 import type { Assessment, Decision, Memory, SemesterPhase, Trigger } from '../../shared/types';
 import { assessPrompt } from '../ai/prompts';
 import { parseJsonLoose, type LlmClient } from '../ai/llm';
+import { assessmentOutput } from '../ai/validation';
 
 /**
  * 研判（PRD §5.7 第 2 步，参考 dsh-superagent 的 Assessment）。
@@ -19,8 +20,9 @@ export async function assess(
         nowIso: ctx.now.toISOString(),
       });
       const r = await ctx.llm.chat([{ role: 'user', content: prompt }], { json: true, temperature: 0.1, maxTokens: 400 });
-      const j = parseJsonLoose<{ value: number; urgency: number; action: Decision; message_draft: string; reason: string; ticket?: { title: string; request: string } | null }>(r.content);
-      if (j && typeof j.value === 'number' && j.action) {
+      const parsed = assessmentOutput.safeParse(parseJsonLoose<unknown>(r.content));
+      if (parsed.success && !r.toolCalls.length) {
+        const j = parsed.data;
         return {
           assessment: {
             value: clamp(j.value), urgency: clamp(j.urgency ?? 0), action: j.action, messageDraft: j.message_draft ?? '',

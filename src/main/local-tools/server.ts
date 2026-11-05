@@ -5,6 +5,19 @@ import type { Channels } from '../engine/channels';
 import { buildToday } from '../today';
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
+const isoDueAt = z.iso.datetime({ offset: true });
+
+/** 没有截止时间用 undefined；拒绝本地歧义时间、无效日期和 NaN。 */
+function optionalDueAt(value?: string): string | undefined {
+  const text = value?.trim();
+  if (!text) return undefined;
+  if (!isoDueAt.safeParse(text).success || !Number.isFinite(Date.parse(text))) {
+    throw new Error('due_at 必须是合法且带时区的 ISO 时间，例如 2026-11-10T23:59:00+08:00；没有截止时间请省略或传空字符串。');
+  }
+  return new Date(text).toISOString();
+}
+
+const dueAtDescription = '带时区的 ISO 截止时间，例如 2026-11-10T23:59:00+08:00；没有截止时间时省略或传空字符串';
 
 /**
  * fudaner-local MCP 服务（PRD §7.5）：记忆、目标、跟进、动态、资源库、搜索。
@@ -64,18 +77,24 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
 
   server.registerTool('create_goal', {
     description: '创建一个目标（例如「申请 2027 春季交换」），之后可以用 add_task 拆解成带日期的任务',
-    inputSchema: { title: z.string(), level: z.enum(['long_term', 'week']), due_at: z.string().optional(), description: z.string().optional() },
+    inputSchema: { title: z.string(), level: z.enum(['long_term', 'week']), due_at: z.string().optional().describe(dueAtDescription), description: z.string().optional() },
   }, async (a) => {
-    const g = repo.addGoal({ level: a.level, title: a.title, dueAt: a.due_at, description: a.description, createdBy: 'assistant' });
+    const dueAt = optionalDueAt(a.due_at);
+    const g = repo.addGoal({ level: a.level, title: a.title, dueAt, description: a.description, createdBy: 'assistant' });
     channels.changed('goals');
     return json(g);
   });
 
   server.registerTool('add_task', {
-    description: '给目标添加一个任务（拆解目标、制定计划时使用）',
-    inputSchema: { goal_id: z.string().optional(), title: z.string(), due_at: z.string().optional() },
+    description: '给目标添加一个任务（拆解目标、制定计划时使用）。goal_id 必须使用 create_goal 或 list_goals 返回的真实 id，不能用目标标题代替',
+    inputSchema: { goal_id: z.string().optional().describe('create_goal 或 list_goals 返回的真实目标 id；不是目标标题'), title: z.string(), due_at: z.string().optional().describe(dueAtDescription) },
   }, async (a) => {
-    const t = repo.addTask({ goalId: a.goal_id, title: a.title, dueAt: a.due_at, source: 'assistant' });
+    const dueAt = optionalDueAt(a.due_at);
+    const goalId = a.goal_id?.trim();
+    if (a.goal_id !== undefined && (!goalId || !repo.getGoal(goalId))) {
+      throw new Error('goal_id 对应的目标不存在。请使用 create_goal 或 list_goals 返回的真实 id，不能使用目标标题；不关联目标时请省略 goal_id。');
+    }
+    const t = repo.addTask({ goalId, title: a.title, dueAt, source: 'assistant' });
     channels.changed('goals');
     return json(t);
   });
@@ -84,7 +103,10 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
     server.registerTool('update_progress', {
       description: '更新任务状态（用户说「写完了」时）',
       inputSchema: { task_id: z.string(), status: z.enum(['todo', 'done', 'skipped']) },
-    }, async ({ task_id, status }) => { repo.setTaskStatus(task_id, status); channels.changed('goals'); return json({ ok: true }); });
+    }, async ({ task_id, status }) => {
+      if (!repo.getTask(task_id)) throw new Error('task_id 对应的任务不存在。请使用 add_task 或 list_goals 返回的真实任务 id，不能使用任务标题。');
+      repo.setTaskStatus(task_id, status); channels.changed('goals'); return json({ ok: true });
+    });
 
     server.registerTool('schedule_followup', {
       description: '安排一次跟进：到时间后助理会主动问进展。用户提到计划或承诺时使用（如「今晚写 Lab 5」→ 明早跟进）',

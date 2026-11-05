@@ -8,10 +8,16 @@ import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
 import { parseJsonLoose } from './llm';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
+import { ConversationSummarizer } from './summary';
+import { memoryOutput } from './validation';
+import { createToolPolicy } from './tool-policy';
 
 const MAX_STEPS = 8;
 
-export interface LoopResult { content: string; toolCalls: ToolCallView[]; cards: CardRef[] }
+export interface LoopResult {
+  content: string; toolCalls: ToolCallView[]; cards: CardRef[];
+  finishReason: 'answer' | 'step_limit';
+}
 
 /**
  * 通用的工具调用循环：主对话智能体和后台工单执行器共用。
@@ -23,6 +29,7 @@ export async function runAgentLoop(opts: {
   onDelta?: (text: string) => void;
   onCards?: (cards: CardRef[]) => void;
   onToolResult?: (result: Awaited<ReturnType<McpHub['call']>>) => void;
+  authorizeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
   signal?: AbortSignal;
 }): Promise<LoopResult> {
   const { llm, hub, tools, messages } = opts;
@@ -40,19 +47,25 @@ export async function runAgentLoop(opts: {
     const r = await llm.chat(messages, { tools, temperature: 0.5, signal: opts.signal, onDelta: opts.onDelta ? emit : undefined });
     opts.signal?.throwIfAborted();
     if (opts.onDelta && !round && r.content) emit(r.content);
-    if (r.toolCalls.length === 0) return { content: opts.onDelta ? streamedContent : r.content, toolCalls: calls, cards };
+    if (r.toolCalls.length === 0) return { content: opts.onDelta ? streamedContent : r.content, toolCalls: calls, cards, finishReason: 'answer' };
     messages.push({
       role: 'assistant', content: r.content || null,
       tool_calls: r.toolCalls.map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.arguments } })),
     });
     for (const tc of r.toolCalls) {
       opts.signal?.throwIfAborted();
-      const args = parseJsonLoose<Record<string, unknown>>(tc.arguments);
-      if (!args || Array.isArray(args)) throw new Error('工具参数不完整，未执行');
+      // Function calling 的参数必须是完整 JSON 对象，不能从残缺文本中“修复”出写操作。
+      let parsed: unknown;
+      try { parsed = JSON.parse(tc.arguments); } catch { throw new Error('工具参数不完整，未执行'); }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('工具参数不完整，未执行');
+      const args = parsed as Record<string, unknown>;
       const [server, tool] = tc.name.split('__');
       const view: ToolCallView = { id: tc.id, name: tool ?? tc.name, server: (server ?? '').replace(/_/g, '-'), args };
       opts.onTool?.(view);
-      const res = await hub.call(tc.name, args);
+      const denied = opts.authorizeTool?.(tc.name, args);
+      const res: Awaited<ReturnType<McpHub['call']>> = denied
+        ? { server: view.server, tool: view.name, ok: false, text: denied }
+        : await hub.call(tc.name, args);
       view.ok = res.ok;
       view.summary = res.text.slice(0, 120);
       calls.push(view);
@@ -69,7 +82,7 @@ export async function runAgentLoop(opts: {
   }
   const end = '这件事步骤有点多，我先停在这里。要我继续吗？';
   if (opts.onDelta) { const text = `${streamedContent ? '\n\n' : ''}${end}`; streamedContent += text; opts.onDelta(text); }
-  return { content: opts.onDelta ? streamedContent : end, toolCalls: calls, cards };
+  return { content: opts.onDelta ? streamedContent : end, toolCalls: calls, cards, finishReason: 'step_limit' };
 }
 
 /** 写操作的结果以卡片形式出现在对话里（PRD §5.1：写操作展示结果、可撤销） */
@@ -81,7 +94,7 @@ function cardsFromTool(tool: string, text: string): CardRef[] {
   const title = typeof j.title === 'string' ? j.title : undefined;
   if (tool === 'save_resource') return [{ type: 'resource', id: j.id, title: title ?? '资源', subtitle: '已存入资源库' }];
   if (tool === 'create_goal') return [{ type: 'goal', id: j.id, title: title ?? '目标', subtitle: '新目标' }];
-  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: typeof j.dueAt === 'string' ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
+  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: typeof j.dueAt === 'string' && Number.isFinite(Date.parse(j.dueAt)) ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
   return [];
 }
 
@@ -106,6 +119,7 @@ function readItemCards(repo: Repo, result: Awaited<ReturnType<McpHub['call']>>):
  * 主对话智能体（PRD §5.1）。作为 MCP 客户端调用各平台工具。
  */
 export class ChatAgent {
+  private readonly summarizer: ConversationSummarizer;
   private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
   state(): ChatRun | null { return this.active ? structuredClone(this.active.view) : null; }
   cancel(id: string): void { if (this.active?.view.id === id) this.active.controller.abort(); }
@@ -115,7 +129,7 @@ export class ChatAgent {
     private readonly router: ModelRouter,
     private readonly hub: McpHub,
     private readonly channels: Channels,
-  ) {}
+  ) { this.summarizer = new ConversationSummarizer(repo, router); }
 
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
     if (this.active) throw new Error('上一条回复还在生成，请先停止或等待完成。');
@@ -141,23 +155,25 @@ export class ChatAgent {
     } finally {
       this.active = null;
       this.channels.thinking(false);
+      void this.summarizer.runInBackground();
     }
   }
 
   private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
-    const system = personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString() });
+    const system = [personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString() }), this.summarizer.context()].filter(Boolean).join('\n\n');
     const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
-    // TODO(C)：更早的对话用 conversation_summaries 的滚动摘要代替
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
+    const policy = createToolPolicy(this.repo, llm);
     const result = await runAgentLoop({
-      llm, hub: this.hub, tools: this.hub.llmTools(), messages,
+      llm, hub: this.hub, tools: this.hub.llmTools(policy.filter), messages,
+      authorizeTool: policy.authorize,
       signal: run.controller.signal,
       onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
       onToolResult: (result) => {
@@ -246,9 +262,16 @@ export class ChatAgent {
     const llm = this.router.for('memory_extract');
     if (!llm) return;
     try {
+      const epochKey = 'ai_memory_epoch';
+      let epoch = this.repo.getKv<string | null>(epochKey, null);
+      if (!epoch) { epoch = randomUUID(); this.repo.setKv(epochKey, epoch); }
       const existing = this.repo.listMemories().map((m) => `- ${m.content}`).join('\n');
       const r = await llm.chat([{ role: 'user', content: memoryExtractPrompt({ dialog: `用户：${userMsg.content}\n助理：${reply.content}`, existing }) }], { json: true, temperature: 0 });
-      const j = parseJsonLoose<{ memories: { op: string; type: string; content: string; expires_days?: number | null }[] }>(r.content);
+      const parsed = memoryOutput.safeParse(parseJsonLoose<unknown>(r.content));
+      if (!parsed.success || r.toolCalls.length) return;
+      const current = this.repo.getMessage(userMsg.id);
+      if (this.repo.getKv<string | null>(epochKey, null) !== epoch || !current || current.createdAt !== userMsg.createdAt || current.content !== userMsg.content) return;
+      const j = parsed.data;
       const added = (j?.memories ?? []).filter((m) => m.op === 'add' && m.content).map((m) => this.repo.addMemory({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         type: m.type as any, content: m.content, source: 'chat', sourceMsgId: userMsg.id,
