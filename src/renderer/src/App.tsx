@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { CardRef } from '../../shared/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CardRef, ReferenceDetail } from '../../shared/types';
 import { api } from './api';
 import { ChatPage } from './pages/Chat';
+import { ReferenceDialog } from './pages/chat/ReferenceDialog';
+import { useChatWorkspace } from './pages/chat/useChatWorkspace';
 import { FeedPage } from './pages/Feed';
 import { GoalsPage } from './pages/Goals';
 import { LibraryPage } from './pages/Library';
@@ -28,7 +30,13 @@ const NAV: { page: Page; icon: string; label: string }[] = [
 export function App() {
   const { layout, toggle } = useSidebarLayout();
   const [page, setPage] = useState<Page>('chat');
-  const [quoted, setQuoted] = useState<CardRef[]>([]);
+  const workspace = useChatWorkspace();
+  const resetWorkspace = workspace.reset;
+  const [pageFocus, setPageFocus] = useState<{ page: 'goals' | 'library' | 'feed'; id: string } | null>(null);
+  const [referenceDetail, setReferenceDetail] = useState<{ ref: CardRef; detail: ReferenceDetail } | null>(null);
+  const [referenceError, setReferenceError] = useState('');
+  const navigationVersion = useRef(0);
+  const openingReference = useRef(false);
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
@@ -38,9 +46,10 @@ export function App() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [chatLocation, setChatLocation] = useState<{ id: string } | null>(null);
   const navigate = useCallback((next: Page) => {
-    if (next === page) { setChatLocation(null); return true; }
-    if (page === 'settings' && (settingsBusy || (settingsDirty && !window.confirm('设置中有尚未保存的修改，离开后这些修改将丢失。确认离开？')))) return false;
-    setChatLocation(null);
+    if (next !== page && page === 'settings' && (settingsBusy || (settingsDirty && !window.confirm('设置中有尚未保存的修改，离开后这些修改将丢失。确认离开？')))) return false;
+    navigationVersion.current++;
+    setChatLocation(null); setPageFocus(null); setReferenceDetail(null); setReferenceError('');
+    if (next === page) return true;
     setSettingsDirty(false); setSettingsBusy(false); setPage(next);
     return true;
   }, [page, settingsDirty, settingsBusy]);
@@ -55,14 +64,31 @@ export function App() {
     } catch { setBootError(true); }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => api.on('chat:cleared', () => { resetWorkspace(); setChatLocation(null); setReferenceDetail(null); }), [resetWorkspace]);
   useEffect(() => {
     if (ready && !onboarding && page === 'chat') void api.profile.get().then((p) => setAssistantName(p.assistantName)).catch(() => undefined);
   }, [ready, onboarding, page]);
 
-  const addQuoted = (ref: CardRef) => setQuoted((q) => (q.some((r) => r.id === ref.id) ? q : [...q, ref]));
   const quote = (ref: CardRef) => {
-    addQuoted(ref);
-    navigate('chat');
+    if (!navigate('chat')) return;
+    workspace.addRef(ref);
+    workspace.focusComposer();
+  };
+  const openReference = async (ref: CardRef) => {
+    if (openingReference.current) return;
+    openingReference.current = true;
+    const version = navigationVersion.current;
+    setReferenceError('');
+    try {
+      const target = await api.references.open({ type: ref.type, id: ref.id });
+      if (version !== navigationVersion.current) return;
+      if (target.kind === 'detail') setReferenceDetail({ ref, detail: target.detail });
+      if (target.kind === 'page' && navigate(target.page)) {
+        setPageFocus({ page: target.page, id: target.id });
+      }
+    } catch {
+      if (version === navigationVersion.current) setReferenceError(`暂时无法打开「${ref.title}」。内容可能已被移除，请刷新后重试。`);
+    } finally { openingReference.current = false; }
   };
 
   useEffect(() => {
@@ -105,13 +131,15 @@ export function App() {
         </button>
       </nav>
       <main className="main">
-        {page === 'chat' && <ChatPage assistantName={assistantName} location={chatLocation} returnToLatest={() => setChatLocation(null)} todayCollapsed={layout.rightCollapsed} toggleToday={() => toggle('rightCollapsed')} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={navigate} />}
-        {page === 'feed' && <FeedPage quote={quote} />}
-        {page === 'goals' && <GoalsPage quote={quote} />}
-        {page === 'library' && <LibraryPage quote={quote} />}
+        {page === 'chat' && <ChatPage assistantName={assistantName} location={chatLocation} returnToLatest={() => setChatLocation(null)} todayCollapsed={layout.rightCollapsed} toggleToday={() => toggle('rightCollapsed')} workspace={workspace} openReference={(ref) => void openReference(ref)} goto={navigate} />}
+        {page === 'feed' && <FeedPage quote={quote} focus={pageFocus?.page === 'feed' ? pageFocus : null} />}
+        {page === 'goals' && <GoalsPage quote={quote} focus={pageFocus?.page === 'goals' ? pageFocus : null} />}
+        {page === 'library' && <LibraryPage quote={quote} focus={pageFocus?.page === 'library' ? pageFocus : null} />}
         {page === 'search' && <SearchPage quote={quote} />}
         {page === 'settings' && <SettingsPage onOpenOnboarding={() => {setSettingsDirty(false);setOnboarding(true);}} onDraftChange={setSettingsDirty} onBusyChange={setSettingsBusy} />}
       </main>
+      {referenceDetail && <ReferenceDialog detail={referenceDetail.detail} close={() => { setReferenceDetail(null); setReferenceError(''); }} error={referenceError} open={(ref) => void openReference(ref)} quote={() => quote(referenceDetail.ref)} />}
+      {referenceError && !referenceDetail && <div className="reference-error" role="alert">{referenceError}<button type="button" onClick={() => setReferenceError('')}>关闭</button></div>}
     </div>
   );
 }

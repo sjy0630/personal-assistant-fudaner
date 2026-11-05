@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   Assessment, CardRef, ChatMessage, Course, Decision, EvalRecord, FeedCard, Followup, GateResult, Goal, Item,
   Memory, Profile, QuickAction, Resource, SearchHit, SemesterPhase, Settings, Task, Ticket, ToolCallView,
@@ -159,7 +160,7 @@ export class Repo {
     return r ? mapMessage(r) : undefined;
   }
   recentMessages(limit = 50): ChatMessage[] {
-    return this.db.all<Row>('SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT ?', limit).map(mapMessage).reverse();
+    return this.db.all<Row>('SELECT * FROM chat_messages ORDER BY created_at DESC,rowid DESC LIMIT ?', limit).map(mapMessage).reverse();
   }
   countProactiveToday(dayStartIso: string): number {
     return this.db.get<Row>('SELECT COUNT(*) AS n FROM chat_messages WHERE proactive = 1 AND created_at >= ?', dayStartIso)?.n ?? 0;
@@ -170,6 +171,126 @@ export class Repo {
     const size = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 100));
     const before = this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM chat_messages WHERE created_at < ? OR (created_at = ? AND rowid < ?)', target.created_at, target.created_at, target.rowid)?.n ?? 0;
     return this.db.all<Row>('SELECT * FROM chat_messages ORDER BY created_at ASC, rowid ASC LIMIT ? OFFSET ?', size, Math.max(0, before - Math.floor(size / 2))).map(mapMessage);
+  }
+  messagePage(beforeId?: string, limit = 50): { messages: ChatMessage[]; hasMore: boolean } {
+    const size = Math.max(1, Math.min(100, Number.isFinite(limit) ? Math.floor(limit) : 50));
+    const before = beforeId ? this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages WHERE id=?', beforeId) : undefined;
+    if (beforeId && !before) return { messages: [], hasMore: false };
+    const rows = before
+      ? this.db.all<Row>('SELECT * FROM chat_messages WHERE created_at < ? OR (created_at = ? AND rowid < ?) ORDER BY created_at DESC,rowid DESC LIMIT ?', before.created_at, before.created_at, before.rowid, size + 1)
+      : this.db.all<Row>('SELECT * FROM chat_messages ORDER BY created_at DESC,rowid DESC LIMIT ?', size + 1);
+    return { messages: rows.slice(0, size).map(mapMessage).reverse(), hasMore: rows.length > size };
+  }
+
+  /** 只由聊天执行器为本轮真实创建的结果调用；不继承传入卡片的撤销权限。 */
+  prepareUndoCards(cards: CardRef[], previous: CardRef[] = []): CardRef[] {
+    return this.db.tx(() => {
+      const next = [...previous];
+      for (const card of cards) {
+        const { undoToken: _token, undone: _undone, ...ref } = card;
+        const undoToken = this.undoFingerprint(card.type, card.id);
+        const parentId = card.type === 'task' && undoToken ? this.getTask(card.id)?.goalId : undefined;
+        if (parentId) {
+          const parent = next.findIndex((candidate) => candidate.type === 'goal' && candidate.id === parentId);
+          const beforeAppend = this.undoFingerprint('goal', parentId, card.id);
+          if (parent >= 0 && beforeAppend && next[parent].undoToken === beforeAppend) {
+            next[parent] = { ...next[parent], undoToken: this.undoFingerprint('goal', parentId) };
+          }
+        }
+        next.push(undoToken ? { ...ref, undoToken } : ref);
+      }
+      return next;
+    });
+  }
+
+  decideSuggestedTicket(ticketId: string, accept: boolean, feedId?: string): ChatMessage[] {
+    return this.db.tx(() => {
+      if (this.getTicket(ticketId)?.status !== 'suggested') throw new Error('这个工单已经处理过了。');
+      this.setTicketStatus(ticketId, accept ? 'queued' : 'dropped');
+      this.db.run("UPDATE feed_cards SET status=? WHERE (dedupe_key=? OR id=?) AND status!='dismissed'", accept ? 'accepted' : 'dismissed', `ticket:${ticketId}`, feedId);
+      const rows = this.db.all<Row>(`SELECT m.* FROM chat_messages m WHERE m.role='assistant' AND EXISTS (
+        SELECT 1 FROM json_each(m.actions) a WHERE json_extract(a.value, '$.payload.ticketId')=?
+        AND json_extract(a.value, '$.action') IN ('accept_ticket', 'decline_ticket')
+      )`, ticketId);
+      return rows.map((row) => {
+        const message = mapMessage(row);
+        message.actions = message.actions.map((action) =>
+          action.payload?.ticketId === ticketId && (action.action === 'accept_ticket' || action.action === 'decline_ticket')
+            ? { ...action, used: true } : action);
+        this.updateMessageActions(message.id, message.actions);
+        return message;
+      });
+    });
+  }
+
+  updateMessageActions(id: string, actions: QuickAction[]): void {
+    this.db.run('UPDATE chat_messages SET actions=? WHERE id=?', toJson(actions), id);
+  }
+
+  /** 权限始终来自数据库中的原助理消息，客户端只提供消息和对象标识。 */
+  undoMessageResult(messageId: string, type: CardRef['type'], id: string): ChatMessage {
+    return this.db.tx(() => {
+      const message = this.getMessage(messageId);
+      if (!message || message.role !== 'assistant') throw new Error('只能撤销原助理消息创建的结果。');
+      const target = message.cards.find(card => card.type === type && card.id === id);
+      if (!target?.undoToken || !['goal', 'task', 'resource'].includes(type)) throw new Error('这条消息没有该结果的撤销权限。');
+      if (target.undone) return message;
+      if (this.undoFingerprint(type, id) !== target.undoToken) throw new Error('结果已被修改、关联其他内容或不再允许撤销，请保留现有数据。');
+
+      const deletedTasks = new Set<string>();
+      // 单个任务的正常撤销会改变父目标快照。仅保留操作前仍然匹配的本消息父卡片。
+      const task = type === 'task' ? this.getTask(id) : undefined;
+      const parentFingerprint = task?.goalId ? this.undoFingerprint('goal', task.goalId) : undefined;
+      const refreshParents = new Set(message.cards.filter(card => card.type === 'goal' && card.id === task?.goalId &&
+        !card.undone && !!parentFingerprint && card.undoToken === parentFingerprint));
+
+      if (type === 'goal') {
+        const tasks = this.db.all<Row>('SELECT id FROM tasks WHERE goal_id=?', id);
+        for (const child of tasks) {
+          deletedTasks.add(child.id);
+          this.removeFromSearch('task', child.id);
+        }
+        this.db.run('DELETE FROM tasks WHERE goal_id=?', id);
+        this.db.run('DELETE FROM goals WHERE id=?', id);
+      } else if (type === 'task') {
+        deletedTasks.add(id);
+        this.db.run('DELETE FROM tasks WHERE id=?', id);
+      } else {
+        // 资源文件可能被其他本地流程引用，此处仅撤销数据库内容。
+        this.db.run('DELETE FROM resource_chunks WHERE resource_id=?', id);
+        this.db.run('DELETE FROM resources WHERE id=?', id);
+      }
+      this.removeFromSearch(type, id);
+      const nextParentFingerprint = refreshParents.size && task?.goalId ? this.undoFingerprint('goal', task.goalId) : undefined;
+      message.cards = message.cards.map(card => {
+        if ((card.type === type && card.id === id) || (card.type === 'task' && deletedTasks.has(card.id))) return { ...card, undone: true };
+        return refreshParents.has(card) ? { ...card, undoToken: nextParentFingerprint } : card;
+      });
+      this.db.run('UPDATE chat_messages SET cards=? WHERE id=?', toJson(message.cards), messageId);
+      return message;
+    });
+  }
+
+  private undoFingerprint(type: CardRef['type'], id: string, excludeTaskId?: string): string | undefined {
+    let snapshot: unknown;
+    if (type === 'goal') {
+      const goal = this.db.get<Row>('SELECT * FROM goals WHERE id=?', id);
+      if (!goal || goal.created_by !== 'assistant' || goal.level === 'course' ||
+        this.db.get<Row>('SELECT id FROM tickets WHERE goal_id=? LIMIT 1', id)) return undefined;
+      const tasks = this.db.all<Row>('SELECT * FROM tasks WHERE goal_id=? ORDER BY id', id).filter((task) => task.id !== excludeTaskId);
+      if (tasks.some(task => task.source !== 'assistant' || task.item_id !== null)) return undefined;
+      snapshot = { goal, tasks };
+    } else if (type === 'task') {
+      const task = this.db.get<Row>('SELECT * FROM tasks WHERE id=?', id);
+      if (!task || task.source !== 'assistant' || task.item_id !== null) return undefined;
+      snapshot = task;
+    } else if (type === 'resource') {
+      const resource = this.db.get<Row>('SELECT * FROM resources WHERE id=?', id);
+      if (!resource || resource.kind !== 'assistant_output' ||
+        this.db.get<Row>('SELECT id FROM tickets WHERE result_resource_id=? LIMIT 1', id)) return undefined;
+      snapshot = { resource, chunks: this.db.all<Row>('SELECT * FROM resource_chunks WHERE resource_id=? ORDER BY seq,id', id) };
+    } else return undefined;
+    return createHash('sha256').update(toJson({ type, snapshot })).digest('hex');
   }
 
   // ---------------- memories ----------------

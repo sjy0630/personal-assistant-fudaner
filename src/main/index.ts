@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, nativeImage, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, nativeImage, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { DEFAULT_FUDAN_STUDENT_IMAP, ImapMailClient } from '@fudaner/mcp-fudan-mail';
 import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
@@ -132,7 +132,10 @@ app.whenReady().then(async () => {
     scheduleSync();
   };
 
-  registerIpc(ctx, { auth, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler });
+  registerIpc(ctx, { auth, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
+    openExternal: (url) => shell.openExternal(url), onMessageUpdated: (msg) => send('chat:updated', msg),
+    copyText: (text) => clipboard.writeText(text), onChatCleared: () => send('chat:cleared'), onChanged: channels.changed,
+  });
   createWindow();
   createTray(ctx, () => { paused = Date.now() + 3_600_000; });
   restartScheduler();

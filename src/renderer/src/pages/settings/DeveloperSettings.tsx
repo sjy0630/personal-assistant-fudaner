@@ -129,7 +129,7 @@ export function DeveloperSettings({ onDirty, onBusy }: PanelProps) {
         <section className={styles.section}>
           <h2>重新准备演示</h2>
           <p className={styles.hint}>
-            重置会清空当前对话、画像、记忆、课程和资源，再加载演示数据。模型与应用设置保留。请勿用它处理需要保留的真实数据。
+            重置会清空当前对话及草稿、画像、记忆、课程和资源，再加载演示数据。模型与应用设置保留。请勿用它处理需要保留的真实数据。
           </p>
           <button
             type="button"
@@ -137,7 +137,7 @@ export function DeveloperSettings({ onDirty, onBusy }: PanelProps) {
             onClick={() => {
               if (
                 window.confirm(
-                  '重置演示将清空当前对话、画像、记忆、课程和资源，并重新加载虚构数据。模型与应用设置保留。确认重置？'
+                  '重置演示将清空当前对话及草稿、画像、记忆、课程和资源，并重新加载虚构数据。模型与应用设置保留。确认重置？'
                 )
               )
                 void task.run('reset', api.dev.resetDemo, '演示数据已重置。');
@@ -149,7 +149,7 @@ export function DeveloperSettings({ onDirty, onBusy }: PanelProps) {
         <section className={styles.section}>
           <h2 className={styles.danger}>清除本地内容</h2>
           <p className={styles.hint}>
-            清除对话、画像、记忆、课程、资源和邮箱专用密码。模型及应用设置会保留，不会删除校内平台的原始内容。此操作不可撤销。
+            清除对话及草稿、画像、记忆、课程、资源和邮箱专用密码。模型及应用设置会保留，不会删除校内平台的原始内容。此操作不可撤销。
           </p>
           <button
             type="button"
@@ -157,7 +157,7 @@ export function DeveloperSettings({ onDirty, onBusy }: PanelProps) {
             onClick={() => {
               if (
                 window.confirm(
-                  '确认清除本地内容？对话、画像、记忆、课程、资源和邮箱专用密码将被清除；模型及应用设置保留，校内原始内容不受影响。此操作不可撤销。'
+                  '确认清除本地内容？对话及草稿、画像、记忆、课程、资源和邮箱专用密码将被清除；模型及应用设置保留，校内原始内容不受影响。此操作不可撤销。'
                 )
               )
                 void task.run(

@@ -56,10 +56,26 @@ export interface Link { id: string; fromItemId: string; toItemId: string; reason
 export type Role = 'user' | 'assistant' | 'tool';
 
 /** 嵌在消息里的卡片 */
-export interface CardRef { type: 'item' | 'goal' | 'task' | 'resource' | 'feed' | 'ticket'; id: string; title: string; subtitle?: string }
+export interface CardRef {
+  type: 'item' | 'goal' | 'task' | 'resource' | 'feed' | 'ticket'; id: string; title: string; subtitle?: string;
+  /** 仅服务端为本轮真实创建的结果生成；客户端不能凭此撤销任意对象。 */
+  undoToken?: string;
+  undone?: boolean;
+}
+export interface ReferenceDetail {
+  title: string;
+  label: string;
+  body: string;
+  fields?: { label: string; value: string }[];
+  related?: CardRef[];
+}
+export type ReferenceOpenResult =
+  | { kind: 'external'; url: string }
+  | { kind: 'page'; page: 'goals' | 'library' | 'feed'; id: string }
+  | { kind: 'detail'; detail: ReferenceDetail };
 
 /** 消息里的快捷按钮 */
-export interface QuickAction { label: string; action: string; payload?: Record<string, unknown> }
+export interface QuickAction { label: string; action: string; payload?: Record<string, unknown>; used?: boolean }
 
 export interface ToolCallView { id?: string; name: string; server: string; args: unknown; ok?: boolean; summary?: string }
 

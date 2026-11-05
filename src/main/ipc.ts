@@ -1,6 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
 import { ipcMain, type BrowserWindow } from 'electron';
 import type { FudanerApi } from '../shared/ipc';
-import type { PlatformState } from '../shared/types';
+import type { ChatMessage, PlatformState } from '../shared/types';
 import type { AppContext } from './app-context';
 import type { AuthManager } from './auth/auth-manager';
 import type { DemoElearningClient, DemoMailClient } from './demo/demo';
@@ -9,6 +10,7 @@ import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
 import { OpenAiCompatClient } from './ai/llm';
+import { resolveChatReference } from './chat/references';
 
 /**
  * 把 FudanerApi（src/shared/ipc.ts）逐个映射到主进程实现。
@@ -19,37 +21,97 @@ export function registerIpc(ctx: AppContext, opts: {
   demo: { elearning: DemoElearningClient; mail: DemoMailClient };
   secrets: { setMailPassword(p: string): void; hasMailPassword(): boolean };
   restartScheduler(): void;
+  openExternal?(url: string): Promise<unknown>;
+  copyText?(text: string): void;
+  onMessageUpdated?(message: ChatMessage): void;
+  onChatCleared?(): void;
+  onChanged?(what: 'goals' | 'library' | 'feed'): void;
 }): void {
   const { repo } = ctx;
+  let pendingUploads = 0;
   const handle = <T extends unknown[], R>(ch: string, fn: (...a: T) => R | Promise<R>) =>
     ipcMain.handle(ch, (_e, ...args) => fn(...(args as T)));
 
   type Api = FudanerApi;
+  handle<Parameters<Api['chat']['page']>, ReturnType<Api['chat']['page']>>('chat.page', async (beforeId, limit) => repo.messagePage(beforeId, limit));
+  handle<Parameters<Api['references']['open']>, ReturnType<Api['references']['open']>>('references.open', async (ref) => {
+    const target = resolveChatReference(repo, ref);
+    if (target.kind === 'external') {
+      if (!opts.openExternal) throw new Error('暂时无法打开原文，请重试。');
+      await opts.openExternal(target.url);
+    }
+    return target;
+  });
+  handle<Parameters<Api['chat']['undoResult']>, ReturnType<Api['chat']['undoResult']>>('chat.undoResult', async (messageId, type, id) => {
+    if (ctx.agent.state()) throw new Error('请等待当前回复完成后再撤销。');
+    const message = repo.undoMessageResult(messageId, type, id);
+    opts.onMessageUpdated?.(message);
+    opts.onChanged?.(type === 'resource' ? 'library' : 'goals');
+    return message;
+  });
   handle<Parameters<Api['chat']['history']>, ReturnType<Api['chat']['history']>>('chat.history', async (limit, aroundId) => aroundId ? repo.messagesAround(aroundId, limit ?? 100) : repo.recentMessages(limit ?? 100));
   handle<Parameters<Api['chat']['send']>, void>('chat.send', async (text, refs) => { await ctx.agent.handleUserMessage(text, refs); });
   handle('chat.state', async () => ctx.agent.state());
   handle<[string], void>('chat.cancel', async (id) => ctx.agent.cancel(id));
-  handle<Parameters<Api['chat']['quickAction']>, void>('chat.quickAction', async (_messageId, action, payload) => {
-    if (action === 'forget_memory' && payload?.id) { repo.removeMemory(String(payload.id)); return; }
-    if (action === 'accept_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'queued'); void ctx.executor.runNext(); return; }
-    if (action === 'decline_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'dropped'); return; }
-    if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
-    if (action === 'say' && payload?.text) { await ctx.agent.handleUserMessage(String(payload.text)); return; }
+  const activeActions = new Set<string>();
+  const decideTicket = (ticketId: string, accept: boolean, feedId?: string) => {
+    for (const message of repo.decideSuggestedTicket(ticketId, accept, feedId)) opts.onMessageUpdated?.(message);
+    opts.onChanged?.('feed');
+    if (accept) void ctx.executor.runNext().catch(() => undefined);
+  };
+  handle<Parameters<Api['chat']['quickAction']>, void>('chat.quickAction', async (messageId, action, payload) => {
+    const message = repo.getMessage(messageId);
+    const button = message?.actions.find((candidate) => candidate.action === action && isDeepStrictEqual(candidate.payload ?? {}, payload ?? {}));
+    if (message?.role !== 'assistant' || !button) throw new Error('这条消息没有该快捷操作。');
+    if (button.used || activeActions.has(messageId)) throw new Error('该操作已处理或正在执行。');
+    activeActions.add(messageId);
+    try {
+      const data = button.payload;
+      const markUsed = () => {
+        message.actions = message.actions.map((entry) => entry === button ? { ...entry, used: true } : entry);
+        repo.updateMessageActions(message.id, message.actions);
+      };
+      if ((action === 'accept_ticket' || action === 'decline_ticket') && typeof data?.ticketId === 'string') {
+        decideTicket(data.ticketId, action === 'accept_ticket');
+        return;
+      }
+      if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
+      if (action === 'say' && typeof data?.text === 'string') {
+        await ctx.agent.handleUserMessage(data.text);
+        markUsed();
+      } else {
+        repo.db.tx(() => {
+          if (action === 'forget_memory' && typeof data?.id === 'string') {
+            const memory = repo.listMemories().find((entry) => entry.id === data.id);
+            if (memory?.source === 'chat') repo.removeMemory(data.id);
+          } else throw new Error('此快捷操作暂不可用。');
+          markUsed();
+        });
+      }
+      opts.onMessageUpdated?.(message);
+    } finally { activeActions.delete(messageId); }
+  });
+  handle<Parameters<Api['copyText']>, void>('copyText', (text) => {
+    if (typeof text !== 'string' || !opts.copyText) throw new Error('暂时无法复制回答。');
+    opts.copyText(text);
   });
   handle('today', async () => buildToday(repo));
 
-  handle<[{ type?: string }?], unknown>('feed.list', async (f) => repo.listFeed(f?.type));
+  handle<Parameters<Api['feed']['list']>, ReturnType<Api['feed']['list']>>('feed.list', async (filter) => {
+    const cards = repo.listFeed(filter?.type);
+    const target = filter?.includeId && !filter.type ? repo.getFeedCard(filter.includeId) : undefined;
+    return target && target.status !== 'dismissed' && !cards.some((card) => card.id === target.id) ? [...cards, target] : cards;
+  });
   handle<[string, string?], void>('feed.dismiss', async (id, reason) => {
     repo.setFeedStatus(id, 'dismissed', reason);
     if (reason) repo.addMemory({ type: 'interest', content: `不关心：${reason}`, source: 'feedback' });
   });
   handle<[string, string], void>('feed.act', async (id, action) => {
     const card = repo.getFeedCard(id);
-    const a = card?.actions.find((x) => x.action === action);
-    if (action === 'accept_ticket' && a?.payload?.ticketId) {
-      repo.setTicketStatus(String(a.payload.ticketId), 'queued');
-      repo.setFeedStatus(id, 'accepted');
-      void ctx.executor.runNext();
+    if (!card || card.status === 'dismissed') throw new Error('这条动态已不存在或已忽略。');
+    const a = card.actions.find((x) => x.action === action);
+    if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
+      decideTicket(a.payload.ticketId, true, id);
     }
   });
 
@@ -59,8 +121,13 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
   handle<[string], unknown>('library.upload', async (path) => {
-    const f = await parseFile(path);
-    return repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path });
+    pendingUploads++;
+    try {
+      const f = await parseFile(path);
+      const resource = repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path });
+      opts.onChanged?.('library');
+      return resource;
+    } finally { pendingUploads--; }
   });
 
   handle<[string], unknown>('search', async (q) => repo.search(q));
@@ -135,7 +202,12 @@ export function registerIpc(ctx: AppContext, opts: {
     if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
     await ctx.executor.runNext();
   });
-  handle('dev.wipe', async () => { repo.wipe(); });
+  const wipe = () => {
+    if (ctx.agent.state() || pendingUploads || activeActions.size) throw new Error('请等当前回复或文件导入结束后再清除数据。');
+    repo.wipe();
+    opts.onChatCleared?.();
+  };
+  handle('dev.wipe', async () => { wipe(); });
   handle('dev.demoSubmitNext', async () => {
     const next = repo.listItems({ kind: 'assignment', done: false, dueAfter: new Date().toISOString(), limit: 1, dueBefore: new Date(Date.now() + 30 * 86_400_000).toISOString() })[0];
     if (next) opts.demo.elearning.submit(next.sourceId);
@@ -144,7 +216,7 @@ export function registerIpc(ctx: AppContext, opts: {
   });
   // 一键重置演示：清空数据 → 重新写入演示画像 → 首次同步 → 运行一次引擎 → 刷新界面（录视频前用）
   handle('dev.resetDemo', async () => {
-    repo.wipe();
+    wipe();
     opts.demo.elearning.reset();
     opts.demo.mail.reset();
     repo.setSettings({ demoMode: true });
