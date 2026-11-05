@@ -50,7 +50,13 @@ export class OpenAiCompatClient implements LlmClient {
       response_format: opts.json ? { type: 'json_object' as const } : undefined,
     };
     if (opts.onDelta) {
-      const stream = await this.client.chat.completions.create({ ...params, stream: true }, { signal: opts.signal });
+      // DeepSeek V4/Flash 默认先深入思考，短正文可能在思考结束后集中返回。
+      // 主对话使用官方快速回复开关，正文直接生成；后台请求保留原有模式。
+      // https://api-docs.deepseek.com/guides/thinking_mode/
+      const fastDeepSeek = this.label.startsWith('cloud:') && /^deepseek-(?:v4(?:[.\-]|$)|flash(?:-|$)|chat$)/i.test(this.cfg.model.trim());
+      const stream = await this.client.chat.completions.create({
+        ...params, stream: true, ...(fastDeepSeek ? { thinking: { type: 'disabled' as const } } : {}),
+      }, { signal: opts.signal });
       let content = '';
       let finished: string | null = null;
       const calls = new Map<number, { id: string; name: string; arguments: string }>();

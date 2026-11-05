@@ -5,14 +5,30 @@ import { OpenAiCompatClient } from '../src/main/ai/llm';
 
 let server: Server;
 afterEach(async () => { server?.closeAllConnections(); if (server) await new Promise<void>((resolve) => server.close(() => resolve())); });
-async function fixture(handler: (res: ServerResponse, request: Record<string, unknown>) => void) {
+async function fixture(handler: (res: ServerResponse, request: Record<string, unknown>) => void, model = 'fixture', kind: 'cloud' | 'local' = 'cloud') {
   server = createServer((req,res) => { let body=''; req.on('data',c=>body+=c); req.on('end',()=>handler(res,JSON.parse(body))); });
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
-  return new OpenAiCompatClient({baseURL:`http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,apiKey:'fixture',model:'fixture'},'cloud');
+  return new OpenAiCompatClient({baseURL:`http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,apiKey:'fixture',model},kind);
 }
 function frame(res: ServerResponse, delta: unknown, finish: string | null = null) { res.write(`data: ${JSON.stringify({id:'s',object:'chat.completion.chunk',created:0,model:'fixture',choices:[{index:0,delta,finish_reason:finish}]})}\n\n`); }
 function begin(res:ServerResponse){res.writeHead(200,{'content-type':'text/event-stream'});}
 describe('真实 SSE 流',()=>{
+  it.each(['DeepSeek-V4.1-Flash','deepseek-v4-pro','deepseek-flash','deepseek-chat'])('云端 %s 的主对话使用快速回复流式参数',async(model)=>{
+    let request:Record<string,unknown>={};
+    const client=await fixture((res,body)=>{request=body;begin(res);frame(res,{content:'收到'});frame(res,{},'stop');res.end('data: [DONE]\\n\\n'.replace(/\\n/g,'\n'));},model);
+    await client.chat([],{onDelta:()=>{}});
+    expect(request).toMatchObject({stream:true,thinking:{type:'disabled'}});
+  });
+  it.each([['fixture','cloud'],['deepseek-r1','cloud'],['deepseek-v4-flash','local']] as const)('%s / %s 不注入专属快速回复参数',async(model,kind)=>{
+    let request:Record<string,unknown>={};
+    const client=await fixture((res,body)=>{request=body;begin(res);frame(res,{content:'收到'});frame(res,{},'stop');res.end('data: [DONE]\n\n');},model,kind);
+    await client.chat([],{onDelta:()=>{}});expect(request).not.toHaveProperty('thinking');
+  });
+  it('非流式的后台请求保留服务商原有模式',async()=>{
+    let request:Record<string,unknown>={};
+    const client=await fixture((res,body)=>{request=body;res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:'{}'},finish_reason:'stop'}]}));},'deepseek-v4-pro');
+    await client.chat([]);expect(request).not.toHaveProperty('thinking');
+  });
   it('首个分片在响应结束前可见，并重组完整正文',async()=>{
     let finish!:()=>void;let first!:()=>void;const gotFirst=new Promise<void>(r=>first=r);
     const client=await fixture((res,request)=>{expect(request.stream).toBe(true);begin(res);frame(res,{content:'你好'});finish=()=>{frame(res,{content:'，同学'});frame(res,{},'stop');res.end('data: [DONE]\n\n');};});
