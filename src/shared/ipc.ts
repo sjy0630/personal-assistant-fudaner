@@ -12,6 +12,8 @@ export interface FudanerApi {
     /** 指定 aroundId 时返回包含该消息的上下文；消息已清理则返回空数组。 */
     history(limit?: number, aroundId?: string): Promise<ChatMessage[]>;
     send(text: string, refs?: CardRef[]): Promise<void>;
+    state(): Promise<import('./types').ChatRun | null>;
+    cancel(messageId: string): Promise<void>;
     quickAction(messageId: string, action: string, payload?: Record<string, unknown>): Promise<void>;
   };
   today(): Promise<TodayOverview>;
@@ -56,6 +58,7 @@ export interface FudanerApi {
 }
 
 export type FudanerEvent =
+  | 'chat:delta'          // payload: ChatRun，真实增量到达后的带版本运行快照
   | 'chat:message'        // 新消息（含主动消息） payload: ChatMessage
   | 'chat:tool'           // 工具调用进度 payload: { messageId: string; call: ToolCallView }
   | 'chat:thinking'       // payload: boolean

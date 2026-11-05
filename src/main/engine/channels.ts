@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolCallView } from '../../shared/types';
+import type { ChatMessage, ChatRun, ToolCallView } from '../../shared/types';
 
 /**
  * 主动引擎的写回端口（参考 dsh-superagent 的 Channel）。
@@ -13,6 +13,7 @@ export interface Channels {
   /** 对话中的工具调用进度（用于界面展示「🔧 正在查询…」） */
   toolProgress(messageId: string, call: ToolCallView): void;
   thinking(on: boolean): void;
+  delta?(run: ChatRun): void;
 }
 
 export const nullChannels: Channels = { messagePosted() {}, notify() {}, changed() {}, toolProgress() {}, thinking() {} };

@@ -4,15 +4,30 @@ import type { Page } from '../App';
 import { api, fmtTime } from '../api';
 import { RefChip } from '../components/RefChip';
 import { NavIcon } from '../theme/NavIcon';
+import { ChatMarkdown } from './chat/ChatMarkdown';
+import { useChatRun } from './chat/useChatRun';
+import './chat/chat.css';
 
 const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课周', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
+const TOOL_LABELS: Record<string, string> = {
+  list_deadlines: '查询作业截止时间', list_courses: '读取课程', list_assignments: '查询作业', get_assignment: '读取作业详情',
+  list_announcements: '读取课程公告', search_mail: '搜索邮件', get_mail: '读取邮件', list_action_required: '查询待回复邮件',
+  get_today: '查看今天的安排', get_profile: '读取个人设置', recall: '查找相关记忆', remember: '保存记忆', forget: '移除记忆',
+  list_goals: '查询目标', create_goal: '创建目标', add_task: '添加任务', update_progress: '更新进度', schedule_followup: '安排跟进',
+  start_background_task: '安排后台任务', push_feed_card: '整理动态', save_resource: '保存资源', search_resources: '搜索资源', read_resource: '读取资源', search_all: '搜索相关内容',
+};
 
 /** 主对话（PRD §5.1）：一条持续的对话流 + 右侧「今天」边栏 */
 export function ChatPage({ assistantName = '旦旦', location, returnToLatest, todayCollapsed, toggleToday, quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; location: { id: string } | null; returnToLatest: () => void; todayCollapsed: boolean; toggleToday: () => void; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [thinking, setThinking] = useState(false);
-  const [liveTools, setLiveTools] = useState<ToolCallView[]>([]);
+  const { run, runError } = useChatRun();
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [stopRequested, setStopRequested] = useState(false);
+  const busy = !!run || sending;
+  const followBottom = useRef(true);
+  const previousScrollTop = useRef(0);
   const [today, setToday] = useState<TodayOverview | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -29,6 +44,7 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
     duringLoad.current = [];
     focusedLocation.current = null;
     setHistoryLoading(true); setHistoryError(false); setMessages([]);
+    if (!location) followBottom.current = true;
     void api.chat.history(200, location?.id).then((history) => {
       if (!active) return;
       const merged = new Map(history.map((m) => [m.id, m]));
@@ -51,13 +67,7 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
           // 查看历史通知时保留上下文；新回复仍可通过“返回最新消息”查看。
           return exists ? prev.map((x) => x.id === message.id ? message : x) : location ? prev : [...prev, message];
         });
-        setLiveTools([]);
         void api.today().then(setToday);
-      }),
-      api.on('chat:thinking', (on) => setThinking(Boolean(on))),
-      api.on('chat:tool', (p) => {
-        const call = (p as { call: ToolCallView }).call;
-        setLiveTools((prev) => [...prev.filter((c) => !(c.name === call.name && c.ok === undefined)), call]);
       }),
       api.on('goals:changed', () => void api.today().then(setToday)),
     ];
@@ -65,8 +75,9 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
   }, [location]);
 
   useEffect(() => {
-    if (!location && !historyLoading) endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, thinking, liveTools, location, historyLoading]);
+    if (!location && !historyLoading && followBottom.current) endRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [messages, run, location, historyLoading]);
+  useEffect(() => { setStopRequested(false); }, [run?.id]);
   useEffect(() => {
     if (!location || historyLoading || loadingHistory.current || focusedLocation.current === location) return;
     const target = Array.from(messagesRef.current?.querySelectorAll<HTMLElement>('[data-message-id]') ?? []).find((el) => el.dataset.messageId === location.id);
@@ -78,11 +89,19 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
 
   const send = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || busy) return;
     if (location) returnToLatest();
-    setInput('');
-    await api.chat.send(text, quoted);
-    clearQuoted();
+    const refs = [...quoted];
+    setInput(''); setSending(true); setSendError(''); clearQuoted(); followBottom.current = true;
+    try { await api.chat.send(text, refs); }
+    catch { setSendError('消息未发送，请等待当前回复结束后重试，或检查连接。'); setInput((current) => current || text); refs.forEach(addQuoted); }
+    finally { setSending(false); }
+  };
+  const stop = async () => {
+    if (!run || stopRequested) return;
+    setStopRequested(true);
+    try { await api.chat.cancel(run.id); }
+    catch { setStopRequested(false); setSendError('暂时无法停止，请重试。'); }
   };
 
   const onDrop = async (e: React.DragEvent) => {
@@ -109,19 +128,29 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
           {historyError && <button type="button" onClick={() => setRetry((n) => n + 1)}>重试</button>}
           <button type="button" className="ghost" onClick={returnToLatest}>返回最新消息</button>
         </div>}
-        <div className="messages" ref={messagesRef} aria-busy={historyLoading}>
+        <div className="messages" ref={messagesRef} aria-busy={historyLoading} onScroll={(event) => {
+          const el = event.currentTarget;
+          if (!historyLoading && !loadingHistory.current) {
+            if (el.scrollTop < previousScrollTop.current) followBottom.current = false;
+            else if (el.scrollHeight - el.scrollTop - el.clientHeight < 64) followBottom.current = true;
+          }
+          previousScrollTop.current = el.scrollTop;
+        }}>
           {!location && historyError && <div role="alert">暂时无法读取对话。<button type="button" onClick={() => setRetry((n) => n + 1)}>重试</button></div>}
           {!location && !historyLoading && !historyError && messages.length === 0 && <div className="empty">和{assistantName}打个招呼吧。可以问「这周有什么 DDL？」或「有哪些邮件要回？」。</div>}
           {messages.map((m) => <Message key={m.id} m={m} assistantName={assistantName} highlighted={location?.id === m.id} />)}
-          {thinking && (
-            <div className="msg assistant">
-              {liveTools.map((t, i) => <ToolLine key={i} t={t} />)}
-              <div className="bubble typing">正在想…</div>
+          {run && !location && !messages.some((m) => m.id === run.id) && (
+            <div className="msg assistant streaming" data-run-id={run.id} aria-busy="true">
+              <div className="meta">{assistantName} · {fmtTime(run.startedAt)}</div>
+              {run.toolCalls.map((t, i) => <ToolLine key={t.id ?? i} t={t} />)}
+              {run.content && <div className="bubble"><ChatMarkdown text={run.content} /></div>}
+              <span className="generation-status" role="status">{stopRequested ? '正在停止…' : run.toolCalls.some((t) => t.ok === undefined) ? '正在查询…' : run.content ? '正在生成…' : '正在等待模型回复…'}</span>
             </div>
           )}
           <div ref={endRef} />
         </div>
         <div className="composer">
+          {(sendError || runError) && <div className="chat-error" role="alert">{sendError || runError}</div>}
           {quoted.length > 0 && (
             <div className="quoted">
               {quoted.map((r) => <RefChip key={r.id} r={r} onRemove={() => clearQuoted(r.id)} />)}
@@ -133,7 +162,7 @@ export function ChatPage({ assistantName = '旦旦', location, returnToLatest, t
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
             />
-            <button className="primary" onClick={() => void send()} disabled={!input.trim()}>发送</button>
+            {run ? <button type="button" onClick={() => void stop()} disabled={stopRequested}>{stopRequested ? '正在停止…' : '停止生成'}</button> : <button className="primary" onClick={() => void send()} disabled={!input.trim() || busy}>发送</button>}
           </div>
         </div>
       </section>
@@ -146,13 +175,13 @@ function Message({ m, assistantName, highlighted }: { m: ChatMessage; assistantN
   return (
     <div className={`msg ${m.role}${highlighted ? ' msg--target' : ''}`} data-message-id={m.id} tabIndex={highlighted ? -1 : undefined} aria-label={highlighted ? '通知定位的消息' : undefined}>
       <div className="meta">{m.role === 'user' ? '你' : assistantName} · {fmtTime(m.createdAt)}{m.proactive && <span className="tag">主动</span>}</div>
-      {m.toolCalls.map((t, i) => <ToolLine key={i} t={t} />)}
+      {m.toolCalls.map((t, i) => <ToolLine key={t.id ?? i} t={t} />)}
       {m.refs.length > 0 && <div className="refs">{m.refs.map((r) => <RefChip key={r.id} r={r} />)}</div>}
-      <div className="bubble">{m.content}</div>
+      <div className="bubble">{m.role === 'assistant' ? <ChatMarkdown text={m.content} /> : m.content}</div>
       {m.cards.length > 0 && <div className="cards">{m.cards.map((c) => <RefChip key={c.id} r={c} card />)}</div>}
       {m.actions.length > 0 && (
         <div className="actions">
-          {m.actions.map((a) => <button key={a.label} onClick={() => void api.chat.quickAction(m.id, a.action, a.payload)}>{a.label}</button>)}
+          {m.actions.map((a) => <button key={a.label} onClick={() => void api.chat.quickAction(m.id, a.action, a.payload).catch(() => window.alert('暂时无法执行，请等待当前回复结束后重试。'))}>{a.label}</button>)}
         </div>
       )}
     </div>
@@ -160,12 +189,11 @@ function Message({ m, assistantName, highlighted }: { m: ChatMessage; assistantN
 }
 
 function ToolLine({ t }: { t: ToolCallView }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="tool" onClick={() => setOpen((o) => !o)}>
-      🔧 {t.ok === undefined ? '正在调用' : t.ok ? '调用了' : '调用失败'} <code>{t.server}/{t.name}</code>
-      {open && <pre>{JSON.stringify(t.args, null, 2)}{t.summary ? `\n→ ${t.summary}` : ''}</pre>}
-    </div>
+    <details className="tool">
+      <summary>{t.ok === undefined ? '正在执行' : t.ok ? '已完成' : '未完成'}：{TOOL_LABELS[t.name] ?? t.name}</summary>
+      <pre>{t.server}/{t.name}{'\n'}{JSON.stringify(t.args, null, 2)}{t.summary ? `\n→ ${t.summary}` : ''}</pre>
+    </details>
   );
 }
 

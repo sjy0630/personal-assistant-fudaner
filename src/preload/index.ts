@@ -17,7 +17,7 @@ ipcRenderer.on('fudaner:event', (_e, channel: string, payload: unknown) => {
 
 /** 只暴露 FudanerApi 定义的接口，渲染进程拿不到 Node / Electron 能力 */
 const api: FudanerApi & { pathForFile(f: File): string } = {
-  chat: { history: call('chat.history'), send: call('chat.send'), quickAction: call('chat.quickAction') } as FudanerApi['chat'],
+  chat: { history: call('chat.history'), send: call('chat.send'), state: call('chat.state'), cancel: call('chat.cancel'), quickAction: call('chat.quickAction') } as FudanerApi['chat'],
   today: call('today') as FudanerApi['today'],
   feed: { list: call('feed.list'), dismiss: call('feed.dismiss'), act: call('feed.act') } as FudanerApi['feed'],
   goals: { list: call('goals.list'), setTaskStatus: call('goals.setTaskStatus') } as FudanerApi['goals'],

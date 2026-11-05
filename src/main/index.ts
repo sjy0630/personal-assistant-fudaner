@@ -27,6 +27,7 @@ function flushNotificationNavigation() {
 }
 
 const channels: Channels = {
+  delta: (run) => send('chat:delta', run),
   messagePosted: (msg) => send('chat:message', msg),
   notify: (title, body, messageId) => {
     if (!Notification.isSupported()) return;
