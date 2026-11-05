@@ -35,7 +35,9 @@ export function ChatPage({ quoted, addQuoted, clearQuoted, goto }: { quoted: Car
     return () => offs.forEach((off) => off());
   }, []);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, thinking, liveTools]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, thinking, liveTools]);
 
   const send = async () => {
     const text = input.trim();

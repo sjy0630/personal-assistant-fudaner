@@ -7,16 +7,18 @@ import { GoalsPage } from './pages/Goals';
 import { LibraryPage } from './pages/Library';
 import { SearchPage } from './pages/Search';
 import { SettingsPage } from './pages/Settings';
+import { NavIcon } from './components/NavIcon';
 
 export type Page = 'chat' | 'feed' | 'goals' | 'library' | 'search' | 'settings';
 
-const NAV: { page: Page; icon: string; label: string }[] = [
-  { page: 'chat', icon: '💬', label: '对话' },
-  { page: 'feed', icon: '📰', label: '动态' },
-  { page: 'goals', icon: '🎯', label: '目标' },
-  { page: 'library', icon: '📚', label: '资源' },
-  { page: 'search', icon: '🔍', label: '搜索' },
+const NAV: { page: Page; label: string }[] = [
+  { page: 'chat', label: '对话' },
+  { page: 'feed', label: '动态' },
+  { page: 'goals', label: '目标' },
+  { page: 'library', label: '资源' },
+  { page: 'search', label: '搜索' },
 ];
+const logo = new URL('../../../resources/icon.png', import.meta.url).href;
 
 /**
  * 信息架构（PRD §5.0）：一个主对话 + 四个副页面。
@@ -41,16 +43,17 @@ export function App() {
 
   return (
     <div className="app">
-      <nav className="nav">
+      <nav className="nav" aria-label="主导航">
+        <div className="nav-brand"><img src={logo} alt="Fudaner" width="32" height="32" /></div>
         {NAV.map((n) => (
-          <button key={n.page} className={page === n.page ? 'nav-item active' : 'nav-item'} onClick={() => setPage(n.page)} title={n.label}>
-            <span className="nav-icon">{n.icon}</span>
+          <button key={n.page} className={page === n.page ? 'nav-item active' : 'nav-item'} aria-current={page === n.page ? 'page' : undefined} onClick={() => setPage(n.page)} title={n.label}>
+            <NavIcon name={n.page} />
             <span className="nav-label">{n.label}</span>
           </button>
         ))}
         <div className="nav-spacer" />
-        <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('settings')} title="设置">
-          <span className="nav-icon">⚙️</span>
+        <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} aria-current={page === 'settings' ? 'page' : undefined} onClick={() => setPage('settings')} title="设置">
+          <NavIcon name="settings" />
           <span className="nav-label">设置</span>
         </button>
       </nav>

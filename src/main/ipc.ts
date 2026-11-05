@@ -56,12 +56,25 @@ export function registerIpc(ctx: AppContext, opts: {
 
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
+  handle<[string], void>('library.remove', (id) => repo.removeResource(id));
   handle<[string], unknown>('library.upload', async (path) => {
     const f = await parseFile(path);
     return repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path });
   });
 
   handle<[string], unknown>('search', async (q) => repo.search(q));
+  handle<Parameters<Api['searchDetail']>, string | null>('search.detail', (type, id) => {
+    switch (type) {
+      case 'message': return repo.getMessage(id)?.content ?? null;
+      case 'feed': return repo.getFeedCard(id)?.body ?? null;
+      case 'goal': return repo.getGoal(id)?.description ?? null;
+      case 'task': return repo.getTask(id)?.title ?? null;
+      case 'resource': return repo.getResource(id)?.text ?? null;
+      case 'item': return repo.getItem(id)?.body ?? null;
+      case 'memory': return repo.listMemories().find((memory) => memory.id === id)?.content ?? null;
+      default: return null;
+    }
+  });
 
   handle('memory.list', async () => repo.listMemories());
   handle<[string, never], void>('memory.add', async (content, type) => { repo.addMemory({ content, type, source: 'manual' }); });

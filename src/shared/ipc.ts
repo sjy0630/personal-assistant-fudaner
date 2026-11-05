@@ -27,8 +27,10 @@ export interface FudanerApi {
     list(courseId?: string): Promise<Resource[]>;
     get(id: string): Promise<Resource | null>;
     upload(filePath: string): Promise<Resource>;
+    remove(id: string): Promise<void>;
   };
   search(query: string): Promise<SearchHit[]>;
+  searchDetail(type: SearchHit['type'], id: string): Promise<string | null>;
   memory: {
     list(): Promise<Memory[]>;
     add(content: string, type: Memory['type']): Promise<void>;

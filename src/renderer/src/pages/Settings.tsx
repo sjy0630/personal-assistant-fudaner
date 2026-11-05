@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Memory, ModelConfig, PlatformState, Profile, Settings } from '../../../shared/types';
 import { DecisionsTab } from './Decisions';
 import { api } from '../api';
+import { getThemePreference, setThemePreference, type ThemePreference } from '../theme';
 
 type Tab = 'model' | 'accounts' | 'me' | 'assistant' | 'decisions' | 'dev';
 const TABS: { key: Tab; label: string }[] = [
@@ -15,9 +16,24 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('model');
+  const [theme, setTheme] = useState(getThemePreference);
   return (
     <div className="page">
-      <header className="page-header"><h1>设置</h1></header>
+      <header className="page-header">
+        <h1>设置</h1>
+        <label className="theme-control">
+          主题
+          <select value={theme} onChange={(event) => {
+            const next = event.target.value as ThemePreference;
+            setThemePreference(next);
+            setTheme(next);
+          }}>
+            <option value="system">跟随系统</option>
+            <option value="light">浅色</option>
+            <option value="dark">深色</option>
+          </select>
+        </label>
+      </header>
       <div className="filters">{TABS.map((t) => <button key={t.key} className={tab === t.key ? 'chip active' : 'chip'} onClick={() => setTab(t.key)}>{t.label}</button>)}</div>
       <div className="settings-body">
         {tab === 'model' && <ModelTab />}
