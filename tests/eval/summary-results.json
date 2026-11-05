@@ -1,0 +1,235 @@
+{
+  "generatedAt": "2026-11-05T17:26:42.648Z",
+  "model": "local:qwen2.5:7b",
+  "rounds": 50,
+  "executedChatCalls": 50,
+  "elapsedMs": 21466,
+  "checks": {
+    "summaryCreated": true,
+    "score": true,
+    "schedule": true,
+    "unfinished": true,
+    "completed": true
+  },
+  "summary": "用户目标分数为320；周二晚上有社团活动，不安排学习；报告尚未完成。记忆测试第21至30轮，只回复“收到”，不调用工具，不添加新安排。",
+  "final": "目标分数是320。周二晚上有社团活动。报告尚未完成。有其他需要帮忙的吗？💡",
+  "requests": [
+    {
+      "summary": false,
+      "elapsedMs": 800
+    },
+    {
+      "summary": false,
+      "elapsedMs": 185
+    },
+    {
+      "summary": false,
+      "elapsedMs": 188
+    },
+    {
+      "summary": false,
+      "elapsedMs": 201
+    },
+    {
+      "summary": false,
+      "elapsedMs": 210
+    },
+    {
+      "summary": false,
+      "elapsedMs": 241
+    },
+    {
+      "summary": false,
+      "elapsedMs": 254
+    },
+    {
+      "summary": false,
+      "elapsedMs": 255
+    },
+    {
+      "summary": false,
+      "elapsedMs": 246
+    },
+    {
+      "summary": false,
+      "elapsedMs": 272
+    },
+    {
+      "summary": false,
+      "elapsedMs": 280
+    },
+    {
+      "summary": false,
+      "elapsedMs": 278
+    },
+    {
+      "summary": false,
+      "elapsedMs": 279
+    },
+    {
+      "summary": false,
+      "elapsedMs": 283
+    },
+    {
+      "summary": false,
+      "elapsedMs": 285
+    },
+    {
+      "summary": false,
+      "elapsedMs": 293
+    },
+    {
+      "summary": false,
+      "elapsedMs": 288
+    },
+    {
+      "summary": false,
+      "elapsedMs": 291
+    },
+    {
+      "summary": false,
+      "elapsedMs": 286
+    },
+    {
+      "summary": false,
+      "elapsedMs": 288
+    },
+    {
+      "summary": true,
+      "elapsedMs": 1434
+    },
+    {
+      "summary": false,
+      "elapsedMs": 411
+    },
+    {
+      "summary": false,
+      "elapsedMs": 328
+    },
+    {
+      "summary": false,
+      "elapsedMs": 326
+    },
+    {
+      "summary": false,
+      "elapsedMs": 330
+    },
+    {
+      "summary": false,
+      "elapsedMs": 328
+    },
+    {
+      "summary": false,
+      "elapsedMs": 339
+    },
+    {
+      "summary": false,
+      "elapsedMs": 325
+    },
+    {
+      "summary": false,
+      "elapsedMs": 326
+    },
+    {
+      "summary": false,
+      "elapsedMs": 332
+    },
+    {
+      "summary": false,
+      "elapsedMs": 329
+    },
+    {
+      "summary": true,
+      "elapsedMs": 1449
+    },
+    {
+      "summary": false,
+      "elapsedMs": 425
+    },
+    {
+      "summary": false,
+      "elapsedMs": 326
+    },
+    {
+      "summary": false,
+      "elapsedMs": 328
+    },
+    {
+      "summary": false,
+      "elapsedMs": 327
+    },
+    {
+      "summary": false,
+      "elapsedMs": 324
+    },
+    {
+      "summary": false,
+      "elapsedMs": 322
+    },
+    {
+      "summary": false,
+      "elapsedMs": 321
+    },
+    {
+      "summary": false,
+      "elapsedMs": 319
+    },
+    {
+      "summary": false,
+      "elapsedMs": 324
+    },
+    {
+      "summary": false,
+      "elapsedMs": 324
+    },
+    {
+      "summary": true,
+      "elapsedMs": 1997
+    },
+    {
+      "summary": false,
+      "elapsedMs": 448
+    },
+    {
+      "summary": false,
+      "elapsedMs": 344
+    },
+    {
+      "summary": false,
+      "elapsedMs": 341
+    },
+    {
+      "summary": false,
+      "elapsedMs": 337
+    },
+    {
+      "summary": false,
+      "elapsedMs": 335
+    },
+    {
+      "summary": false,
+      "elapsedMs": 329
+    },
+    {
+      "summary": false,
+      "elapsedMs": 335
+    },
+    {
+      "summary": false,
+      "elapsedMs": 336
+    },
+    {
+      "summary": false,
+      "elapsedMs": 331
+    },
+    {
+      "summary": false,
+      "elapsedMs": 828
+    }
+  ],
+  "limitations": [
+    "Fictitious facts; in-memory Repo and the production ChatAgent/summary logic.",
+    "Tools disabled to isolate conversational retention; memory extraction disabled to ensure this tests rolling summaries, not the memory table.",
+    "Only a local-model smoke case, not a general factual recall benchmark."
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "generatedAt": "2026-11-05T17:41:46.875Z",
+  "model": "local:qwen2.5:7b",
+  "referenceNow": "2026-11-06T10:00:00+08:00",
+  "passed": 4,
+  "total": 4,
+  "results": [
+    {
+      "id": "morning-grounding",
+      "passed": true,
+      "elapsedMs": 2416,
+      "actualModel": "local:qwen2.5:7b",
+      "checks": {
+        "nonEmpty": true,
+        "knownLabTitle": true,
+        "knownDeadline": true,
+        "knownCourse": true,
+        "numericClockTimesGrounded": true,
+        "noOtherSeededCourse": true,
+        "noOtherClassroom": true,
+        "singleModelCall": true,
+        "noToolCalls": true
+      },
+      "input": "今天是2026年11月6日。\n今天只有一节课：数据结构，13:30–15:10，地点H2215。\nLab 5：链表与栈，今天23:59截止，目前未交。\n15:10之后空闲。没有其他已知课程、邮件或活动。",
+      "rawOutput": "早上好！今天是2026年11月6日，你有一节课数据结构，今天13:30–15:10在H2215。Lab 5：链表与栈的作业今天23:59截止，还没有提交呢。15:10之后你将空闲，没有其他已知课程或活动。作业进度如何了？如果有任何问题，随时告诉我！",
+      "parsedOutput": {
+        "numericClockTimes": [
+          "13:30",
+          "15:10",
+          "23:59",
+          "15:10"
+        ],
+        "reviewRequired": "Regex checks cover known title/times/course names only; human review must check all facts, tone and natural-language times."
+      }
+    },
+    {
+      "id": "low-value-assessment",
+      "passed": true,
+      "elapsedMs": 1468,
+      "actualModel": "local:qwen2.5:7b",
+      "checks": {
+        "actualModelNotFallback": true,
+        "lowAttentionAction": true,
+        "returnedReasonAtMost20": true,
+        "rawReasonAtMost20": true,
+        "noUnrequestedTicket": true,
+        "singleModelCall": true,
+        "noToolCalls": true
+      },
+      "input": "{\"category\":\"other\",\"from\":\"虚构归档系统\",\"subject\":\"自动归档成功\",\"summary\":\"普通系统回执，不需要回复或处理，没有截止时间，与用户目标或兴趣无关。\"}",
+      "rawOutput": "{\n    \"value\": 0.1,\n    \"urgency\": 0.1,\n    \"action\": \"record\",\n    \"message_draft\": \"已自动归档，无需处理。\",\n    \"reason\": \"归档通知，无需操作。\",\n    \"ticket\": null\n}",
+      "parsedOutput": {
+        "assessment": {
+          "value": 0.1,
+          "urgency": 0.1,
+          "action": "record",
+          "messageDraft": "已自动归档，无需处理。",
+          "reason": "归档通知，无需操作。"
+        },
+        "model": "local:qwen2.5:7b"
+      }
+    },
+    {
+      "id": "stable-user-memory",
+      "passed": true,
+      "elapsedMs": 906,
+      "actualModel": "local:qwen2.5:7b",
+      "checks": {
+        "validProductionSchema": true,
+        "userScheduleRetained": true,
+        "onlyUserScheduleFacts": true,
+        "assistantRunningAdviceNotRemembered": true,
+        "singleModelCall": true,
+        "noToolCalls": true
+      },
+      "input": "用户：我每周二晚上19:00到21:00固定参加社团活动。\n助理：建议你从下周起每天早上7:00跑步。",
+      "rawOutput": "{\"memories\":[{\"op\":\"add\",\"type\":\"schedule\",\"content\":\"每周二晚上19:00到21:00固定参加社团活动\"}]}",
+      "parsedOutput": {
+        "memories": [
+          {
+            "op": "add",
+            "type": "schedule",
+            "content": "每周二晚上19:00到21:00固定参加社团活动",
+            "expires_days": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "casual-no-memory",
+      "passed": true,
+      "elapsedMs": 289,
+      "actualModel": "local:qwen2.5:7b",
+      "checks": {
+        "validProductionSchema": true,
+        "noLongTermMemoryFromLunch": true,
+        "singleModelCall": true,
+        "noToolCalls": true
+      },
+      "input": "用户：我今天午饭吃了一碗面，味道还行。\n助理：好，下午出门记得留出路上时间。",
+      "rawOutput": "{\"memories\":[]}",
+      "parsedOutput": {
+        "memories": []
+      }
+    }
+  ],
+  "method": "Four production-prompt smoke scenarios, one explicit local request each, 45-second request bounds. assess() must report the actual local model, never rules fallback. memoryOutput validates the actual generated JSON.",
+  "limitations": [
+    "Four controlled fictitious scenarios are not a statistical prompt-quality benchmark and do not prove the PRD memory-acceptance target.",
+    "Morning checks cover known Lab title, numeric deadline/clock values, course and classroom names; they cannot fully prove absence of unsupported natural-language facts. Raw text is retained for human review.",
+    "Memory checks cover this explicit Tuesday schedule and rejection of assistant running advice; semantic accuracy outside these cases is not established.",
+    "No cloud request, no key, no application account/settings or real mail is read."
+  ]
+}
