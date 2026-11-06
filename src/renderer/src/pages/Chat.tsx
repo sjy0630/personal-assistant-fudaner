@@ -7,7 +7,7 @@ import { RefChip } from '../components/RefChip';
 const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课周', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
 
 /** 主对话（PRD §5.1）：一条持续的对话流 + 右侧「今天」边栏 */
-export function ChatPage({ quoted, addQuoted, clearQuoted, goto }: { quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
+export function ChatPage({ assistantName = '旦旦', quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -59,12 +59,12 @@ export function ChatPage({ quoted, addQuoted, clearQuoted, goto }: { quoted: Car
     <div className="chat-layout">
       <section className="chat" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <header className="page-header">
-          <h1>旦旦</h1>
+          <h1>{assistantName}</h1>
           <button className="ghost" onClick={() => setShowToday((s) => !s)}>{showToday ? '收起今天' : '今天'}</button>
         </header>
         <div className="messages">
-          {messages.length === 0 && <div className="empty">还没有消息。和旦旦打个招呼吧，或者在「设置 → 开发者」里打开演示模式。</div>}
-          {messages.map((m) => <Message key={m.id} m={m} />)}
+          {messages.length === 0 && <div className="empty">和{assistantName}打个招呼吧。可以问「这周有什么 DDL？」或「有哪些邮件要回？」。</div>}
+          {messages.map((m) => <Message key={m.id} m={m} assistantName={assistantName} />)}
           {thinking && (
             <div className="msg assistant">
               {liveTools.map((t, i) => <ToolLine key={i} t={t} />)}
@@ -81,7 +81,7 @@ export function ChatPage({ quoted, addQuoted, clearQuoted, goto }: { quoted: Car
           )}
           <div className="composer-row">
             <textarea
-              value={input} placeholder="和旦旦说点什么…（可以把文件拖进来）" rows={2}
+              value={input} placeholder={`和${assistantName}说点什么…（可以把文件拖进来）`} rows={2}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
             />
@@ -94,10 +94,10 @@ export function ChatPage({ quoted, addQuoted, clearQuoted, goto }: { quoted: Car
   );
 }
 
-function Message({ m }: { m: ChatMessage }) {
+function Message({ m, assistantName }: { m: ChatMessage; assistantName: string }) {
   return (
     <div className={`msg ${m.role}`}>
-      <div className="meta">{m.role === 'user' ? '你' : '旦旦'} · {fmtTime(m.createdAt)}{m.proactive && <span className="tag">主动</span>}</div>
+      <div className="meta">{m.role === 'user' ? '你' : assistantName} · {fmtTime(m.createdAt)}{m.proactive && <span className="tag">主动</span>}</div>
       {m.toolCalls.map((t, i) => <ToolLine key={i} t={t} />)}
       {m.refs.length > 0 && <div className="refs">{m.refs.map((r) => <RefChip key={r.id} r={r} />)}</div>}
       <div className="bubble">{m.content}</div>

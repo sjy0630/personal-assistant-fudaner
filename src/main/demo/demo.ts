@@ -156,6 +156,8 @@ export function applyDemoCourseExtras(repo: Repo, now: Date): void {
 /** 演示用的画像和记忆（PRD 演示脚本中的「周二晚上有社团」「想申请交换」） */
 export function seedDemoProfile(repo: Repo): void {
   if (repo.getKv('demo_seeded', false)) return;
+  // 用户可能在首次引导中才开启演示。下次启动不能用演示画像覆盖刚保存的个人配置。
+  if (repo.getSettings().onboardingCompleted) { repo.setKv('demo_seeded', true); return; }
   // 主动程度设为「多」：演示开始时首次同步会集中涌入一批事件，「中」档的预算会在演示后半段用完，
   // 导致闭环确认等关键镜头被降级到动态里（这本身是预期行为，但不利于演示）
   repo.setProfile({ nickname: '小旦', school: '计算与智能创新学院', grade: '2024 级', degree: '本科', assistantName: '旦旦', style: 'playful', proactivity: 'high' });

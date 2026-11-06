@@ -7,6 +7,7 @@ import { GoalsPage } from './pages/Goals';
 import { LibraryPage } from './pages/Library';
 import { SearchPage } from './pages/Search';
 import { SettingsPage } from './pages/Settings';
+import { OnboardingPage } from './pages/Onboarding';
 
 export type Page = 'chat' | 'feed' | 'goals' | 'library' | 'search' | 'settings';
 
@@ -25,6 +26,25 @@ const NAV: { page: Page; icon: string; label: string }[] = [
 export function App() {
   const [page, setPage] = useState<Page>('chat');
   const [quoted, setQuoted] = useState<CardRef[]>([]);
+  const [ready, setReady] = useState(false);
+  const [bootError, setBootError] = useState(false);
+  const [onboarding, setOnboarding] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [assistantName, setAssistantName] = useState('旦旦');
+  const load = async () => {
+    setBootError(false);
+    try {
+      const [settings, profile] = await Promise.all([api.settings.get(), api.profile.get()]);
+      setCompleted(!!settings.onboardingCompleted);
+      setOnboarding(!settings.onboardingCompleted);
+      setAssistantName(profile.assistantName);
+      setReady(true);
+    } catch { setBootError(true); }
+  };
+  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (ready && !onboarding && page === 'chat') void api.profile.get().then((p) => setAssistantName(p.assistantName)).catch(() => undefined);
+  }, [ready, onboarding, page]);
 
   const addQuoted = (ref: CardRef) => setQuoted((q) => (q.some((r) => r.id === ref.id) ? q : [...q, ref]));
   const quote = (ref: CardRef) => {
@@ -38,6 +58,9 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => { offNav(); window.removeEventListener('keydown', onKey); };
   }, []);
+
+  if (!ready) return <main className="page"><h1>Fudaner</h1>{bootError ? <><p role="alert">无法读取本机配置，请重试。</p><button onClick={() => void load()}>重试</button></> : <p role="status">正在准备你的助理…</p>}</main>;
+  if (onboarding) return <OnboardingPage onComplete={() => { setCompleted(true); setOnboarding(false); setPage('chat'); }} onClose={completed ? () => { setOnboarding(false); setPage('settings'); } : undefined} />;
 
   return (
     <div className="app">
@@ -55,12 +78,12 @@ export function App() {
         </button>
       </nav>
       <main className="main">
-        {page === 'chat' && <ChatPage quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={setPage} />}
+        {page === 'chat' && <ChatPage assistantName={assistantName} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={setPage} />}
         {page === 'feed' && <FeedPage quote={quote} />}
         {page === 'goals' && <GoalsPage quote={quote} />}
         {page === 'library' && <LibraryPage quote={quote} />}
         {page === 'search' && <SearchPage quote={quote} />}
-        {page === 'settings' && <SettingsPage />}
+        {page === 'settings' && <SettingsPage onOpenOnboarding={() => setOnboarding(true)} />}
       </main>
     </div>
   );
