@@ -1,15 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CardRef, Resource } from '../../../shared/types';
 import { api, fmtRelative } from '../api';
 
 const KIND: Record<Resource['kind'], string> = { assistant_output: '旦旦做的', upload: '我上传的', replay_note: '回放笔记', courseware: '课件' };
 
 /** 资源库（PRD §5.4）：助理的成果 + 用户上传的文件 */
-export function LibraryPage({ quote }: { quote: (r: CardRef) => void }) {
+export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; focus?: { id: string } | null }) {
   const [list, setList] = useState<Resource[]>([]);
   const [open, setOpen] = useState<Resource | null>(null);
   const load = () => void api.library.list().then(setList);
   useEffect(() => { load(); return api.on('library:changed', load); }, []);
+  const view = useRef<HTMLDivElement>(null);
+  const [focusError, setFocusError] = useState(false);
+  useEffect(() => {
+    setFocusError(false);
+    if (!focus) return;
+    let active = true;
+    void api.library.get(focus.id).then((resource) => {
+      if (active) { setOpen(resource); setFocusError(!resource); }
+    }).catch(() => { if (active) setFocusError(true); });
+    return () => { active = false; };
+  }, [focus]);
+  useEffect(() => {
+    if (focus && open?.id === focus.id) view.current?.focus({ preventScroll: true });
+  }, [focus, open?.id]);
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -32,7 +46,8 @@ export function LibraryPage({ quote }: { quote: (r: CardRef) => void }) {
             </div>
           ))}
         </div>
-        <div className="resource-view">
+        <div className={focus && focus.id === open?.id ? 'resource-view reference-highlight' : 'resource-view'} ref={view} tabIndex={-1}>
+          {focusError && <p role="alert">暂时无法读取这份资源。</p>}
           {open ? (
             <>
               <div className="goal-head"><strong>{open.title}</strong><button onClick={() => quote({ type: 'resource', id: open.id, title: open.title })}>引用到对话</button></div>

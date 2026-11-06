@@ -11,14 +11,18 @@ export interface FudanerApi {
   chat: {
     /** 指定 aroundId 时返回包含该消息的上下文；消息已清理则返回空数组。 */
     history(limit?: number, aroundId?: string): Promise<ChatMessage[]>;
+    page(beforeId?: string, limit?: number): Promise<{ messages: ChatMessage[]; hasMore: boolean }>;
     send(text: string, refs?: CardRef[]): Promise<void>;
     state(): Promise<import('./types').ChatRun | null>;
     cancel(messageId: string): Promise<void>;
+    undoResult(messageId: string, type: CardRef['type'], id: string): Promise<ChatMessage>;
     quickAction(messageId: string, action: string, payload?: Record<string, unknown>): Promise<void>;
   };
+  references: { open(ref: Pick<CardRef, 'type' | 'id'>): Promise<import('./types').ReferenceOpenResult> };
+  copyText(text: string): Promise<void>;
   today(): Promise<TodayOverview>;
   feed: {
-    list(filter?: { type?: string }): Promise<FeedCard[]>;
+    list(filter?: { type?: string; includeId?: string }): Promise<FeedCard[]>;
     dismiss(id: string, reason?: string): Promise<void>;
     act(id: string, action: string): Promise<void>;
   };
@@ -60,6 +64,8 @@ export interface FudanerApi {
 export type FudanerEvent =
   | 'chat:delta'          // payload: ChatRun，真实增量到达后的带版本运行快照
   | 'chat:message'        // 新消息（含主动消息） payload: ChatMessage
+  | 'chat:updated'        // 已保存消息变更 payload: ChatMessage
+  | 'chat:cleared'
   | 'chat:tool'           // 工具调用进度 payload: { messageId: string; call: ToolCallView }
   | 'chat:thinking'       // payload: boolean
   | 'feed:changed'

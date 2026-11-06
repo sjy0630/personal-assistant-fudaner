@@ -21,6 +21,8 @@ export async function runAgentLoop(opts: {
   llm: LlmClient; hub: McpHub; tools: LlmTool[]; messages: LlmMessage[];
   onTool?: (call: ToolCallView) => void;
   onDelta?: (text: string) => void;
+  onCards?: (cards: CardRef[]) => void;
+  onToolResult?: (result: Awaited<ReturnType<McpHub['call']>>) => void;
   signal?: AbortSignal;
 }): Promise<LoopResult> {
   const { llm, hub, tools, messages } = opts;
@@ -54,9 +56,14 @@ export async function runAgentLoop(opts: {
       view.ok = res.ok;
       view.summary = res.text.slice(0, 120);
       calls.push(view);
+      if (res.ok && res.server === 'fudaner-local') {
+        const created = cardsFromTool(res.tool, res.text);
+        cards.push(...created);
+        if (created.length) opts.onCards?.(created);
+      }
+      if (res.ok) opts.onToolResult?.(res);
       opts.onTool?.(view);
       opts.signal?.throwIfAborted();
-      cards.push(...cardsFromTool(res.tool, res.text));
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, res.text.slice(0, 12000)) });
     }
   }
@@ -67,20 +74,39 @@ export async function runAgentLoop(opts: {
 
 /** 写操作的结果以卡片形式出现在对话里（PRD §5.1：写操作展示结果、可撤销） */
 function cardsFromTool(tool: string, text: string): CardRef[] {
-  const j = parseJsonLoose<Record<string, string>>(text);
+  const j = parseJsonLoose<Record<string, unknown>>(text);
   if (!j || Array.isArray(j)) return [];
-  if (tool === 'save_resource' && j.id) return [{ type: 'resource', id: j.id, title: j.title ?? '资源', subtitle: '已存入资源库' }];
-  if (tool === 'create_goal' && j.id) return [{ type: 'goal', id: j.id, title: j.title ?? '目标', subtitle: '新目标' }];
-  if (tool === 'add_task' && j.id) return [{ type: 'task', id: j.id, title: j.title ?? '任务', subtitle: j.dueAt ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
-  if (tool === 'start_background_task' && j.ticketId) return [{ type: 'ticket', id: j.ticketId, title: '后台任务', subtitle: '已开始' }];
+  if (tool === 'start_background_task' && typeof j.ticketId === 'string') return [{ type: 'ticket', id: j.ticketId, title: '后台任务', subtitle: '已开始' }];
+  if (typeof j.id !== 'string' || !j.id) return [];
+  const title = typeof j.title === 'string' ? j.title : undefined;
+  if (tool === 'save_resource') return [{ type: 'resource', id: j.id, title: title ?? '资源', subtitle: '已存入资源库' }];
+  if (tool === 'create_goal') return [{ type: 'goal', id: j.id, title: title ?? '目标', subtitle: '新目标' }];
+  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: typeof j.dueAt === 'string' ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
   return [];
+}
+
+function readItemCards(repo: Repo, result: Awaited<ReturnType<McpHub['call']>>): CardRef[] {
+  const { server, tool, text } = result;
+  const assignments = (server === 'fudaner-local' && tool === 'list_deadlines') ||
+    (server === 'fudan-elearning' && ['list_assignments', 'get_assignment'].includes(tool));
+  const mail = server === 'fudan-mail' && ['list_action_required', 'search_mail', 'get_mail'].includes(tool);
+  if (!assignments && !mail) return [];
+  const kind = assignments ? 'assignment' : 'email';
+  const value = parseJsonLoose<unknown>(text);
+  const records: unknown[] = Array.isArray(value) ? value : [value];
+  return records.slice(0, 5).flatMap((record) => {
+    if (!record || typeof record !== 'object' || !('id' in record) || typeof record.id !== 'string') return [];
+    const item = repo.getItem(record.id);
+    if (item?.kind !== kind) return [];
+    return [{ type: 'item', id: item.id, title: item.title, subtitle: item.dueAt ? `截止 ${fmt(item.dueAt)}` : item.sender }];
+  });
 }
 
 /**
  * 主对话智能体（PRD §5.1）。作为 MCP 客户端调用各平台工具。
  */
 export class ChatAgent {
-  private active: { view: ChatRun; controller: AbortController } | null = null;
+  private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
   state(): ChatRun | null { return this.active ? structuredClone(this.active.view) : null; }
   cancel(id: string): void { if (this.active?.view.id === id) this.active.controller.abort(); }
   private publish(): void { const view = this.state(); if (view) this.channels.delta?.(view); }
@@ -94,7 +120,7 @@ export class ChatAgent {
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
     if (this.active) throw new Error('上一条回复还在生成，请先停止或等待完成。');
     if (!text.trim()) throw new Error('请输入消息。');
-    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController() };
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>() };
     this.active = run;
     try {
       const userMsg = this.repo.addMessage({ role: 'user', content: text, refs });
@@ -109,7 +135,7 @@ export class ChatAgent {
     } catch {
       const note = run.controller.signal.aborted ? '已停止生成。' : '回复未完成：连接中断或模型未能正常返回，请检查网络和模型配置后重试。';
       const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
-      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls });
+      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
       this.channels.messagePosted(msg);
       return msg;
     } finally {
@@ -127,12 +153,16 @@ export class ChatAgent {
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs)}` : text },
+      { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
     const result = await runAgentLoop({
       llm, hub: this.hub, tools: this.hub.llmTools(), messages,
       signal: run.controller.signal,
+      onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
+      onToolResult: (result) => {
+        for (const card of readItemCards(this.repo, result)) if (run.itemCards.size < 5) run.itemCards.set(card.id, card);
+      },
       onDelta: (text) => { run.view.content += text; run.view.version++; this.publish(); },
       onTool: (call) => {
         const index = run.view.toolCalls.findIndex((t) => t.id === call.id);
@@ -140,15 +170,22 @@ export class ChatAgent {
         run.view.version++; this.publish(); this.channels.toolProgress(run.view.id, call);
       },
     });
-    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content: result.content || '模型没有返回正文，请重试。', toolCalls: result.toolCalls, cards: result.cards });
+    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content: result.content || '模型没有返回正文，请重试。', toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */
-  private refContext(refs: CardRef[]): string {
+  private refContext(refs: CardRef[], local: boolean): string {
+    const allowMailBody = local || this.repo.getSettings().allowSensitiveToCloud === true;
     return refs.map((r) => {
       if (r.type === 'item') {
         const it = this.repo.getItem(r.id);
-        return it ? externalData(`item/${it.kind}`, `${it.title}\n${it.dueAt ? `截止 ${it.dueAt}\n` : ''}${it.sender ? `发件人 ${it.sender}\n` : ''}${it.body.slice(0, 3000)}`) : '';
+        if (!it) return externalData('item', '引用的事项已不存在。');
+        const body = it.kind !== 'email' || local ? it.body : [
+          it.aiSummary && `摘要：${it.aiSummary}`,
+          it.aiAction && `建议操作：${it.aiAction}`,
+          !it.aiSummary && (allowMailBody ? it.body : '当前只有邮件主题可用，正文保留在本机。'),
+        ].filter(Boolean).join('\n');
+        return externalData(`item/${it.kind}`, `${it.title}\n${it.dueAt ? `截止 ${it.dueAt}\n` : ''}${it.sender ? `发件人 ${it.sender}\n` : ''}${body.slice(0, 3000)}`);
       }
       if (r.type === 'feed') {
         const c = this.repo.getFeedCard(r.id);
@@ -156,13 +193,28 @@ export class ChatAgent {
       }
       if (r.type === 'resource') {
         const res = this.repo.getResource(r.id);
-        return res ? externalData('resource', `${res.title}\n${res.text.slice(0, 6000)}`) : '';
+        if (!res) return externalData('resource', '引用的资源已不存在。');
+        const limit = 6000;
+        const continuation = res.text.length > limit
+          ? `\n[已显示前 ${limit} 个字符，共 ${res.text.length} 个字符。可用 read_resource 按 ID 从 offset=${limit} 继续读取。]`
+          : '';
+        return externalData('resource', `${res.title}\n资源 ID：${res.id}\n${res.text.slice(0, limit)}${continuation}`);
       }
       if (r.type === 'goal') {
         const g = this.repo.getGoal(r.id);
-        return g ? `引用的目标：${g.title}（${g.level}）\n任务：${this.repo.listTasks({ goalId: g.id }).map((t) => `${t.title}[${t.status}]`).join('、')}` : '';
+        return g ? externalData('goal', `${g.title}（${g.level} · ${g.status}）\n${g.description ?? ''}\n任务：${this.repo.listTasks({ goalId: g.id }).map((t) => `${t.title}[${t.status}]`).join('、')}`) : '';
       }
-      return `引用：${r.title}`;
+      if (r.type === 'task') {
+        const task = this.repo.getTask(r.id);
+        const goal = task?.goalId ? this.repo.getGoal(task.goalId) : undefined;
+        return task ? externalData('task', [task.title, `状态：${task.status}`, task.dueAt && `截止：${task.dueAt}`, goal && `所属目标：${goal.title}`].filter(Boolean).join('\n')) : '';
+      }
+      if (r.type === 'ticket') {
+        const ticket = this.repo.getTicket(r.id);
+        const resource = ticket?.resultResourceId ? this.repo.getResource(ticket.resultResourceId) : undefined;
+        return ticket ? externalData('ticket', [ticket.title, `状态：${ticket.status}`, ticket.request, resource?.text.slice(0, 6000)].filter(Boolean).join('\n')) : '';
+      }
+      return '';
     }).join('\n\n');
   }
 
@@ -202,10 +254,11 @@ export class ChatAgent {
         type: m.type as any, content: m.content, source: 'chat', sourceMsgId: userMsg.id,
         expiresAt: m.expires_days ? new Date(Date.now() + m.expires_days * 86_400_000).toISOString() : undefined,
       }));
-      if (added.length) {
+      const created = added.filter((memory) => memory.sourceMsgId === userMsg.id);
+      if (created.length) {
         const note = this.repo.addMessage({
-          role: 'assistant', content: `📌 已记住：${added.map((m) => m.content).join('；')}`,
-          actions: added.map((m) => ({ label: `撤销「${m.content.slice(0, 8)}…」`, action: 'forget_memory', payload: { id: m.id } })),
+          role: 'assistant', content: `📌 已记住：${created.map((m) => m.content).join('；')}`,
+          actions: created.map((m) => ({ label: `撤销「${m.content.slice(0, 8)}…」`, action: 'forget_memory', payload: { id: m.id } })),
         });
         this.channels.messagePosted(note);
       }

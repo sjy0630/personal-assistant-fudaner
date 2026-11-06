@@ -8,12 +8,12 @@ import { nullChannels } from '../src/main/engine/channels';
 
 const opened: Db[]=[];
 afterEach(()=>opened.splice(0).forEach(db=>db.close()));
-function setup(chat: LlmClient['chat']) {
+function setup(chat: LlmClient['chat'], call?: McpHub['call']) {
   const db=new Db(':memory:');opened.push(db);const repo=new Repo(db);
   const snapshots: {id:string;content:string;version:number}[]=[];
   const client:LlmClient={label:'fixture',chat};
   const router={for:(task:string)=>task==='chat'?client:null} as ModelRouter;
-  const hub={llmTools:()=>[]} as unknown as McpHub;
+  const hub={llmTools:()=>[],call} as unknown as McpHub;
   const agent=new ChatAgent(repo,router,hub,{...nullChannels,delta:(s:unknown)=>snapshots.push(structuredClone(s) as never)} as never);
   return {repo,agent,snapshots};
 }
@@ -37,6 +37,42 @@ describe('主对话流式生命周期',()=>{
     await expect(agent.handleUserMessage('second')).rejects.toThrow();expect(repo.recentMessages().filter(m=>m.role==='user')).toHaveLength(1);
     agent.cancel('other');expect(agent.state()).not.toBeNull();agent.cancel(state.id);
     const reply=await pending;expect(reply.content).toContain('部分回复');expect(reply.content).toContain('已停止');expect(agent.state()).toBeNull();
+  });
+  it('真实查询返回可点击的作业和邮件卡片，且不会取得撤销权限', async () => {
+    let turn = 0;
+    const { repo, agent } = setup(async () => ({
+      content: turn ? '已查到。' : '',
+      toolCalls: turn++ ? [] : [
+        { id: 'deadlines', name: 'fudaner_local__list_deadlines', arguments: '{}' },
+        { id: 'mail', name: 'fudan_mail__list_action_required', arguments: '{}' },
+      ],
+    }), async (qualified) => {
+      if (qualified.startsWith('fudaner_local')) {
+        return { ok: true, server: 'fudaner-local', tool: 'list_deadlines', text: JSON.stringify([{ id: assignment.id }, { id: email.id }]) };
+      }
+      return { ok: true, server: 'fudan-mail', tool: 'list_action_required', text: JSON.stringify([{ id: email.id }, { id: 'missing' }]) };
+    });
+    const publishedAt = new Date().toISOString();
+    const assignment = repo.upsertItem({ source: 'elearning', kind: 'assignment', sourceId: 'a', title: '本周作业', body: '', publishedAt, done: false }).item;
+    const email = repo.upsertItem({ source: 'mail', kind: 'email', sourceId: 'm', title: '待回复邮件', body: '', publishedAt, done: false }).item;
+    const reply = await agent.handleUserMessage('帮我查看作业和邮件');
+    expect(reply.cards.map((card) => card.id)).toEqual([assignment.id, email.id]);
+    expect(reply.cards.every((card) => card.type === 'item' && !card.undoToken)).toBe(true);
+  });
+  it('停止前写入的目标保留结果卡片和撤销权限', async () => {
+    const { repo, agent } = setup(async () => ({
+      content: '', toolCalls: [{ id: 'goal-call', name: 'fudaner_local__create_goal', arguments: '{}' }],
+    }), async () => {
+      const goal = repo.addGoal({ title: '临时目标', level: 'week', createdBy: 'assistant' });
+      agent.cancel(agent.state()!.id);
+      return { ok: true, text: JSON.stringify(goal), server: 'fudaner-local', tool: 'create_goal' };
+    });
+    const reply = await agent.handleUserMessage('创建目标');
+    expect(reply.content).toContain('已停止');
+    expect(reply.cards).toHaveLength(1);
+    const card = reply.cards[0];
+    expect(card.undoToken).toBeTruthy();
+    expect(repo.undoMessageResult(reply.id, card.type, card.id).cards[0].undone).toBe(true);
   });
   it('跨工具轮显示真实正文，并区分同名工具的多次调用',async()=>{
     let turn=0;const text:string[]=[];
