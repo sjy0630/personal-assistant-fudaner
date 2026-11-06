@@ -1,0 +1,29 @@
+.chat-markdown { white-space: normal; overflow-wrap: anywhere; }
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown p { margin: .7em 0; }
+.chat-markdown :is(h1,h2,h3,h4,h5,h6) { line-height: 1.5; margin: 1.2em 0 .5em; font-weight: 600; }
+.chat-markdown h1 { font-size: 1.4em; }
+.chat-markdown h2 { font-size: 1.25em; }
+.chat-markdown :is(h3,h4,h5,h6) { font-size: 1.1em; }
+.chat-markdown :is(ul,ol) { padding-left: 1.5em; margin: .7em 0; }
+.chat-markdown li { margin: .25em 0; }
+.chat-markdown li > p { margin: .3em 0; }
+.chat-markdown code { font-size: .88em; background: var(--accent-soft); border-radius: 4px; padding: .12em .3em; }
+.chat-markdown pre { white-space: pre; overflow-x: auto; max-width: 100%; padding: 14px 16px; background: var(--nav-bg); border: 1px solid var(--border); border-radius: 8px; line-height: 1.6; }
+.chat-markdown pre code { background: transparent; padding: 0; overflow-wrap: normal; }
+.chat-markdown blockquote { color: var(--muted); margin: 1em 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; }
+.chat-markdown a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.markdown-table { max-width: 100%; overflow-x: auto; margin: 1em 0; }
+.markdown-table table { border-collapse: collapse; min-width: 100%; }
+.markdown-table :is(th,td) { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
+.markdown-table th { background: var(--nav-bg); font-weight: 600; }
+.chat-markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
+.markdown-image { color: var(--muted); }
+.msg.streaming { min-width: 0; }
+.generation-status { display: block; color: var(--muted); font-size: 13px; margin-top: 10px; }
+.chat-error { color: var(--danger); padding: 5px 0; font-size: 14px; }
+.tool details { max-width: 100%; }
+details.tool > summary { cursor: pointer; overflow-wrap: anywhere; }
+.tool pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.messages { min-height: 0; }

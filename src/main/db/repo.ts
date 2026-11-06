@@ -164,6 +164,13 @@ export class Repo {
   countProactiveToday(dayStartIso: string): number {
     return this.db.get<Row>('SELECT COUNT(*) AS n FROM chat_messages WHERE proactive = 1 AND created_at >= ?', dayStartIso)?.n ?? 0;
   }
+  messagesAround(id: string, limit = 100): ChatMessage[] {
+    const target = this.db.get<{ created_at: string; rowid: number }>('SELECT created_at, rowid FROM chat_messages WHERE id = ?', id);
+    if (!target) return [];
+    const size = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 100));
+    const before = this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM chat_messages WHERE created_at < ? OR (created_at = ? AND rowid < ?)', target.created_at, target.created_at, target.rowid)?.n ?? 0;
+    return this.db.all<Row>('SELECT * FROM chat_messages ORDER BY created_at ASC, rowid ASC LIMIT ? OFFSET ?', size, Math.max(0, before - Math.floor(size / 2))).map(mapMessage);
+  }
 
   // ---------------- memories ----------------
   addMemory(m: { type: Memory['type']; content: string; source: Memory['source']; sourceMsgId?: string; expiresAt?: string }): Memory {

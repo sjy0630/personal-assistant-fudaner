@@ -18,10 +18,15 @@ export interface LlmResult {
   toolCalls: { id: string; name: string; arguments: string }[];
 }
 
+export interface LlmOptions {
+  tools?: LlmTool[]; json?: boolean; temperature?: number; maxTokens?: number;
+  onDelta?: (text: string) => void;
+  signal?: AbortSignal;
+}
 export interface LlmClient {
   /** 用于决策记录展示，如 "local:qwen2.5:7b" */
   readonly label: string;
-  chat(messages: LlmMessage[], opts?: { tools?: LlmTool[]; json?: boolean; temperature?: number; maxTokens?: number }): Promise<LlmResult>;
+  chat(messages: LlmMessage[], opts?: LlmOptions): Promise<LlmResult>;
 }
 
 /** OpenAI 兼容协议客户端：云端（DeepSeek、通义、Kimi…）和本地（Ollama 等）共用。 */
@@ -34,16 +39,46 @@ export class OpenAiCompatClient implements LlmClient {
     this.label = `${kind}:${cfg.model}`;
   }
 
-  async chat(messages: LlmMessage[], opts: { tools?: LlmTool[]; json?: boolean; temperature?: number; maxTokens?: number } = {}): Promise<LlmResult> {
-    const res = await this.client.chat.completions.create({
+  async chat(messages: LlmMessage[], opts: LlmOptions = {}): Promise<LlmResult> {
+    const params = {
       model: this.cfg.model,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: messages as any,
       tools: opts.tools?.length ? opts.tools : undefined,
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens,
-      response_format: opts.json ? { type: 'json_object' } : undefined,
-    });
+      response_format: opts.json ? { type: 'json_object' as const } : undefined,
+    };
+    if (opts.onDelta) {
+      // DeepSeek V4/Flash 默认先深入思考，短正文可能在思考结束后集中返回。
+      // 主对话使用官方快速回复开关，正文直接生成；后台请求保留原有模式。
+      // https://api-docs.deepseek.com/guides/thinking_mode/
+      const fastDeepSeek = this.label.startsWith('cloud:') && /^deepseek-(?:v4(?:[.\-]|$)|flash(?:-|$)|chat$)/i.test(this.cfg.model.trim());
+      const stream = await this.client.chat.completions.create({
+        ...params, stream: true, ...(fastDeepSeek ? { thinking: { type: 'disabled' as const } } : {}),
+      }, { signal: opts.signal });
+      let content = '';
+      let finished: string | null = null;
+      const calls = new Map<number, { id: string; name: string; arguments: string }>();
+      for await (const chunk of stream) {
+        opts.signal?.throwIfAborted();
+        const choice = chunk.choices.find((c) => c.index === 0);
+        if (!choice) continue;
+        if (choice.delta.content) { content += choice.delta.content; opts.onDelta(choice.delta.content); }
+        for (const part of choice.delta.tool_calls ?? []) {
+          const call = calls.get(part.index) ?? { id: '', name: '', arguments: '' };
+          call.id += part.id ?? ''; call.name += part.function?.name ?? ''; call.arguments += part.function?.arguments ?? '';
+          calls.set(part.index, call);
+        }
+        if (choice.finish_reason) finished = choice.finish_reason;
+      }
+      opts.signal?.throwIfAborted();
+      if (finished !== 'stop' && finished !== 'tool_calls') throw new Error('模型回复未完整结束');
+      const toolCalls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => c);
+      if (toolCalls.some((c) => !c.id || !c.name)) throw new Error('工具调用未完整接收');
+      return { content, toolCalls };
+    }
+    const res = await this.client.chat.completions.create(params, { signal: opts.signal });
     const m = res.choices[0]?.message;
     return {
       content: m?.content ?? '',

@@ -25,14 +25,16 @@ export function registerIpc(ctx: AppContext, opts: {
     ipcMain.handle(ch, (_e, ...args) => fn(...(args as T)));
 
   type Api = FudanerApi;
-  handle<[number?], ReturnType<Api['chat']['history']>>('chat.history', async (limit) => repo.recentMessages(limit ?? 100));
-  handle<Parameters<Api['chat']['send']>, void>('chat.send', async (text, refs) => { void ctx.agent.handleUserMessage(text, refs); });
+  handle<Parameters<Api['chat']['history']>, ReturnType<Api['chat']['history']>>('chat.history', async (limit, aroundId) => aroundId ? repo.messagesAround(aroundId, limit ?? 100) : repo.recentMessages(limit ?? 100));
+  handle<Parameters<Api['chat']['send']>, void>('chat.send', async (text, refs) => { await ctx.agent.handleUserMessage(text, refs); });
+  handle('chat.state', async () => ctx.agent.state());
+  handle<[string], void>('chat.cancel', async (id) => ctx.agent.cancel(id));
   handle<Parameters<Api['chat']['quickAction']>, void>('chat.quickAction', async (_messageId, action, payload) => {
     if (action === 'forget_memory' && payload?.id) { repo.removeMemory(String(payload.id)); return; }
     if (action === 'accept_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'queued'); void ctx.executor.runNext(); return; }
     if (action === 'decline_ticket' && payload?.ticketId) { repo.setTicketStatus(String(payload.ticketId), 'dropped'); return; }
     if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
-    if (action === 'say' && payload?.text) { void ctx.agent.handleUserMessage(String(payload.text)); return; }
+    if (action === 'say' && payload?.text) { await ctx.agent.handleUserMessage(String(payload.text)); return; }
   });
   handle('today', async () => buildToday(repo));
 

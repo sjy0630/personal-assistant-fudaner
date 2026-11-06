@@ -3,9 +3,21 @@ import type { FudanerApi } from '../shared/ipc';
 
 const call = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
 
+// 通知可能在 React 首次订阅之前抵达。只缓冲最新导航，避免启动时丢失点击。
+const navigationListeners = new Set<(payload: unknown) => void>();
+let navigationVersion = 0;
+let pendingNavigation: { payload: unknown; version: number } | null = null;
+ipcRenderer.on('fudaner:event', (_e, channel: string, payload: unknown) => {
+  if (channel !== 'navigate') return;
+  navigationVersion++;
+  if (!navigationListeners.size) { pendingNavigation = { payload, version: navigationVersion }; return; }
+  pendingNavigation = null;
+  navigationListeners.forEach((cb) => cb(payload));
+});
+
 /** 只暴露 FudanerApi 定义的接口，渲染进程拿不到 Node / Electron 能力 */
 const api: FudanerApi & { pathForFile(f: File): string } = {
-  chat: { history: call('chat.history'), send: call('chat.send'), quickAction: call('chat.quickAction') } as FudanerApi['chat'],
+  chat: { history: call('chat.history'), send: call('chat.send'), state: call('chat.state'), cancel: call('chat.cancel'), quickAction: call('chat.quickAction') } as FudanerApi['chat'],
   today: call('today') as FudanerApi['today'],
   feed: { list: call('feed.list'), dismiss: call('feed.dismiss'), act: call('feed.act') } as FudanerApi['feed'],
   goals: { list: call('goals.list'), setTaskStatus: call('goals.setTaskStatus') } as FudanerApi['goals'],
@@ -22,6 +34,16 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
     demoSubmitNext: call('dev.demoSubmitNext'), demoNewMail: call('dev.demoNewMail'), resetDemo: call('dev.resetDemo'),
   } as FudanerApi['dev'],
   on(channel, cb) {
+    if (channel === 'navigate') {
+      navigationListeners.add(cb);
+      queueMicrotask(() => {
+        if (!navigationListeners.has(cb) || !pendingNavigation) return;
+        const pending = pendingNavigation;
+        pendingNavigation = null;
+        if (pending.version === navigationVersion) cb(pending.payload);
+      });
+      return () => { navigationListeners.delete(cb); };
+    }
     const listener = (_e: unknown, ch: string, payload: unknown) => { if (ch === channel) cb(payload); };
     ipcRenderer.on('fudaner:event', listener);
     return () => ipcRenderer.removeListener('fudaner:event', listener);

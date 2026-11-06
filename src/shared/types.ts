@@ -61,7 +61,10 @@ export interface CardRef { type: 'item' | 'goal' | 'task' | 'resource' | 'feed' 
 /** 消息里的快捷按钮 */
 export interface QuickAction { label: string; action: string; payload?: Record<string, unknown> }
 
-export interface ToolCallView { name: string; server: string; args: unknown; ok?: boolean; summary?: string }
+export interface ToolCallView { id?: string; name: string; server: string; args: unknown; ok?: boolean; summary?: string }
+
+/** 版本递增，避免页面恢复时旧快照覆盖新进度。 */
+export interface ChatRun { id: string; content: string; toolCalls: ToolCallView[]; startedAt: string; version: number }
 
 export interface ChatMessage {
   id: string;

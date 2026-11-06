@@ -1,4 +1,5 @@
-import type { CardRef, ChatMessage, ToolCallView } from '../../shared/types';
+import { randomUUID } from 'node:crypto';
+import type { CardRef, ChatMessage, ChatRun, ToolCallView } from '../../shared/types';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
 import { fmt } from '../engine/engine';
@@ -19,32 +20,49 @@ export interface LoopResult { content: string; toolCalls: ToolCallView[]; cards:
 export async function runAgentLoop(opts: {
   llm: LlmClient; hub: McpHub; tools: LlmTool[]; messages: LlmMessage[];
   onTool?: (call: ToolCallView) => void;
+  onDelta?: (text: string) => void;
+  signal?: AbortSignal;
 }): Promise<LoopResult> {
   const { llm, hub, tools, messages } = opts;
   const calls: ToolCallView[] = [];
   const cards: CardRef[] = [];
+  let streamedContent = '';
   for (let step = 0; step < MAX_STEPS; step++) {
-    const r = await llm.chat(messages, { tools, temperature: 0.5 });
-    if (r.toolCalls.length === 0) return { content: r.content, toolCalls: calls, cards };
+    opts.signal?.throwIfAborted();
+    let round = '';
+    const emit = (text: string) => {
+      if (!text) return;
+      if (!round && streamedContent) { streamedContent += '\n\n'; opts.onDelta?.('\n\n'); }
+      round += text; streamedContent += text; opts.onDelta?.(text);
+    };
+    const r = await llm.chat(messages, { tools, temperature: 0.5, signal: opts.signal, onDelta: opts.onDelta ? emit : undefined });
+    opts.signal?.throwIfAborted();
+    if (opts.onDelta && !round && r.content) emit(r.content);
+    if (r.toolCalls.length === 0) return { content: opts.onDelta ? streamedContent : r.content, toolCalls: calls, cards };
     messages.push({
       role: 'assistant', content: r.content || null,
       tool_calls: r.toolCalls.map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.arguments } })),
     });
     for (const tc of r.toolCalls) {
-      const args = parseJsonLoose<Record<string, unknown>>(tc.arguments) ?? {};
+      opts.signal?.throwIfAborted();
+      const args = parseJsonLoose<Record<string, unknown>>(tc.arguments);
+      if (!args || Array.isArray(args)) throw new Error('工具参数不完整，未执行');
       const [server, tool] = tc.name.split('__');
-      const view: ToolCallView = { name: tool ?? tc.name, server: (server ?? '').replace(/_/g, '-'), args };
+      const view: ToolCallView = { id: tc.id, name: tool ?? tc.name, server: (server ?? '').replace(/_/g, '-'), args };
       opts.onTool?.(view);
       const res = await hub.call(tc.name, args);
       view.ok = res.ok;
       view.summary = res.text.slice(0, 120);
       calls.push(view);
       opts.onTool?.(view);
+      opts.signal?.throwIfAborted();
       cards.push(...cardsFromTool(res.tool, res.text));
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, res.text.slice(0, 12000)) });
     }
   }
-  return { content: '这件事步骤有点多，我先停在这里。要我继续吗？', toolCalls: calls, cards };
+  const end = '这件事步骤有点多，我先停在这里。要我继续吗？';
+  if (opts.onDelta) { const text = `${streamedContent ? '\n\n' : ''}${end}`; streamedContent += text; opts.onDelta(text); }
+  return { content: opts.onDelta ? streamedContent : end, toolCalls: calls, cards };
 }
 
 /** 写操作的结果以卡片形式出现在对话里（PRD §5.1：写操作展示结果、可撤销） */
@@ -62,6 +80,10 @@ function cardsFromTool(tool: string, text: string): CardRef[] {
  * 主对话智能体（PRD §5.1）。作为 MCP 客户端调用各平台工具。
  */
 export class ChatAgent {
+  private active: { view: ChatRun; controller: AbortController } | null = null;
+  state(): ChatRun | null { return this.active ? structuredClone(this.active.view) : null; }
+  cancel(id: string): void { if (this.active?.view.id === id) this.active.controller.abort(); }
+  private publish(): void { const view = this.state(); if (view) this.channels.delta?.(view); }
   constructor(
     private readonly repo: Repo,
     private readonly router: ModelRouter,
@@ -70,20 +92,28 @@ export class ChatAgent {
   ) {}
 
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
-    const userMsg = this.repo.addMessage({ role: 'user', content: text, refs });
-    this.channels.messagePosted(userMsg);
-    this.channels.thinking(true);
+    if (this.active) throw new Error('上一条回复还在生成，请先停止或等待完成。');
+    if (!text.trim()) throw new Error('请输入消息。');
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController() };
+    this.active = run;
     try {
+      const userMsg = this.repo.addMessage({ role: 'user', content: text, refs });
+      this.channels.messagePosted(userMsg);
+      this.channels.thinking(true);
       const llm = this.router.for('chat');
+      if (llm) this.publish();
       const reply = llm ? await this.withModel(llm, text, refs) : this.withoutModel(text);
       this.channels.messagePosted(reply);
       if (llm) void this.extractMemories(userMsg, reply);
       return reply;
-    } catch (e) {
-      const msg = this.repo.addMessage({ role: 'assistant', content: `出错了：${(e as Error).message}。可以检查一下设置里的模型配置。` });
+    } catch {
+      const note = run.controller.signal.aborted ? '已停止生成。' : '回复未完成：连接中断或模型未能正常返回，请检查网络和模型配置后重试。';
+      const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
+      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls });
       this.channels.messagePosted(msg);
       return msg;
     } finally {
+      this.active = null;
       this.channels.thinking(false);
     }
   }
@@ -99,12 +129,18 @@ export class ChatAgent {
       ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs)}` : text },
     ];
-    const pendingId = `pending-${Date.now()}`;
+    const run = this.active!;
     const result = await runAgentLoop({
       llm, hub: this.hub, tools: this.hub.llmTools(), messages,
-      onTool: (call) => this.channels.toolProgress(pendingId, call),
+      signal: run.controller.signal,
+      onDelta: (text) => { run.view.content += text; run.view.version++; this.publish(); },
+      onTool: (call) => {
+        const index = run.view.toolCalls.findIndex((t) => t.id === call.id);
+        if (index < 0) run.view.toolCalls.push(structuredClone(call)); else run.view.toolCalls[index] = structuredClone(call);
+        run.view.version++; this.publish(); this.channels.toolProgress(run.view.id, call);
+      },
     });
-    return this.repo.addMessage({ role: 'assistant', content: result.content, toolCalls: result.toolCalls, cards: result.cards });
+    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content: result.content || '模型没有返回正文，请重试。', toolCalls: result.toolCalls, cards: result.cards });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */

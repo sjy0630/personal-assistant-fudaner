@@ -36,10 +36,13 @@ export function App() {
   const [assistantName, setAssistantName] = useState('旦旦');
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [chatLocation, setChatLocation] = useState<{ id: string } | null>(null);
   const navigate = useCallback((next: Page) => {
-    if (next === page) return;
-    if (page === 'settings' && (settingsBusy || (settingsDirty && !window.confirm('设置中有尚未保存的修改，离开后这些修改将丢失。确认离开？')))) return;
+    if (next === page) { setChatLocation(null); return true; }
+    if (page === 'settings' && (settingsBusy || (settingsDirty && !window.confirm('设置中有尚未保存的修改，离开后这些修改将丢失。确认离开？')))) return false;
+    setChatLocation(null);
     setSettingsDirty(false); setSettingsBusy(false); setPage(next);
+    return true;
   }, [page, settingsDirty, settingsBusy]);
   const load = async () => {
     setBootError(false);
@@ -63,7 +66,12 @@ export function App() {
   };
 
   useEffect(() => {
-    const offNav = api.on('navigate', (p) => navigate(((p as { page: Page }).page) ?? 'chat'));
+    const offNav = api.on('navigate', (payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      const { page: next, id } = payload as { page?: unknown; id?: unknown };
+      if (typeof next !== 'string' || !['chat', 'feed', 'goals', 'library', 'search', 'settings'].includes(next)) return;
+      if (navigate(next as Page) && next === 'chat' && typeof id === 'string' && id.trim()) setChatLocation({ id });
+    });
     const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); navigate('search'); } };
     window.addEventListener('keydown', onKey);
     return () => { offNav(); window.removeEventListener('keydown', onKey); };
@@ -97,7 +105,7 @@ export function App() {
         </button>
       </nav>
       <main className="main">
-        {page === 'chat' && <ChatPage assistantName={assistantName} todayCollapsed={layout.rightCollapsed} toggleToday={() => toggle('rightCollapsed')} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={navigate} />}
+        {page === 'chat' && <ChatPage assistantName={assistantName} location={chatLocation} returnToLatest={() => setChatLocation(null)} todayCollapsed={layout.rightCollapsed} toggleToday={() => toggle('rightCollapsed')} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={navigate} />}
         {page === 'feed' && <FeedPage quote={quote} />}
         {page === 'goals' && <GoalsPage quote={quote} />}
         {page === 'library' && <LibraryPage quote={quote} />}
