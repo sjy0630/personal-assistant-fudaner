@@ -79,13 +79,19 @@ export class OpenAiCompatClient implements LlmClient {
       return { content, toolCalls };
     }
     const res = await this.client.chat.completions.create(params, { signal: opts.signal });
-    const m = res.choices[0]?.message;
+    const choice = res.choices[0];
+    if (!choice || (choice.finish_reason !== 'stop' && choice.finish_reason !== 'tool_calls')) {
+      throw new Error('模型回复未完整结束');
+    }
+    const m = choice.message;
+    const toolCalls = (m.tool_calls ?? [])
+      .filter((t) => t.type === 'function')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((t: any) => ({ id: t.id as string, name: t.function.name as string, arguments: t.function.arguments as string }));
+    if (toolCalls.some((call) => !call.id || !call.name)) throw new Error('工具调用未完整接收');
     return {
       content: m?.content ?? '',
-      toolCalls: (m?.tool_calls ?? [])
-        .filter((t) => t.type === 'function')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((t: any) => ({ id: t.id, name: t.function.name, arguments: t.function.arguments })),
+      toolCalls,
     };
   }
 }

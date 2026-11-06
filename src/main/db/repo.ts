@@ -9,6 +9,19 @@ import { Db, fromJson, newId, nowIso, toJson } from './db';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
 
+export interface ConversationSummary {
+  untilMsgId: string;
+  untilCreatedAt: string;
+  summary: string;
+}
+export interface ConversationSummaryBatch {
+  epoch: string;
+  previous: ConversationSummary | undefined;
+  messages: ChatMessage[];
+  fingerprint: string;
+}
+const SUMMARY_EPOCH_KEY = 'conversation_summary_epoch';
+
 /**
  * 所有数据访问都经过 Repo。其他模块不直接写 SQL，方便多人并行开发时只改这一处。
  */
@@ -291,6 +304,57 @@ export class Repo {
       snapshot = { resource, chunks: this.db.all<Row>('SELECT * FROM resource_chunks WHERE resource_id=? ORDER BY seq,id', id) };
     } else return undefined;
     return createHash('sha256').update(toJson({ type, snapshot })).digest('hex');
+  }
+
+  /** 摘要按消息时间及插入顺序排序，同毫秒的消息也有确定的覆盖边界。 */
+  latestSummary(): ConversationSummary | undefined {
+    const row = this.db.get<Row>(`SELECT s.until_msg_id, s.summary, m.created_at FROM conversation_summaries s
+      JOIN chat_messages m ON m.id=s.until_msg_id ORDER BY m.created_at DESC,m.rowid DESC,s.rowid DESC LIMIT 1`);
+    return row ? { untilMsgId: row.until_msg_id, untilCreatedAt: row.created_at, summary: row.summary } : undefined;
+  }
+  addSummary(untilMsgId: string, summary: string): void {
+    const content = Array.from(summary.trim()).slice(0, 300).join('');
+    if (!content || !this.getMessage(untilMsgId)) throw new Error('摘要内容或覆盖消息无效。');
+    this.db.run('INSERT INTO conversation_summaries (id,until_msg_id,summary) VALUES (?,?,?)', newId(), untilMsgId, content);
+  }
+  /** 保留最近 20 条原文；每批最多处理 80 条旧消息，避免积压历史撑满上下文。 */
+  summaryBatch(): ConversationSummaryBatch | undefined {
+    const cutoff = this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages ORDER BY created_at DESC,rowid DESC LIMIT 1 OFFSET 19');
+    if (!cutoff) return undefined;
+    const previous = this.latestSummary();
+    const rows = this.summaryRows(previous, cutoff, false).slice(0, 80);
+    if (rows.length < 20) return undefined;
+    // wipe() 会删除此内部键；即使新对话重用相同消息 ID，旧异步任务也不能写回。
+    let epoch = this.getKv<string | undefined>(SUMMARY_EPOCH_KEY, undefined);
+    if (!epoch) { epoch = newId(); this.setKv(SUMMARY_EPOCH_KEY, epoch); }
+    return { epoch, previous, messages: rows.map(mapMessage), fingerprint: this.summaryFingerprint(rows) };
+  }
+  /** 仅在清空代次、原摘要和待覆盖消息均未变化时原子保存，防止重复或过期摘要覆盖。 */
+  commitSummary(batch: ConversationSummaryBatch, summary: string): boolean {
+    return this.db.tx(() => {
+      if (this.getKv<string | undefined>(SUMMARY_EPOCH_KEY, undefined) !== batch.epoch ||
+        toJson(this.latestSummary()) !== toJson(batch.previous)) return false;
+      const until = batch.messages.at(-1);
+      const boundary = until && this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages WHERE id=?', until.id);
+      const cutoff = this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages ORDER BY created_at DESC,rowid DESC LIMIT 1 OFFSET 19');
+      if (!boundary || !cutoff || boundary.created_at > cutoff.created_at ||
+        (boundary.created_at === cutoff.created_at && boundary.rowid >= cutoff.rowid)) return false;
+      if (this.summaryFingerprint(this.summaryRows(batch.previous, boundary, true)) !== batch.fingerprint) return false;
+      this.addSummary(until!.id, summary);
+      return true;
+    });
+  }
+  private summaryRows(previous: ConversationSummary | undefined, boundary: { created_at: string; rowid: number }, inclusive: boolean): Row[] {
+    const cursor = previous && this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages WHERE id=?', previous.untilMsgId);
+    const after = cursor ? 'AND (created_at > ? OR (created_at = ? AND rowid > ?))' : '';
+    const params = cursor ? [cursor.created_at, cursor.created_at, cursor.rowid] : [];
+    return this.db.all<Row>(`SELECT rowid AS summary_rowid,* FROM chat_messages
+      WHERE (created_at < ? OR (created_at = ? AND rowid ${inclusive ? '<=' : '<'} ?)) ${after}
+      ORDER BY created_at ASC,rowid ASC`, boundary.created_at, boundary.created_at, boundary.rowid, ...params);
+  }
+  private summaryFingerprint(rows: Row[]): string {
+    return createHash('sha256').update(toJson(rows.map(row => ({ rowid: row.summary_rowid, id: row.id,
+      role: row.role, content: row.content, createdAt: row.created_at })))).digest('hex');
   }
 
   // ---------------- memories ----------------

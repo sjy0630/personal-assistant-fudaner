@@ -1,0 +1,907 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-05T17:35:30.961Z",
+  "dataset": {
+    "datasetId": "demo-ai-labeled-2026-11-06-v1",
+    "provenance": "AI 演示标注；DEMO001–010 取自 demoMails，DEMO011 取自 demoLateMail，DEMO012–016 是基于演示课程和作业的补充难例。全部虚构。",
+    "independentHumanLabels": false,
+    "formalCompetitionDataset": false,
+    "sampleCount": 16,
+    "referenceNow": "2026-11-06T10:00:00+08:00",
+    "timeZone": "Asia/Shanghai",
+    "labelPolicy": [
+      "一封邮件标主要分类；课程作业不因出现提交二字改成 action；通知活动时间不是 deadline。",
+      "仅月日的截止时间按2026年当日23:59标注，这是评测约定，不声称原文给出了精确时刻；明确时刻保留。",
+      "截止时间字段标注原文出现的处理截止；DEMO008 中截止针对院系初评，也计为邮件提及截止。",
+      "只写截止不变而没有日期的邮件标 null；不从已关联的作业泄漏截止标签。",
+      "DEMO010 的今晚确认是回复诉求，不作为提交截止；关联标签由本数据集唯一的 Lab 5 确定。",
+      "DEMO013 是无需回信的课程作业，特意覆盖关键词误判；DEMO015 覆盖邮件内指令应被当作数据。"
+    ],
+    "limitations": [
+      "非 M 提供的正式20/40封人工标注集，未双人复核，不可作为正式准确率结论。",
+      "演示课程只有6门，作业关联正例数量小，必须同时报告正负样本分布及分项结果。",
+      "主要来自已有演示邮件，不是独立真实分布的测试集；提示词调优后不得声称是未见过的测试集。"
+    ]
+  },
+  "sampleCount": 16,
+  "distribution": {
+    "category": {
+      "reply": 2,
+      "action": 2,
+      "course": 5,
+      "notice": 6,
+      "other": 1
+    },
+    "deadlinePositive": 7,
+    "deadlineNegative": 9,
+    "assignmentPositive": 6,
+    "assignmentNegative": 10
+  },
+  "method": {
+    "deadline": "Both rows use the production deterministic extractDeadline grounded in mail text, not model date extraction. Asia/Shanghai exact minute; null==null; invalid timestamps are wrong. Date-only textual deadlines use the documented 23:59 convention.",
+    "association": "Exact course and assignment pair from linkMail rules; model courseHint may assist course lookup. No model assignment linker is implemented.",
+    "fallback": "metrics includes fallbacks with explicit sourceCounts; modelOnlyMetrics selects items whose classification source is model, but their dates and associations still use common deterministic rules. A fallback-only run is not model accuracy.",
+    "timing": "Fixed batches of 8, total pipeline wall time divided by logical batch count includes retries and cold start; API call durations are also recorded.",
+    "targets": {
+      "category": 0.85,
+      "deadline": 0.9,
+      "association": 0.8,
+      "formalValidation": false
+    }
+  },
+  "machine": {
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13650HX",
+    "memoryGiB": 23.73,
+    "node": "v24.14.1",
+    "platform": "win32",
+    "gpu": "Not auto-detected; verify separately before reporting GPU inference."
+  },
+  "skipped": [
+    {
+      "kind": "cloud",
+      "reason": "not explicitly configured for this invocation"
+    }
+  ],
+  "runs": [
+    {
+      "kind": "rules",
+      "requestedModel": "rules",
+      "actualModel": "rules",
+      "status": "complete",
+      "metrics": {
+        "category": {
+          "correct": 16,
+          "total": 16,
+          "accuracy": 1
+        },
+        "deadline": {
+          "correct": 16,
+          "total": 16,
+          "accuracy": 1
+        },
+        "course": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "assignment": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "association": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 5,
+            "total": 6,
+            "accuracy": 0.8333333333333334
+          },
+          "negative": {
+            "correct": 10,
+            "total": 10,
+            "accuracy": 1
+          },
+          "precision": {
+            "correct": 5,
+            "total": 5,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 7,
+          "total": 7,
+          "accuracy": 1
+        },
+        "deadlineNegative": {
+          "correct": 9,
+          "total": 9,
+          "accuracy": 1
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          },
+          "action": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          },
+          "course": {
+            "correct": 5,
+            "total": 5,
+            "accuracy": 1
+          },
+          "notice": {
+            "correct": 6,
+            "total": 6,
+            "accuracy": 1
+          },
+          "other": {
+            "correct": 1,
+            "total": 1,
+            "accuracy": 1
+          }
+        },
+        "sourceCounts": {
+          "rules": 16
+        },
+        "errors": [
+          {
+            "id": "DEMO010",
+            "subject": "Lab 5 我们分工一下？",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "DEMO010",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "modelOnlyMetrics": null,
+      "diagnostics": null,
+      "timing": {
+        "totalMs": 1.75,
+        "logicalBatches": 2,
+        "averageLogicalBatchMs": 0.88,
+        "apiCalls": 0,
+        "averageApiCallMs": null,
+        "calls": [],
+        "includesColdStart": "First model call may include Ollama loading; no warm-up is excluded."
+      },
+      "predictions": [
+        {
+          "id": "DEMO001",
+          "category": "reply",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO002",
+          "category": "action",
+          "deadline": "2026-11-10T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO003",
+          "category": "notice",
+          "deadline": "2026-11-15T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO004",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO005",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO006",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO007",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO008",
+          "category": "notice",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO009",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO010",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO011",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": "Lab 5：链表与栈",
+          "source": "rules"
+        },
+        {
+          "id": "DEMO012",
+          "category": "course",
+          "deadline": "2026-11-15T23:59:00+08:00",
+          "course": "数据结构",
+          "assignment": "Lab 6：二叉树",
+          "source": "rules"
+        },
+        {
+          "id": "DEMO013",
+          "category": "course",
+          "deadline": "2026-11-09T18:00:00+08:00",
+          "course": "数学分析 III",
+          "assignment": "数分作业 6",
+          "source": "rules"
+        },
+        {
+          "id": "DEMO014",
+          "category": "course",
+          "deadline": "2026-11-08T12:00:00+08:00",
+          "course": "大学物理 B",
+          "assignment": "大学物理 习题 8",
+          "source": "rules"
+        },
+        {
+          "id": "DEMO015",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "DEMO016",
+          "category": "course",
+          "deadline": "2026-11-10T23:59:00+08:00",
+          "course": "学术英语写作",
+          "assignment": "Essay Draft 2",
+          "source": "rules"
+        }
+      ]
+    },
+    {
+      "kind": "local",
+      "requestedModel": "local:qwen2.5:7b",
+      "actualModel": "local:qwen2.5:7b",
+      "status": "complete",
+      "metrics": {
+        "category": {
+          "correct": 11,
+          "total": 16,
+          "accuracy": 0.6875
+        },
+        "deadline": {
+          "correct": 16,
+          "total": 16,
+          "accuracy": 1
+        },
+        "course": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "assignment": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "association": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 5,
+            "total": 6,
+            "accuracy": 0.8333333333333334
+          },
+          "negative": {
+            "correct": 10,
+            "total": 10,
+            "accuracy": 1
+          },
+          "precision": {
+            "correct": 5,
+            "total": 5,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 7,
+          "total": 7,
+          "accuracy": 1
+        },
+        "deadlineNegative": {
+          "correct": 9,
+          "total": 9,
+          "accuracy": 1
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 1,
+            "total": 2,
+            "accuracy": 0.5
+          },
+          "action": {
+            "correct": 0,
+            "total": 2,
+            "accuracy": 0
+          },
+          "course": {
+            "correct": 3,
+            "total": 5,
+            "accuracy": 0.6
+          },
+          "notice": {
+            "correct": 6,
+            "total": 6,
+            "accuracy": 1
+          },
+          "other": {
+            "correct": 1,
+            "total": 1,
+            "accuracy": 1
+          }
+        },
+        "sourceCounts": {
+          "model": 16
+        },
+        "errors": [
+          {
+            "id": "DEMO002",
+            "subject": "关于 2026 秋季学期期中考试安排的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "DEMO002",
+              "category": "notice",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO006",
+            "subject": "冬季长跑活动开始打卡",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "DEMO006",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO010",
+            "subject": "Lab 5 我们分工一下？",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "DEMO010",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "DEMO013",
+            "subject": "数学分析 III：数分作业 6",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T18:00+08:00",
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "DEMO013",
+              "category": "notice",
+              "deadline": "2026-11-09T18:00+08:00",
+              "course": "数学分析 III",
+              "assignment": "数分作业 6",
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO014",
+            "subject": "大学物理 B 习题课作业",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "DEMO014",
+              "category": "notice",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8",
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          }
+        ]
+      },
+      "modelOnlyMetrics": {
+        "category": {
+          "correct": 11,
+          "total": 16,
+          "accuracy": 0.6875
+        },
+        "deadline": {
+          "correct": 16,
+          "total": 16,
+          "accuracy": 1
+        },
+        "course": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "assignment": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375
+        },
+        "association": {
+          "correct": 15,
+          "total": 16,
+          "accuracy": 0.9375,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 5,
+            "total": 6,
+            "accuracy": 0.8333333333333334
+          },
+          "negative": {
+            "correct": 10,
+            "total": 10,
+            "accuracy": 1
+          },
+          "precision": {
+            "correct": 5,
+            "total": 5,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 7,
+          "total": 7,
+          "accuracy": 1
+        },
+        "deadlineNegative": {
+          "correct": 9,
+          "total": 9,
+          "accuracy": 1
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 1,
+            "total": 2,
+            "accuracy": 0.5
+          },
+          "action": {
+            "correct": 0,
+            "total": 2,
+            "accuracy": 0
+          },
+          "course": {
+            "correct": 3,
+            "total": 5,
+            "accuracy": 0.6
+          },
+          "notice": {
+            "correct": 6,
+            "total": 6,
+            "accuracy": 1
+          },
+          "other": {
+            "correct": 1,
+            "total": 1,
+            "accuracy": 1
+          }
+        },
+        "sourceCounts": {
+          "model": 16
+        },
+        "errors": [
+          {
+            "id": "DEMO002",
+            "subject": "关于 2026 秋季学期期中考试安排的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "DEMO002",
+              "category": "notice",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO006",
+            "subject": "冬季长跑活动开始打卡",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "DEMO006",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO010",
+            "subject": "Lab 5 我们分工一下？",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "DEMO010",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "DEMO013",
+            "subject": "数学分析 III：数分作业 6",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T18:00+08:00",
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "DEMO013",
+              "category": "notice",
+              "deadline": "2026-11-09T18:00+08:00",
+              "course": "数学分析 III",
+              "assignment": "数分作业 6",
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "DEMO014",
+            "subject": "大学物理 B 习题课作业",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "DEMO014",
+              "category": "notice",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8",
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          }
+        ]
+      },
+      "diagnostics": {
+        "batches": 2,
+        "modelBatches": 2,
+        "failedBatches": 0,
+        "invalidItems": 0,
+        "fallbackItems": 0,
+        "retriedBatches": 0,
+        "errors": []
+      },
+      "timing": {
+        "totalMs": 28786.04,
+        "logicalBatches": 2,
+        "averageLogicalBatchMs": 14393.02,
+        "apiCalls": 2,
+        "averageApiCallMs": 14390.3,
+        "calls": [
+          {
+            "elapsedMs": 14435.58,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 14345.01,
+            "status": "completed"
+          }
+        ],
+        "includesColdStart": "First model call may include Ollama loading; no warm-up is excluded."
+      },
+      "predictions": [
+        {
+          "id": "DEMO001",
+          "category": "reply",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO002",
+          "category": "notice",
+          "deadline": "2026-11-10T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO003",
+          "category": "notice",
+          "deadline": "2026-11-15T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO004",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO005",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO006",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO007",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO008",
+          "category": "notice",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO009",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO010",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO011",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": "Lab 5：链表与栈",
+          "source": "model"
+        },
+        {
+          "id": "DEMO012",
+          "category": "course",
+          "deadline": "2026-11-15T23:59:00+08:00",
+          "course": "数据结构",
+          "assignment": "Lab 6：二叉树",
+          "source": "model"
+        },
+        {
+          "id": "DEMO013",
+          "category": "notice",
+          "deadline": "2026-11-09T18:00:00+08:00",
+          "course": "数学分析 III",
+          "assignment": "数分作业 6",
+          "source": "model"
+        },
+        {
+          "id": "DEMO014",
+          "category": "notice",
+          "deadline": "2026-11-08T12:00:00+08:00",
+          "course": "大学物理 B",
+          "assignment": "大学物理 习题 8",
+          "source": "model"
+        },
+        {
+          "id": "DEMO015",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "DEMO016",
+          "category": "course",
+          "deadline": "2026-11-10T23:59:00+08:00",
+          "course": "学术英语写作",
+          "assignment": "Essay Draft 2",
+          "source": "model"
+        }
+      ]
+    }
+  ]
+}
