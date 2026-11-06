@@ -3,17 +3,17 @@ import type { CardRef, ChatMessage, TodayOverview, ToolCallView } from '../../..
 import type { Page } from '../App';
 import { api, fmtTime } from '../api';
 import { RefChip } from '../components/RefChip';
+import { NavIcon } from '../theme/NavIcon';
 
 const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课周', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
 
 /** 主对话（PRD §5.1）：一条持续的对话流 + 右侧「今天」边栏 */
-export function ChatPage({ assistantName = '旦旦', quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
+export function ChatPage({ assistantName = '旦旦', todayCollapsed, toggleToday, quoted, addQuoted, clearQuoted, goto }: { assistantName?: string; todayCollapsed: boolean; toggleToday: () => void; quoted: CardRef[]; addQuoted: (r: CardRef) => void; clearQuoted: (id?: string) => void; goto: (p: Page) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [liveTools, setLiveTools] = useState<ToolCallView[]>([]);
   const [today, setToday] = useState<TodayOverview | null>(null);
-  const [showToday, setShowToday] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +60,9 @@ export function ChatPage({ assistantName = '旦旦', quoted, addQuoted, clearQuo
       <section className="chat" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <header className="page-header">
           <h1>{assistantName}</h1>
-          <button className="ghost" onClick={() => setShowToday((s) => !s)}>{showToday ? '收起今天' : '今天'}</button>
+          <button className="ghost sidebar-toggle today-toggle" type="button" onClick={toggleToday} aria-label={todayCollapsed ? '展开右侧栏' : '收起右侧栏'} aria-expanded={!todayCollapsed} aria-controls="today-sidebar" title={todayCollapsed ? '展开右侧栏' : '收起右侧栏'}>
+            <NavIcon name={todayCollapsed ? 'expand-right' : 'collapse-right'} />
+          </button>
         </header>
         <div className="messages">
           {messages.length === 0 && <div className="empty">和{assistantName}打个招呼吧。可以问「这周有什么 DDL？」或「有哪些邮件要回？」。</div>}
@@ -89,7 +91,7 @@ export function ChatPage({ assistantName = '旦旦', quoted, addQuoted, clearQuo
           </div>
         </div>
       </section>
-      {showToday && today && <TodayPanel today={today} goto={goto} />}
+      {today && <TodayPanel today={today} goto={goto} collapsed={todayCollapsed} />}
     </div>
   );
 }
@@ -121,10 +123,10 @@ function ToolLine({ t }: { t: ToolCallView }) {
   );
 }
 
-function TodayPanel({ today, goto }: { today: TodayOverview; goto: (p: Page) => void }) {
+function TodayPanel({ today, goto, collapsed }: { today: TodayOverview; goto: (p: Page) => void; collapsed: boolean }) {
   const pending = today.deadlines.filter((d) => !d.done);
   return (
-    <aside className="today">
+    <aside className="today" id="today-sidebar" aria-label="今天概况" hidden={collapsed}>
       <h2>今天</h2>
       <div className="muted">{today.date}{today.weekNo ? ` · 第 ${today.weekNo} 周` : ''} · {PHASE[today.phase]}</div>
       {today.courses.length > 0 && (

@@ -1,0 +1,105 @@
+/* 暖色宋体试用主题。完整恢复原有视觉可切回 f1/settings 基线。 */
+:root {
+  --bg: #faf9f5;
+  --panel: #fffefa;
+  --nav-bg: #f0ede5;
+  --text: #302c27;
+  --muted: #71685d;
+  --border: #e2ddd3;
+  --accent: #a14f36;
+  --accent-soft: #ece1d6;
+  --accent-contrast: #fffefa;
+  --bubble-user: #eeece6;
+  --bubble-user-text: #302c27;
+  --bubble-ai: transparent;
+  --danger: #aa3f32;
+  --ok: #3f7047;
+  --font-reading: Georgia, 'Songti SC', SimSun, STSong, serif;
+  font-family: var(--font-reading);
+  font-size: 16px;
+  line-height: 1.7;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #25231f;
+    --panel: #2e2a25;
+    --nav-bg: #211f1b;
+    --text: #eee8dd;
+    --muted: #beb3a4;
+    --border: #494239;
+    --accent: #e0a58d;
+    --accent-soft: #44352d;
+    --accent-contrast: #2b201a;
+    --bubble-user: #3a342c;
+    --bubble-user-text: #eee8dd;
+    --danger: #eda696;
+    --ok: #a7c3a1;
+    color-scheme: dark;
+  }
+}
+body, button, input, textarea, select { font-family: var(--font-reading); }
+button.primary, .chip.active { color: var(--accent-contrast); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+code, pre, kbd, samp { font-family: Consolas, 'SFMono-Regular', monospace; }
+button, input, textarea, select { line-height: 1.6; }
+button { padding: 6px 13px; }
+:is(button, input, textarea, select, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.nav { width: 182px; flex-shrink: 0; background: var(--nav-bg); padding: 25px 12px 16px; gap: 6px; }
+.nav-brand { font: 500 24px/1.4 var(--font-reading); padding: 0 13px; }
+.nav-caption { margin: 7px 13px 30px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.nav-item { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 13px; border-radius: 9px; text-align: left; }
+.nav-item:hover { background: var(--accent-soft); }
+.nav-icon { display: inline-flex; flex-shrink: 0; align-items: center; }
+.nav-icon svg { width: 19px; height: 19px; }
+.nav-label { font-size: 16px; margin-top: 0; line-height: 1.5; }
+.nav-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-left: 10px; }
+.nav-header .nav-brand { padding: 0; font-size: 22px; }
+.nav-menu { display: flex; flex-direction: column; gap: 6px; }
+.sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 5px; border: 0; background: transparent; color: var(--muted); flex-shrink: 0; }
+.sidebar-toggle svg, .today-toggle svg { width: 20px; height: 20px; }
+.sidebar-toggle:hover { color: var(--text); background: var(--accent-soft); }
+.nav.nav--collapsed { width: 64px; padding-left: 8px; padding-right: 8px; }
+.nav--collapsed .nav-header { padding: 0; justify-content: center; margin-bottom: 26px; }
+.nav--collapsed .nav-brand, .nav--collapsed .nav-caption { display: none; }
+.nav--collapsed .nav-item { justify-content: center; padding: 12px 8px; gap: 0; }
+.nav--collapsed .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
+.today-toggle { display: inline-flex; align-items: center; gap: 7px; }
+.today[hidden] { display: none; }
+.page-header h1 { font-weight: 600; }
+.chat .page-header { padding: 24px 30px 0; margin-bottom: 16px; }
+.messages { padding: 10px 30px 24px; }
+.msg { margin: 24px 0; max-width: 740px; }
+.msg .meta { font-size: 12px; margin-bottom: 9px; }
+.msg.user { max-width: min(86%, 640px); }
+.bubble { line-height: 1.9; font-size: 17px; padding: 13px 17px; }
+.msg.assistant .bubble { display: block; padding: 0; border: 0; background: transparent; line-height: 1.95; font-size: 18px; }
+.msg.user .bubble { font-size: 16px; background: var(--bubble-user); }
+.tool { font-size: 12px; margin-bottom: 10px; }
+.tool code { font-size: 11px; }
+.cards, .refs { margin-top: 14px; gap: 8px; }
+.ref.card { font-size: 14px; padding: 9px 12px; }
+.ref { font-size: 13px; }
+.tag, .small { font-size: 12px; }
+.composer { border-top: 0; padding: 15px 30px 22px; }
+.composer-row { border: 1px solid var(--border); background: var(--panel); border-radius: 16px; padding: 12px 14px; gap: 12px; }
+.composer textarea { border: 0; background: transparent; padding: 2px 0; min-height: 56px; font-size: 16px; line-height: 1.8; }
+.composer textarea:focus-visible { outline-offset: 1px; }
+.composer .primary { flex-shrink: 0; }
+.today { width: 236px; flex-shrink: 0; background: var(--bg); padding: 25px 19px; font-size: 14px; }
+.today h2 { font-size: 16px; }
+.today h3 { font-size: 13px; margin-top: 24px; }
+.today .muted { font-size: 12px; }
+.today .row { flex-wrap: wrap; line-height: 1.8; gap: 4px; margin-bottom: 7px; }
+.feed-card, .goal, .resource-view, .eval, .card-box { border-radius: 10px; }
+.feed-card p, .doc { line-height: 1.9; }
+.stats span { font-size: 13px; }
+@media (max-width: 1050px) {
+  .nav { width: 160px; padding-left: 9px; padding-right: 9px; }
+  .nav-item { gap: 9px; padding: 10px 12px; }
+  .nav-brand { font-size: 23px; }
+  .nav-caption { font-size: 11px; margin-bottom: 24px; }
+  .today { width: 214px; padding: 22px 15px; }
+  .messages { padding-left: 22px; padding-right: 22px; }
+  .composer { padding-left: 22px; padding-right: 22px; }
+}
