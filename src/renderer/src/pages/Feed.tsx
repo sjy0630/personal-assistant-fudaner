@@ -28,11 +28,31 @@ export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?
     target.current.focus({ preventScroll: true });
     target.current.scrollIntoView({ block: 'center' });
   }, [focus, cards]);
+  const [dismissCard, setDismissCard] = useState<FeedCard | null>(null);
+  const [reason, setReason] = useState('这门课不关心');
+  const [otherReason, setOtherReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (dismissCard) dialogRef.current?.showModal();
+    else dialogRef.current?.close();
+  }, [dismissCard]);
 
-  const dismiss = async (c: FeedCard) => {
-    const reason = window.prompt('为什么不感兴趣？（可选，比如「不关心体育类通知」）') ?? undefined;
-    await api.feed.dismiss(c.id, reason || undefined);
-    load();
+  const dismiss = async () => {
+    if (!dismissCard || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const feedback = reason === '其他' ? otherReason.trim() || '其他' : reason;
+      await api.feed.dismiss(dismissCard.id, `${feedback}（对应动态：${dismissCard.title}）`);
+      setDismissCard(null);
+      load();
+    } catch {
+      setError('未能保存反馈，请稍后重试。');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -55,11 +75,33 @@ export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?
               {c.actions.filter((a) => a.action !== 'quote' && a.action !== 'dismiss' && (a.action !== 'accept_ticket' || c.status !== 'accepted')).map((a) => (
                 <button key={a.label} className="primary" onClick={() => { setActionError(''); void api.feed.act(c.id, a.action).then(load).catch(() => { setActionError('暂时无法执行该操作。该建议可能已处理。'); load(); }); }}>{a.label}</button>
               ))}
-              <button className="ghost" onClick={() => void dismiss(c)}>不感兴趣</button>
+              <button className="ghost" onClick={() => { setReason('这门课不关心'); setOtherReason(''); setError(''); setDismissCard(c); }}>不感兴趣</button>
             </div>
           </article>
         ))}
       </div>
+      <dialog ref={dialogRef} className="feedback-dialog" aria-labelledby="feedback-title" onCancel={(e) => { if (saving) e.preventDefault(); }} onClose={() => setDismissCard(null)}>
+        <form onSubmit={(e) => { e.preventDefault(); void dismiss(); }}>
+          <h2 id="feedback-title">为什么不感兴趣？</h2>
+          <p className="muted">选择原因，帮助旦旦了解你的偏好。</p>
+          <p className="feedback-title">{dismissCard?.title}</p>
+          <fieldset disabled={saving}>
+            <legend>反馈原因</legend>
+            {['这门课不关心', '这类通知不想看', '其他'].map((option) => (
+              <label className="feedback-option" key={option}>
+                <input type="radio" name="dismiss-reason" value={option} checked={reason === option} onChange={() => setReason(option)} />
+                {option}
+              </label>
+            ))}
+            {reason === '其他' && <textarea aria-label="补充原因（可选）" placeholder="补充原因（可选）" maxLength={300} rows={3} value={otherReason} onChange={(e) => setOtherReason(e.target.value)} />}
+          </fieldset>
+          {error && <p className="feedback-error" role="alert">{error}</p>}
+          <div className="actions feedback-actions">
+            <button type="button" disabled={saving} onClick={() => setDismissCard(null)}>取消</button>
+            <button type="submit" className="primary" disabled={saving}>{saving ? '保存中…' : '确认反馈'}</button>
+          </div>
+        </form>
+      </dialog>
     </div>
   );
 }

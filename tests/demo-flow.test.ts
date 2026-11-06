@@ -47,6 +47,11 @@ describe('演示流程', () => {
     expect(wang.aiCategory).toBe('reply');
   });
 
+  it('搜索支持两个中文字和包含短词的作业名', () => {
+    expect(ctx.repo.search('交换').some((hit) => hit.title.includes('交换'))).toBe(true);
+    expect(ctx.repo.search('lab 5').some((hit) => hit.title.includes('Lab 5'))).toBe(true);
+  });
+
   it('主动引擎：早安 + 动态 + 建议工单，打扰次数远少于事件数', async () => {
     const evals = await ctx.engine.tick(NOW);
     const morning = posted.find((m) => m.trigger === 'morning');

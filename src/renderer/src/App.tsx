@@ -15,12 +15,12 @@ import { useSidebarLayout } from './theme/useSidebarLayout';
 
 export type Page = 'chat' | 'feed' | 'goals' | 'library' | 'search' | 'settings';
 
-const NAV: { page: Page; icon: string; label: string }[] = [
-  { page: 'chat', icon: '💬', label: '对话' },
-  { page: 'feed', icon: '📰', label: '动态' },
-  { page: 'goals', icon: '🎯', label: '目标' },
-  { page: 'library', icon: '📚', label: '资源' },
-  { page: 'search', icon: '🔍', label: '搜索' },
+const NAV: { page: Page; label: string }[] = [
+  { page: 'chat', label: '对话' },
+  { page: 'feed', label: '动态' },
+  { page: 'goals', label: '目标' },
+  { page: 'library', label: '资源' },
+  { page: 'search', label: '搜索' },
 ];
 
 /**

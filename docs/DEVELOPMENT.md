@@ -168,6 +168,13 @@
 | LK（F2） | 新增占位图标 `resources/icon.png`（窗口、托盘、安装包共用），可以直接替换成你设计的 Logo（1024×1024 PNG） |
 | 小鸟游六花（P） | 同步时如果抛出 `NeedLoginError`，`app-context.ts` 会生成「登录过期」事件，由主动引擎提醒用户重新登录；「清除所有数据」现在也会清掉同步进度，清除后按首次同步处理 |
 
+### 3.10 主题与样式约定（11/6 定）
+
+- **正式主题：暖色宋体**（JOHN 设计）。`styles.css`（LK）是基础样式，`theme/warm-songti.css` 在它之后加载、覆盖配色变量。
+- **深浅色**：由 `theme.ts`（LK）在 `<html data-theme="light|dark">` 上切换，设置页顶部的「外观」可以选跟随系统、浅色、深色。暖色主题的深色配色写在 `:root[data-theme="dark"]` 下。
+- **新写的样式只用配色变量**（`--bg`、`--panel`、`--text`、`--muted`、`--border`、`--accent`、`--accent-soft`、`--accent-fill`、`--on-accent` 等），不要写死颜色；需要新变量时，在 `styles.css` 和 `warm-songti.css` 的浅色、深色两处都补上取值。
+- 导航图标统一用 `theme/NavIcon.tsx`。应用图标 `resources/icon.png` 目前还是蓝色占位，**请 LK 换成暖色版本**（1024×1024 PNG）。
+
 ## 4. 协作规则
 
 - **分支**：`main` 是基线。每个人从 `main` 拉自己的分支，命名为 `<代号>/<内容>`，如 `f1/onboarding`、`p/uis-login`。

@@ -528,6 +528,13 @@ export class Repo {
     const r = this.db.get<Row>('SELECT * FROM resources WHERE id = ?', id);
     return r ? mapResource(r) : undefined;
   }
+  removeResource(id: string): void {
+    this.db.tx(() => {
+      this.db.run('DELETE FROM resource_chunks WHERE resource_id = ?', id);
+      this.removeFromSearch('resource', id);
+      this.db.run('DELETE FROM resources WHERE id = ?', id);
+    });
+  }
   listResources(courseId?: string): Resource[] {
     return this.db.all<Row>(`SELECT * FROM resources ${courseId ? 'WHERE course_id = ?' : ''} ORDER BY created_at DESC`, ...(courseId ? [courseId] : [])).map(mapResource);
   }
@@ -544,17 +551,19 @@ export class Repo {
     const q = query.trim();
     if (!q) return [];
     let rows: Row[];
-    if ([...q].length >= 3) {
+    const terms = q.split(/\s+/);
+    if (terms.every((term) => [...term].length >= 3)) {
       // trigram 分词需要至少 3 个字符
-      const fts = q.split(/\s+/).map((w) => `"${w.replace(/"/g, '""')}"`).join(' ');
+      const fts = terms.map((w) => `"${w.replace(/"/g, '""')}"`).join(' ');
       rows = this.db.all<Row>(
-        `SELECT object_type, object_id, title, snippet(search_index, 3, '【', '】', '…', 16) AS snip
+        `SELECT object_type, object_id, title, snippet(search_index, 3, '', '', '…', 16) AS snip
          FROM search_index WHERE search_index MATCH ? ORDER BY rank LIMIT ?`, fts, limit,
       );
     } else {
+      const matches = terms.map(() => '(instr(lower(title), lower(?)) > 0 OR instr(lower(body), lower(?)) > 0)').join(' AND ');
       rows = this.db.all<Row>(
-        `SELECT object_type, object_id, title, substr(body, max(1, instr(body, ?) - 20), 60) AS snip
-         FROM search_index WHERE title LIKE ? OR body LIKE ? LIMIT ?`, q, `%${q}%`, `%${q}%`, limit,
+        `SELECT object_type, object_id, title, substr(body, max(1, instr(lower(body), lower(?)) - 20), 100) AS snip
+         FROM search_index WHERE ${matches} LIMIT ?`, terms[0], ...terms.flatMap((term) => [term, term]), limit,
       );
     }
     return rows

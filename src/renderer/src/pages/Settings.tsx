@@ -6,6 +6,7 @@ import { PersonalSettings } from './settings/PersonalSettings';
 import { AssistantSettings } from './settings/AssistantSettings';
 import { DeveloperSettings } from './settings/DeveloperSettings';
 import styles from './settings/Settings.module.css';
+import { getThemePreference, setThemePreference, type ThemePreference } from '../theme';
 
 type Tab = 'model' | 'accounts' | 'me' | 'assistant' | 'decisions' | 'dev';
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -27,6 +28,7 @@ export function SettingsPage({
 }) {
   const [tab, setTab] = useState<Tab>('model');
   const [dirty, setDirty] = useState(false);
+  const [theme, setTheme] = useState(getThemePreference);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     onDraftChange?.(dirty);
@@ -47,6 +49,19 @@ export function SettingsPage({
     <div className={styles.root}>
       <header className={styles.header}>
         <h1>设置</h1>
+        {/* 深浅色切换（来自 F2）：暖色宋体主题的浅色 / 深色两套配色 */}
+        <label className="theme-control">
+          外观
+          <select value={theme} onChange={(event) => {
+            const next = event.target.value as ThemePreference;
+            setThemePreference(next);
+            setTheme(next);
+          }}>
+            <option value="system">跟随系统</option>
+            <option value="light">浅色</option>
+            <option value="dark">深色</option>
+          </select>
+        </label>
         {onOpenOnboarding && (
           <button
             disabled={busy}

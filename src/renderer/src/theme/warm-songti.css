@@ -1,4 +1,8 @@
-/* 暖色宋体试用主题。完整恢复原有视觉可切回 f1/settings 基线。 */
+/*
+ * 暖色宋体主题（团队选定的正式主题，F1 设计）。
+ * 在 styles.css（F2 的基础样式）之后加载，覆盖其配色变量。
+ * 深浅色由 theme.ts（F2）在 <html data-theme="light|dark"> 上切换，「跟随系统」时也会写入 data-theme。
+ */
 :root {
   --bg: #faf9f5;
   --panel: #fffefa;
@@ -14,29 +18,50 @@
   --bubble-ai: transparent;
   --danger: #aa3f32;
   --ok: #3f7047;
+  /* F2 页面使用的配色变量，取暖色值 */
+  --accent-fill: #a14f36;
+  --accent-fill-hover: #8a412c;
+  --on-accent: #fffefa;
+  --accent-border: #d6b9a8;
+  --nav-surface: #f0ede5;
+  --input-surface: #fffefa;
+  --hover-surface: #ece1d6;
   --font-reading: Georgia, 'Songti SC', SimSun, STSong, serif;
   font-family: var(--font-reading);
   font-size: 16px;
   line-height: 1.7;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #25231f;
-    --panel: #2e2a25;
-    --nav-bg: #211f1b;
-    --text: #eee8dd;
-    --muted: #beb3a4;
-    --border: #494239;
-    --accent: #e0a58d;
-    --accent-soft: #44352d;
-    --accent-contrast: #2b201a;
-    --bubble-user: #3a342c;
-    --bubble-user-text: #eee8dd;
-    --danger: #eda696;
-    --ok: #a7c3a1;
-    color-scheme: dark;
-  }
+:root[data-theme="dark"] {
+  --bg: #25231f;
+  --panel: #2e2a25;
+  --nav-bg: #211f1b;
+  --text: #eee8dd;
+  --muted: #beb3a4;
+  --border: #494239;
+  --accent: #e0a58d;
+  --accent-soft: #44352d;
+  --accent-contrast: #2b201a;
+  --bubble-user: #3a342c;
+  --bubble-user-text: #eee8dd;
+  --danger: #eda696;
+  --ok: #a7c3a1;
+  color-scheme: dark;
+  --accent-fill: #e0a58d;
+  --accent-fill-hover: #e9b8a3;
+  --on-accent: #2b201a;
+  --accent-border: #7a5646;
+  --nav-surface: #211f1b;
+  --input-surface: #2a2621;
+  --hover-surface: #3a342c;
+}
+/* F2 的深色模式给主内容区单独设了面板色，这里换成暖色 */
+[data-theme="dark"] .main {
+  --panel: #312c27;
+  --border: #4d453b;
+  --input-surface: #2a2621;
+  --control-border: #6b6052;
+  box-shadow: inset 1px 0 #4a4238;
 }
 body, button, input, textarea, select { font-family: var(--font-reading); }
 button.primary, .chip.active { color: var(--accent-contrast); }
@@ -45,7 +70,8 @@ code, pre, kbd, samp { font-family: Consolas, 'SFMono-Regular', monospace; }
 button, input, textarea, select { line-height: 1.6; }
 button { padding: 6px 13px; }
 :is(button, input, textarea, select, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.nav { width: 182px; flex-shrink: 0; background: var(--nav-bg); padding: 25px 12px 16px; gap: 6px; }
+/* flex-basis 要一起设：F2 的 styles.css 用 flex: 0 0 76px 定宽，只设 width 会被它压过 */
+.nav { flex: 0 0 182px; width: 182px; background: var(--nav-bg); padding: 25px 12px 16px; gap: 6px; }
 .nav-brand { font: 500 24px/1.4 var(--font-reading); padding: 0 13px; }
 .nav-caption { margin: 7px 13px 30px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .nav-item { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 13px; border-radius: 9px; text-align: left; }
@@ -59,7 +85,7 @@ button { padding: 6px 13px; }
 .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 5px; border: 0; background: transparent; color: var(--muted); flex-shrink: 0; }
 .sidebar-toggle svg, .today-toggle svg { width: 20px; height: 20px; }
 .sidebar-toggle:hover { color: var(--text); background: var(--accent-soft); }
-.nav.nav--collapsed { width: 64px; padding-left: 8px; padding-right: 8px; }
+.nav.nav--collapsed { flex-basis: 64px; width: 64px; padding-left: 8px; padding-right: 8px; }
 .nav--collapsed .nav-header { padding: 0; justify-content: center; margin-bottom: 26px; }
 .nav--collapsed .nav-brand, .nav--collapsed .nav-caption { display: none; }
 .nav--collapsed .nav-item { justify-content: center; padding: 12px 8px; gap: 0; }
