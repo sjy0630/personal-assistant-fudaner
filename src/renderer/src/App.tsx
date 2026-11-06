@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CardRef } from '../../shared/types';
 import { api } from './api';
 import { ChatPage } from './pages/Chat';
@@ -31,6 +31,13 @@ export function App() {
   const [onboarding, setOnboarding] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [assistantName, setAssistantName] = useState('旦旦');
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const navigate = useCallback((next: Page) => {
+    if (next === page) return;
+    if (page === 'settings' && (settingsBusy || (settingsDirty && !window.confirm('设置中有尚未保存的修改，离开后这些修改将丢失。确认离开？')))) return;
+    setSettingsDirty(false); setSettingsBusy(false); setPage(next);
+  }, [page, settingsDirty, settingsBusy]);
   const load = async () => {
     setBootError(false);
     try {
@@ -49,15 +56,15 @@ export function App() {
   const addQuoted = (ref: CardRef) => setQuoted((q) => (q.some((r) => r.id === ref.id) ? q : [...q, ref]));
   const quote = (ref: CardRef) => {
     addQuoted(ref);
-    setPage('chat');
+    navigate('chat');
   };
 
   useEffect(() => {
-    const offNav = api.on('navigate', (p) => setPage(((p as { page: Page }).page) ?? 'chat'));
-    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setPage('search'); } };
+    const offNav = api.on('navigate', (p) => navigate(((p as { page: Page }).page) ?? 'chat'));
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); navigate('search'); } };
     window.addEventListener('keydown', onKey);
     return () => { offNav(); window.removeEventListener('keydown', onKey); };
-  }, []);
+  }, [navigate]);
 
   if (!ready) return <main className="page"><h1>Fudaner</h1>{bootError ? <><p role="alert">无法读取本机配置，请重试。</p><button onClick={() => void load()}>重试</button></> : <p role="status">正在准备你的助理…</p>}</main>;
   if (onboarding) return <OnboardingPage onComplete={() => { setCompleted(true); setOnboarding(false); setPage('chat'); }} onClose={completed ? () => { setOnboarding(false); setPage('settings'); } : undefined} />;
@@ -66,24 +73,24 @@ export function App() {
     <div className="app">
       <nav className="nav">
         {NAV.map((n) => (
-          <button key={n.page} className={page === n.page ? 'nav-item active' : 'nav-item'} onClick={() => setPage(n.page)} title={n.label}>
+          <button key={n.page} className={page === n.page ? 'nav-item active' : 'nav-item'} onClick={() => navigate(n.page)} title={n.label}>
             <span className="nav-icon">{n.icon}</span>
             <span className="nav-label">{n.label}</span>
           </button>
         ))}
         <div className="nav-spacer" />
-        <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setPage('settings')} title="设置">
+        <button className={page === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => navigate('settings')} title="设置">
           <span className="nav-icon">⚙️</span>
           <span className="nav-label">设置</span>
         </button>
       </nav>
       <main className="main">
-        {page === 'chat' && <ChatPage assistantName={assistantName} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={setPage} />}
+        {page === 'chat' && <ChatPage assistantName={assistantName} quoted={quoted} addQuoted={addQuoted} clearQuoted={(id) => setQuoted((q) => (id ? q.filter((r) => r.id !== id) : []))} goto={navigate} />}
         {page === 'feed' && <FeedPage quote={quote} />}
         {page === 'goals' && <GoalsPage quote={quote} />}
         {page === 'library' && <LibraryPage quote={quote} />}
         {page === 'search' && <SearchPage quote={quote} />}
-        {page === 'settings' && <SettingsPage onOpenOnboarding={() => setOnboarding(true)} />}
+        {page === 'settings' && <SettingsPage onOpenOnboarding={() => {setSettingsDirty(false);setOnboarding(true);}} onDraftChange={setSettingsDirty} onBusyChange={setSettingsBusy} />}
       </main>
     </div>
   );
