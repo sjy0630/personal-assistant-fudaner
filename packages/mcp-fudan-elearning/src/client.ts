@@ -48,17 +48,55 @@ export class CanvasClient implements ElearningClient {
 
   constructor(private readonly auth: FudanAuth) {}
 
-  private async get<T>(path: string, params: Record<string, string | string[]> = {}): Promise<T> {
-    const url = new URL(`/api/v1${path}`, this.base);
-    for (const [k, v] of Object.entries(params)) {
-      for (const one of Array.isArray(v) ? v : [v]) url.searchParams.append(k, one);
+  private async request(url: string): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const res = await this.auth.fetch('elearning', url, { headers: { Accept: 'application/json' } });
+      if (res.status === 401 || isUisLoginUrl(res.url)) throw new NeedLoginError('elearning');
+      if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+        const retry = res.headers.get('retry-after');
+        const seconds = retry ? Number(retry) : NaN;
+        const wait = Number.isFinite(seconds) ? seconds * 1000 : retry ? Date.parse(retry) - Date.now() : 500 * 2 ** attempt;
+        // 不提前重试服务器要求长时间等待的请求。
+        if (wait > 5000) throw new Error('eLearning 请求受限，请稍后再同步');
+        await res.body?.cancel();
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number.isFinite(wait) ? wait : 500)));
+        continue;
+      }
+      if (!res.ok) throw Object.assign(new Error(`eLearning API 返回 ${res.status}`), { status: res.status });
+      return res;
     }
-    url.searchParams.set('per_page', '100');
-    const res = await this.auth.fetch('elearning', url.toString(), { headers: { Accept: 'application/json' } });
-    if (res.status === 401 || isUisLoginUrl(res.url)) throw new NeedLoginError('elearning');
-    if (!res.ok) throw new Error(`eLearning API ${path} 返回 ${res.status}`);
-    // TODO(B)：处理 Link 头分页（课程或作业超过 100 条时）
-    return (await res.json()) as T;
+  }
+
+  private async get<T>(path: string, params: Record<string, string | string[]> = {}): Promise<T> {
+    const first = new URL(`/api/v1${path}`, this.base);
+    for (const [k, v] of Object.entries(params)) {
+      for (const one of Array.isArray(v) ? v : [v]) first.searchParams.append(k, one);
+    }
+    first.searchParams.set('per_page', '100');
+    let url: URL | undefined = first;
+    const seen = new Set<string>();
+    const rows: unknown[] = [];
+    while (url) {
+      if (url.origin !== first.origin || url.pathname !== first.pathname || url.username || url.password || seen.has(url.href)) {
+        throw new Error('eLearning 返回了异常分页链接，请稍后重试');
+      }
+      seen.add(url.href);
+      const res = await this.request(url.href);
+      if (!res.headers.get('content-type')?.includes('json')) {
+        throw new Error('eLearning 未返回接口数据，请重新登录后同步');
+      }
+      const data: unknown = await res.json();
+      if (path === '/users/self') {
+        if (!data || typeof data !== 'object' || !('id' in data) || !data.id) throw new Error('无法确认 eLearning 登录身份');
+        return data as T;
+      }
+      if (!Array.isArray(data)) throw new Error('eLearning 返回的数据格式不正确');
+      rows.push(...data);
+      const next: string | undefined = res.headers.get('link')?.split(/,(?=\s*<)/)
+        .find((part) => /;\s*rel="?next"?(?:\s*;|\s*$)/i.test(part))?.match(/<([^>]+)>/)?.[1];
+      url = next ? new URL(next, url) : undefined;
+    }
+    return rows as T;
   }
 
   async ping(): Promise<boolean> {
@@ -74,20 +112,31 @@ export class CanvasClient implements ElearningClient {
   async listCourses(): Promise<CanvasCourse[]> {
     type Raw = {
       id: number; name: string; course_code: string; term?: { name: string };
-      teachers?: { display_name: string }[];
+      teachers?: { display_name: string; email?: string }[];
     };
     const raw = await this.get<Raw[]>('/courses', {
       enrollment_state: 'active',
       'include[]': ['term', 'teachers'],
     });
-    // TODO(B)：助教邮箱需要 /courses/:id/users?enrollment_type[]=ta 获取，待实测权限
-    return raw.map((c) => ({
-      id: String(c.id),
-      name: c.name,
-      courseCode: c.course_code,
-      term: c.term?.name,
-      teachers: (c.teachers ?? []).map((t) => ({ name: t.display_name, role: 'teacher' as const })),
-    }));
+    const courses: CanvasCourse[] = [];
+    for (const c of raw) {
+      const teachers: CanvasCourse['teachers'] = (c.teachers ?? []).map((t) => ({ name: t.display_name, email: t.email, role: 'teacher' }));
+      // 部分课程不允许学生查看名册；权限不足不妨碍同步课程和作业。
+      for (const role of ['teacher', 'ta'] as const) {
+        try {
+          const staff = await this.get<{ name: string; email?: string }[]>(`/courses/${c.id}/users`, { 'enrollment_type[]': [role] });
+          for (const person of staff) {
+            const existing = teachers.find((t) => t.role === role && t.name === person.name);
+            if (existing) existing.email = person.email ?? existing.email;
+            else teachers.push({ name: person.name, email: person.email, role });
+          }
+        } catch (error) {
+          if (![403, 404].includes((error as { status?: number }).status ?? 0)) throw error;
+        }
+      }
+      courses.push({ id: String(c.id), name: c.name, courseCode: c.course_code, term: c.term?.name, teachers });
+    }
+    return courses;
   }
 
   async listAssignments(courseId: string): Promise<CanvasAssignment[]> {

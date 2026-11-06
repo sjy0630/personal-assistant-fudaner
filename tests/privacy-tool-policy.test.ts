@@ -158,4 +158,31 @@ describe('模型工具的邮件正文隐私策略', () => {
     expect(result.toolCalls[0].ok).toBe(false);
     expect(messages.find(message => message.role === 'tool')?.content).toContain('当前未允许');
   });
+  it('未授权时模型明确获知隐私设置原因和开启路径', async () => {
+    const state = setup(); state.script([]);
+    await new ChatAgent(state.repo, state.route, state.hub, nullChannels).handleUserMessage('读取邮件原文');
+    const system = JSON.parse(state.sent[0])[0].content;
+    expect(system).toContain('用户尚未允许向云端发送邮件正文');
+    expect(system).toContain('设置 → 模型 → 隐私任务的云端授权');
+    expect(state.advertised[0]).not.toContain('fudan_mail__get_mail');
+  });
+
+  it.each([['cloud:fixture', true], ['local:fixture', false], ['cloud:fixture', false]])(
+    '引用已有摘要的邮件依照正文授权处理：%s / %s', async (label, allow) => {
+      const state = setup(label, allow);
+      state.repo.setItemAi(state.email.id, { summary: '仅有摘要', category: 'notice' });
+      state.script([]);
+      await new ChatAgent(state.repo, state.route, state.hub, nullChannels).handleUserMessage('解释这封邮件', [{ type: 'item', id: state.email.id, title: '邮件' }]);
+      const messages = JSON.parse(state.sent[0]) as LlmMessage[];
+      const user = messages.at(-1)!.content;
+      if (allow || label.startsWith('local:')) {
+        expect(user).toContain(PRIVATE_BODY);
+        expect(messages[0].content).toContain('调用 get_mail 读取 body');
+      } else {
+        expect(user).not.toContain(PRIVATE_BODY);
+        expect(user).toContain('仅有摘要');
+      }
+    },
+  );
+
 });

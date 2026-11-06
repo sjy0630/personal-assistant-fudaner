@@ -185,7 +185,7 @@ export function registerIpc(ctx: AppContext, opts: {
     if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' }));
     return [
       { platform: 'elearning', status: await opts.auth.status('elearning') },
-      { platform: 'icourse', status: await opts.auth.status('icourse') },
+      { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
       { platform: 'mail', status: s.mail?.user && opts.secrets.hasMailPassword() ? 'ok' : 'not_configured' },
     ];
   });
@@ -193,7 +193,7 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('platforms.syncNow', async () => {
     const result = await ctx.syncAll();
     await ctx.engine.tick();
-    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+    if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
   });
 
   handle<[number?], unknown>('decisions', async (limit) => {
@@ -212,7 +212,7 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('dev.tick', async () => {
     const result = await ctx.syncAll();
     await ctx.engine.tick();
-    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+    if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
     await ctx.executor.runNext();
   });
   const wipe = () => {

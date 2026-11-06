@@ -17,11 +17,14 @@ export async function syncMail(client: MailClient, repo: Repo, router: ModelRout
   const msgs = await client.fetchSince(since);
   const fresh: Item[] = [];
   for (const m of msgs) {
+    const sourceId = m.messageId ?? m.uid;
+    const prev = repo.findSourceItem('mail', 'email', sourceId);
     const { item, created } = repo.upsertItem({
-      source: 'mail', kind: 'email', sourceId: m.messageId ?? m.uid, title: m.subject, body: m.text, publishedAt: m.date,
-      sender: m.from.name ? `${m.from.name} <${m.from.address}>` : m.from.address, done: false,
+      source: 'mail', kind: 'email', sourceId, title: m.subject, body: m.text, publishedAt: m.date,
+      courseId: prev?.courseId,
+      sender: m.from.name ? `${m.from.name} <${m.from.address}>` : m.from.address, done: prev?.done ?? false,
     });
-    if (created) fresh.push(item);
+    if (created || !item.aiCategory) fresh.push(item);
   }
 
   const { results, model } = await classifyMails(fresh, router.for('mail_classify'));

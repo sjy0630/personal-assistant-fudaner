@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  settingsErrorMessage,
   prepareModel,
   choosePreset,
   prepareMail,
@@ -76,5 +77,17 @@ describe('设置输入与保存边界', () => {
       'future_rule',
     ]);
     expect(toggleObserveRule(['mail_new'], 'mail_new', true)).toEqual(['mail_new']);
+  });
+});
+
+describe('设置页 IPC 错误提示', () => {
+  it('保留被 Electron 包装的邮箱认证提示', () => {
+    const error = new Error("Error invoking remote method 'platforms.syncNow': Error: 请检查邮箱客户端专用密码。");
+    expect(settingsErrorMessage(error, '同步未完成')).toBe('请检查邮箱客户端专用密码。');
+  });
+  it('普通提示保留，内部异常使用通用提示', () => {
+    expect(settingsErrorMessage(new Error('请重新登录。'), '失败')).toBe('请重新登录。');
+    expect(settingsErrorMessage(new Error("Error invoking remote method 'x': Error: internal failure"), '失败')).toBe('失败');
+    expect(settingsErrorMessage('unknown', '失败')).toBe('失败');
   });
 });

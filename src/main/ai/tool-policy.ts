@@ -3,6 +3,7 @@ import type { LlmClient } from './llm';
 
 /** 工具可见性与执行前检查共用策略；隐藏工具也必须防止模型直接请求。 */
 export function createToolPolicy(repo: Repo, llm: Pick<LlmClient, 'label'>): {
+  mailInstructions(): string;
   filter(server: string, tool: string): boolean;
   authorize(name: string, args: Record<string, unknown>): string | undefined;
 } {
@@ -10,6 +11,9 @@ export function createToolPolicy(repo: Repo, llm: Pick<LlmClient, 'label'>): {
   const protectedTool = (server: string, tool: string) =>
     (server === 'fudan-mail' && tool === 'get_mail') || (server === 'fudaner-local' && tool === 'search_all');
   return {
+    mailInstructions: () => mailBodyAllowed()
+      ? '邮件正文读取已获允许。search_mail 和 list_action_required 只返回列表摘要；用户询问邮件具体内容、细节或原文时，先搜索定位邮件，再用返回的真实 id 调用 get_mail 读取 body。不能把搜索列表缺少正文说成邮箱接口不支持正文。'
+      : '当前邮件隐私设置：本轮使用云端模型，用户尚未允许向云端发送邮件正文，因此 get_mail 和全文搜索工具被隐私策略隐藏。搜索列表仅提供摘要。需要正文时，应解释是应用的隐私设置限制，指导用户到「设置 → 模型 → 隐私任务的云端授权」勾选授权并保存，或使用本地模型对话。不要声称邮箱接口不支持正文，也不要声称授权已开启。配置了本地模型但对话仍使用云端时，云端正文读取仍需要授权。',
     filter: (server, tool) => !protectedTool(server, tool) || mailBodyAllowed(),
     authorize: (name, args) => {
       // 与 McpHub.call 的拆分语义保持一致，不能通过追加 __ 后缀绕过检查。

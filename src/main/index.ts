@@ -45,7 +45,8 @@ const secretsKey = 'mail_password_enc';
 function secrets(ctx: AppContext) {
   return {
     setMailPassword(p: string) {
-      const enc = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(p).toString('base64') : null;
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('请先解锁系统钥匙串，再保存邮箱客户端专用密码。');
+      const enc = safeStorage.encryptString(p).toString('base64');
       ctx.repo.setKv(secretsKey, enc);
     },
     getMailPassword(): string | null {

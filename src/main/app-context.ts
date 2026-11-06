@@ -98,19 +98,23 @@ export class AppContext {
     const errors: string[] = [];
     const out: { elearning?: unknown; mail?: unknown; errors: string[] } = { errors };
     try {
-      const el = this.deps.elearning();
-      if (el) {
-        out.elearning = await syncElearning(el, this.repo, now).catch((e: Error) => {
-          errors.push(`eLearning：${e.message}`);
-          // 登录过期：交给主动引擎提醒用户重新登录（每天每个平台最多一次）
-          if (e.name === 'NeedLoginError') {
-            this.repo.addTrigger({ source: 'elearning', kind: 'auth_expired', sourceRef: `${localDate(now)}:elearning`, threadKey: 'auth', payload: { platform: 'elearning' } });
-          }
-        });
+      try {
+        const el = this.deps.elearning();
+        if (el) out.elearning = await syncElearning(el, this.repo, now);
         if (this.repo.getSettings().demoMode) applyDemoCourseExtras(this.repo, now);
+      } catch (error) {
+        const e = error as Error;
+        errors.push(`eLearning：${e.message}`);
+        if (e.name === 'NeedLoginError') {
+          this.repo.addTrigger({ source: 'elearning', kind: 'auth_expired', sourceRef: `${localDate(now)}:elearning`, threadKey: 'auth', payload: { platform: 'elearning' } });
+        }
       }
-      const mail = this.deps.mail();
-      if (mail) out.mail = await syncMail(mail, this.repo, this.router, now).catch((e) => { errors.push(`邮箱：${e.message}`); });
+      try {
+        const mail = this.deps.mail();
+        if (mail) out.mail = await syncMail(mail, this.repo, this.router, now);
+      } catch (error) {
+        errors.push(`邮箱：${(error as Error).message}`);
+      }
       this.engine.verifyAfterSync();
       this.deps.channels.changed('goals');
       this.deps.channels.changed('feed');

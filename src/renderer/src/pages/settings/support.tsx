@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './Settings.module.css';
+import { settingsErrorMessage } from '../settings-state';
 
 export type PanelProps = { onDirty: (dirty: boolean) => void; onBusy: (busy: boolean) => void };
 export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -52,7 +53,7 @@ export function useTask(onBusy: PanelProps['onBusy']) {
       await action();
       setNotice(success);
     } catch (err) {
-      setError(err instanceof Error && /^请/.test(err.message) ? err.message : failure);
+      setError(settingsErrorMessage(err, failure));
     } finally {
       active.current = false;
       setBusy('');

@@ -70,7 +70,7 @@ export function AccountSettings({ onDirty, onBusy }: PanelProps) {
                 <div>
                   <strong>{PLATFORM[p.platform]}</strong>
                   <p className={styles.hint}>
-                    {p.platform === 'mail' && p.status === 'ok'
+                    {p.message ?? (p.platform === 'mail' && p.status === 'ok'
                       ? '已有邮箱配置，收信是否可用需通过同步验证。'
                       : p.status === 'need_login'
                         ? '登录会话不可用，请重新登录后同步。'
@@ -80,7 +80,7 @@ export function AccountSettings({ onDirty, onBusy }: PanelProps) {
                             ? '完成配置后再同步。'
                             : p.status === 'demo'
                               ? '使用内置虚构内容。'
-                              : '可尝试同步最新数据。'}
+                              : '可尝试同步最新数据。')}
                   </p>
                 </div>
                 <span className={styles.badge}>

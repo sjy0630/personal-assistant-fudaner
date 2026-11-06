@@ -108,6 +108,10 @@ export class Repo {
     );
     return { item: this.getItem(prev.id)!, created: false, changedFields: changed };
   }
+  findSourceItem(source: string, kind: string, sourceId: string): Item | undefined {
+    const row = this.db.get<Row>('SELECT * FROM items WHERE source = ? AND kind = ? AND source_id = ?', source, kind, sourceId);
+    return row ? mapItem(row) : undefined;
+  }
   setItemAi(id: string, ai: { category?: string; summary?: string; action?: string; model?: string }): void {
     this.db.run('UPDATE items SET ai_category=?, ai_summary=?, ai_action=?, ai_model_used=? WHERE id=?', ai.category, ai.summary, ai.action, ai.model, id);
   }
