@@ -1,4 +1,5 @@
 import type {
+  Item,
   ChatMessage, CardRef, EvalRecord, FeedCard, Goal, Memory, PlatformState, Profile, Resource,
   SearchHit, Settings, Task, Ticket, TodayOverview, ToolCallView,
 } from './types';
@@ -55,6 +56,14 @@ export interface FudanerApi {
     status(): Promise<PlatformState[]>;
     login(): Promise<void>;
     syncNow(): Promise<void>;
+  };
+  activities: {
+    /** 接下来 days 天的活动（默认 14 天） */
+    list(days?: number): Promise<Item[]>;
+    /** 导入一篇文章链接里的活动 */
+    import(url: string): Promise<{ title: string; activities: Item[]; past: number }>;
+    /** 立即读取所有订阅源 */
+    syncFeeds(): Promise<{ entries: number; activities: number; errors: string[] }>;
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;
   tickets(): Promise<Ticket[]>;

@@ -7,7 +7,7 @@ const FILTERS = [
   { key: 'assignment', label: '课程' },
   { key: 'course_mail', label: '课程邮件' },
   { key: 'mail_action', label: '待处理邮件' },
-  { key: 'opportunity', label: '机会' },
+  { key: 'opportunity', label: '活动与机会' },
   { key: 'suggest_ticket', label: '建议' },
 ];
 const TYPE_ICON: Record<string, string> = { assignment: '📝', announcement: '📢', course_mail: '📧', mail_action: '📮', opportunity: '🌏', replay: '🎬', insight: '💡', suggest_ticket: '🤝' };
@@ -72,7 +72,7 @@ export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?
             {c.done && <div className="done">✓ {c.done}</div>}
             <div className="actions">
               <button onClick={() => quote({ type: 'feed', id: c.id, title: c.title })}>引用到对话</button>
-              {c.actions.filter((a) => a.action !== 'quote' && a.action !== 'dismiss' && ((a.action !== 'accept_ticket' && a.action !== 'mark_done') || c.status !== 'accepted')).map((a) => (
+              {c.actions.filter((a) => a.action !== 'quote' && a.action !== 'dismiss' && (!['accept_ticket', 'mark_done', 'add_to_plan'].includes(a.action) || c.status !== 'accepted')).map((a) => (
                 <button key={a.label} className="primary" onClick={() => { setActionError(''); void api.feed.act(c.id, a.action).then(load).catch(() => { setActionError('暂时无法执行该操作。该建议可能已处理。'); load(); }); }}>{a.label}</button>
               ))}
               <button className="ghost" onClick={() => { setReason('这门课不关心'); setOtherReason(''); setError(''); setDismissCard(c); }}>不感兴趣</button>

@@ -34,6 +34,11 @@ export function gate(t: Trigger, ctx: GateContext): GateResult {
   if (isDeadline && ctx.task?.status === 'done') return { pass: false, rule: 'task_done', note: '任务已完成' };
   if (isDeadline && ctx.alreadyReminded) return { pass: false, rule: 'duplicate', note: '同一提醒已发过' };
   if (t.kind === 'assignment_changed' && !t.payload.dueChanged) return { pass: false, rule: 'trivial_change', note: '变更不影响截止时间' };
+  if (t.kind === 'activity_new') {
+    const starts = Date.parse(String(t.payload.startsAt ?? ''));
+    if (Number.isFinite(starts) && starts < ctx.now.getTime()) return { pass: false, rule: 'activity_over', note: '活动已经开始或结束' };
+    if (ctx.item?.done) return { pass: false, rule: 'not_interested', note: '用户已表示不感兴趣' };
+  }
 
   const urgent = t.kind === 'deadline_3h' || t.kind === 'morning';
   if (!urgent && inQuietHours(ctx.now, ctx.settings.quietHours)) {

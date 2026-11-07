@@ -103,7 +103,12 @@ export function registerIpc(ctx: AppContext, opts: {
     return target && target.status !== 'dismissed' && !cards.some((card) => card.id === target.id) ? [...cards, target] : cards;
   });
   handle<[string, string?], void>('feed.dismiss', async (id, reason) => {
+    const card = repo.getFeedCard(id);
     repo.setFeedStatus(id, 'dismissed', reason);
+    // 不感兴趣的活动以后不再推荐，也不再出现在活动列表里（重复导入同一篇文章也不会）
+    for (const ref of card?.refs ?? []) {
+      if (ref.type === 'item' && repo.getItem(ref.id)?.kind === 'activity') repo.markItemDone(ref.id, true);
+    }
     if (reason) repo.addMemory({ type: 'interest', content: `不关心：${reason}`, source: 'feedback' });
   });
   handle<[string, string], void>('feed.act', async (id, action) => {
@@ -116,6 +121,13 @@ export function registerIpc(ctx: AppContext, opts: {
     // 在本地标记邮件已处理 / 作业已完成（不改邮箱和 eLearning）
     if (action === 'mark_done' && typeof a?.payload?.itemId === 'string') {
       if (!repo.markItemDone(a.payload.itemId, true)) throw new Error('对应的邮件或作业已不存在。');
+      repo.setFeedStatus(id, 'accepted');
+      opts.onChanged?.('feed');
+      opts.onChanged?.('goals');
+    }
+    // 把活动加入「校园活动」目标
+    if (action === 'add_to_plan' && typeof a?.payload?.itemId === 'string') {
+      if (!repo.addActivityToPlan(a.payload.itemId)) throw new Error('这场活动已不存在。');
       repo.setFeedStatus(id, 'accepted');
       opts.onChanged?.('feed');
       opts.onChanged?.('goals');
@@ -193,6 +205,27 @@ export function registerIpc(ctx: AppContext, opts: {
     const result = await ctx.syncAll();
     await ctx.engine.tick();
     if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
+  });
+
+  handle<[number?], unknown>('activities.list', async (days) => {
+    const now = Date.now();
+    return repo.listActivities({ from: new Date(now - 2 * 3_600_000).toISOString(), to: new Date(now + (days ?? 14) * 86_400_000).toISOString(), limit: 100 });
+  });
+  handle<[string], unknown>('activities.import', async (url) => {
+    try {
+      const r = await ctx.importArticle(url);
+      opts.onChanged?.('feed');
+      return { title: r.article.title, activities: r.activities, past: r.past };
+    } catch (e) {
+      // 去掉技术细节，留下给用户看的原因（都以「请」开头，渲染进程会原样显示）
+      throw new Error(`请检查链接：${(e as Error).message}`);
+    }
+  });
+  handle<[], unknown>('activities.syncFeeds', async () => {
+    const r = await ctx.syncAll();
+    await ctx.engine.tick();
+    opts.onChanged?.('feed');
+    return r.activities ?? { entries: 0, activities: 0, errors: r.errors.filter((e) => e.startsWith('活动订阅')) };
   });
 
   handle<[number?], unknown>('decisions', async (limit) => {

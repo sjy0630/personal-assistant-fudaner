@@ -30,6 +30,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   profile: { get: call('profile.get'), set: call('profile.set') } as FudanerApi['profile'],
   settings: { get: call('settings.get'), set: call('settings.set'), setMailPassword: call('settings.setMailPassword'), testModel: call('settings.testModel') } as FudanerApi['settings'],
   platforms: { status: call('platforms.status'), login: call('platforms.login'), syncNow: call('platforms.syncNow') } as FudanerApi['platforms'],
+  activities: { list: call('activities.list'), import: call('activities.import'), syncFeeds: call('activities.syncFeeds') } as FudanerApi['activities'],
   decisions: call('decisions') as FudanerApi['decisions'],
   tickets: call('tickets') as FudanerApi['tickets'],
   dev: {

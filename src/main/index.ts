@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, clipboard, nativeImage, safeStorage, shell, dialog } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, nativeImage, net, safeStorage, shell, dialog } from 'electron';
 import { join } from 'node:path';
 import { DEFAULT_FUDAN_STUDENT_IMAP, ImapMailClient } from '@fudaner/mcp-fudan-mail';
 import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
@@ -116,6 +116,7 @@ app.whenReady().then(async () => {
   ctx = new AppContext({
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
+    fetchText: readPublicPage,
     platformStatus: async (probe) => {
       const s = ctx.repo.getSettings();
       if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' as const }));
@@ -178,3 +179,28 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => { /* 常驻托盘，不退出 */ });
+
+/**
+ * 读取公开网页（公众号文章、订阅源）。用 Electron 的网络栈，跟随系统代理；
+ * 不带复旦登录会话（默认会话），限时 20 秒、最多 5 MB。
+ */
+async function readPublicPage(url: string): Promise<{ url: string; status: number; text: string }> {
+  const res = await net.fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9',
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const length = Number(res.headers.get('content-length') ?? 0);
+  if (length > 5 * 1024 * 1024) throw new Error('页面太大，无法读取。');
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > 5 * 1024 * 1024) throw new Error('页面太大，无法读取。');
+  const charset = /charset=([\w-]+)/i.exec(res.headers.get('content-type') ?? '')?.[1]
+    ?? /<meta[^>]+charset=["']?([\w-]+)/i.exec(new TextDecoder('latin1').decode(buf.slice(0, 2048)))?.[1]
+    ?? 'utf-8';
+  let text: string;
+  try { text = new TextDecoder(charset).decode(buf); } catch { text = new TextDecoder('utf-8').decode(buf); }
+  return { url: res.url || url, status: res.status, text };
+}

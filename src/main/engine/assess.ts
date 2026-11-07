@@ -78,7 +78,7 @@ const BASE: Record<Trigger['kind'], Rule> = {
     if (cat === 'course' || cat === 'action') return { value: 0.5, urgency: 0.4, action: 'card', draft: `${p(t, 'subject')}：${p(t, 'summary')}`, reason: cat === 'course' ? '课程相关邮件' : '需要处理的邮件' };
     if (cat === 'notice') {
       const text = `${p(t, 'subject')} ${p(t, 'summary')}`;
-      const hit = (type: string) => ctx.memories.find((m) => m.type === type && keywords(m.content).some((k) => text.includes(k)));
+      const hit = (type: string) => ctx.memories.find((m) => m.type === type && memoryMatches(m.content, text));
       // 匹配长期目标：助理可以主动帮忙 → 建议工单
       const goal = hit('goal');
       if (goal) {
@@ -107,6 +107,18 @@ const BASE: Record<Trigger['kind'], Rule> = {
     ticket: ctx.phase === 'pre_exam' ? { title: '考试周复习计划', request: '根据各门课的考试安排和作业情况，制定考试周前两周的复习计划' } : undefined,
   }),
   user_commitment: (t) => ({ value: 0.4, urgency: 0.2, action: 'record', draft: '', reason: `用户计划：${p(t, 'text')}` }),
+  // 校园活动：和长期目标有关、符合兴趣的推荐到动态；无关的只记录，用户问起时再查
+  activity_new: (t, ctx) => {
+    const text = ['title', 'category', 'summary', 'organizer', 'speaker', 'sourceName', 'excerpt'].map((k) => p(t, k)).join(' ');
+    const when = [p(t, 'timeText'), p(t, 'location')].filter(Boolean).join(' · ');
+    const draft = `${t.payload.changed ? '时间有更新：' : ''}${p(t, 'title')}${when ? `（${when}）` : ''}${t.payload.summary ? `。${p(t, 'summary')}` : ''}`;
+    const hit = (type: string) => ctx.memories.find((m) => m.type === type && memoryMatches(m.content, text));
+    const goal = hit('goal');
+    if (goal) return { value: 0.6, urgency: 0.3, action: 'card', draft, reason: `和你的目标有关：${goal.content}` };
+    const interest = hit('interest');
+    if (interest) return { value: 0.5, urgency: 0.25, action: 'card', draft, reason: `匹配你的兴趣：${interest.content}` };
+    return { value: 0.15, urgency: 0.1, action: 'record', draft, reason: '校园活动，与你的目标和兴趣关系不大' };
+  },
   auth_expired: () => ({ value: 0.8, urgency: 0.6, action: 'chat_notify', draft: '复旦账号的登录过期了，eLearning 暂时同步不了。点下面的按钮重新登录一下就好。', reason: 'UIS 登录过期，无法同步' }),
 };
 
@@ -116,6 +128,35 @@ function hoursLeft(t: Trigger, now = new Date()): string {
   if (!due) return '即将';
   const h = Math.max(1, Math.round((due - now.getTime()) / 3_600_000));
   return h < 36 ? `还剩约 ${h} 小时` : `还剩约 ${Math.round(h / 24)} 天`;
+}
+
+/** 去掉「讲座」「活动」这类太宽泛的词（只剩宽泛词时保留），避免所有讲座都算匹配兴趣 */
+const GENERIC = ['讲座', '活动', '比赛', '课程', '学习', '相关', '方面', '东西'];
+function specificKeywords(s: string): string[] {
+  // 年份、数字不算关键词（「2027 春季交换」不应匹配「2027 校园招聘」）
+  const all = keywords(s).filter((k) => !/^\d+$/.test(k));
+  const specific = all.filter((k) => !GENERIC.includes(k));
+  return specific.length ? specific : all;
+}
+
+/**
+ * 记忆（兴趣、目标）和一条通知 / 活动是否相关（没有模型时的规则判断）：
+ * - 关键词原样出现即相关；英文按整词匹配；年份数字和「讲座」这类宽泛词不算；
+ * - 较长的中文词拆成两字片段，命中两个以上也算（「春季交换」匹配「春季学期……交换项目」）。
+ */
+export function memoryMatches(memory: string, text: string): boolean {
+  return specificKeywords(memory).some((k) => {
+    if (mentions(text, k)) return true;
+    if (!/^[\u4e00-\u9fff]{4,}$/.test(k)) return false;
+    const pieces = new Set(Array.from({ length: k.length - 1 }, (_, i) => k.slice(i, i + 2)));
+    return [...pieces].filter((piece) => text.includes(piece)).length >= 2;
+  });
+}
+
+/** 英文关键词按整词匹配（「AI」不匹配「email」），中文按包含 */
+function mentions(text: string, k: string): boolean {
+  if (/^[a-z0-9+#.-]+$/i.test(k)) return new RegExp(`(^|[^a-z0-9])${k.replace(/[.+#-]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(text);
+  return text.includes(k);
 }
 
 function keywords(s: string): string[] {

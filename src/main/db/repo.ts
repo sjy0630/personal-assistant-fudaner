@@ -91,9 +91,10 @@ export class Repo {
     if (!prev) {
       const id = newId();
       this.db.run(
-        `INSERT INTO items (id, source, kind, source_id, title, body, url, published_at, due_at, course_id, done, sender)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, source, kind, source_id, title, body, url, published_at, due_at, course_id, done, sender, raw)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, i.source, i.kind, i.sourceId, i.title, i.body, i.url, i.publishedAt, i.dueAt, i.courseId, i.done ? 1 : 0, i.sender,
+        i.activity ? JSON.stringify({ activity: i.activity }) : null,
       );
       this.indexForSearch('item', id, i.title, i.body);
       return { item: this.getItem(id)!, created: true, changedFields: [] };
@@ -102,9 +103,10 @@ export class Repo {
     if ((prev.due_at ?? undefined) !== i.dueAt) changed.push('dueAt');
     if (!!prev.done !== i.done) changed.push('done');
     if (prev.title !== i.title) changed.push('title');
+    if (i.activity && fromJson<{ activity?: { startsAt?: string } }>(prev.raw, {}).activity?.startsAt !== i.activity.startsAt) changed.push('startsAt');
     this.db.run(
-      'UPDATE items SET title=?, body=?, url=?, due_at=?, course_id=?, done=? WHERE id=?',
-      i.title, i.body, i.url, i.dueAt, i.courseId, i.done ? 1 : 0, prev.id,
+      'UPDATE items SET title=?, body=?, url=?, due_at=?, course_id=?, done=?, raw=COALESCE(?, raw) WHERE id=?',
+      i.title, i.body, i.url, i.dueAt, i.courseId, i.done ? 1 : 0, i.activity ? JSON.stringify({ activity: i.activity }) : null, prev.id,
     );
     return { item: this.getItem(prev.id)!, created: false, changedFields: changed };
   }
@@ -156,6 +158,35 @@ export class Repo {
     const sql = `SELECT * FROM items ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY COALESCE(due_at, published_at) ${filter.dueBefore || filter.dueAfter ? 'ASC' : 'DESC'} LIMIT ?`;
     return this.db.all<Row>(sql, ...params, filter.limit ?? 100).map(mapItem);
+  }
+
+  /**
+   * 校园活动，按开始时间排序。from / to 按开始时间筛选（没有开始时间的活动按发布时间算）；
+   * query 匹配标题、正文、地点、主办方。
+   */
+  listActivities(filter: { from?: string; to?: string; query?: string; campus?: string; category?: string; limit?: number } = {}): Item[] {
+    const at = (i: Item) => i.activity?.startsAt ?? i.publishedAt;
+    const q = filter.query?.trim().toLowerCase();
+    return this.db.all<Row>("SELECT * FROM items WHERE kind = 'activity' AND done = 0 ORDER BY published_at DESC LIMIT 1000").map(mapItem)
+      .filter((i) => (!filter.from || at(i) >= filter.from) && (!filter.to || at(i) <= filter.to))
+      .filter((i) => !filter.campus || i.activity?.campus === filter.campus)
+      .filter((i) => !filter.category || i.activity?.category === filter.category)
+      .filter((i) => !q || [i.title, i.body, i.activity?.location, i.activity?.organizer, i.activity?.speaker, i.activity?.summary, i.activity?.sourceName]
+        .some((s) => s?.toLowerCase().includes(q)))
+      .sort((a, b) => at(a).localeCompare(at(b)))
+      .slice(0, filter.limit ?? 50);
+  }
+
+  /** 把活动加入计划：放进「校园活动」目标，任务时间为活动开始时间 */
+  addActivityToPlan(itemId: string): Task | undefined {
+    const item = this.getItem(itemId);
+    if (!item || item.kind !== 'activity') return undefined;
+    const existing = this.taskForItem(itemId);
+    if (existing) return existing;
+    let goal = this.listGoals().find((g) => g.title === '校园活动' && g.status === 'active' && g.createdBy === 'system');
+    if (!goal) goal = this.addGoal({ level: 'long_term', title: '校园活动', description: '想参加的讲座、宣讲会和活动', createdBy: 'system' });
+    const where = [item.activity?.timeText, item.activity?.location].filter(Boolean).join(' · ');
+    return this.upsertTaskForItem({ goalId: goal.id, itemId, title: `参加：${item.title}${where ? `（${where}）` : ''}`, dueAt: item.activity?.startsAt, done: false });
   }
 
   addLink(fromItemId: string, toItemId: string, reason: string, confidence: number): void {
@@ -729,6 +760,7 @@ function mapItem(r: Row): Item {
     id: r.id, source: r.source, kind: r.kind, sourceId: r.source_id, title: r.title, body: r.body, url: opt(r.url),
     publishedAt: r.published_at, dueAt: opt(r.due_at), courseId: opt(r.course_id), done: !!r.done, sender: opt(r.sender),
     aiCategory: opt(r.ai_category), aiSummary: opt(r.ai_summary), aiAction: opt(r.ai_action), aiModelUsed: opt(r.ai_model_used),
+    ...(r.kind === 'activity' ? { activity: fromJson<{ activity?: Item['activity'] }>(r.raw, {}).activity ?? {} } : {}),
   };
 }
 function mapMessage(r: Row): ChatMessage {
