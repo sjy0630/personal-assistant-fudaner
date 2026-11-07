@@ -60,6 +60,7 @@ npm run dev
 | `npm run check` | 类型检查 + 测试 + 构建 |
 | `npm run dist` | 打包 Windows 安装包（需在 Windows 上运行） |
 | `npm run dist:dir` | 打包为当前系统的免安装目录（用于验证打包） |
+| `npm run dist:mac` | 打包 macOS 安装包 dmg（需在 Mac 上运行） |
 
 ## 目录结构
 
