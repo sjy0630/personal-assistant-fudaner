@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { SCHEMA, SCHEMA_VERSION } from './schema';
+import { COLUMN_MIGRATIONS, SCHEMA, SCHEMA_VERSION } from './schema';
 
 type Param = string | number | null | bigint | Uint8Array;
 
@@ -12,6 +12,10 @@ export class Db {
     this.raw = new DatabaseSync(path);
     this.raw.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
     this.raw.exec(SCHEMA);
+    for (const m of COLUMN_MIGRATIONS) {
+      const columns = this.all<{ name: string }>(`PRAGMA table_info(${m.table})`);
+      if (!columns.some((c) => c.name === m.column)) this.raw.exec(m.ddl);
+    }
     this.run('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', 'schema_version', String(SCHEMA_VERSION));
   }
 

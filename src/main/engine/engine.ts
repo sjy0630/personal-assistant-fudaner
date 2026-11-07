@@ -292,7 +292,7 @@ export class ProactiveEngine {
       if (task.verify?.type === 'assignment_submitted') {
         const item = this.repo.getItem(task.verify.itemId);
         if (item?.done) {
-          this.repo.setTaskStatus(task.id, 'done');
+          this.repo.setTaskStatus(task.id, 'done', 'platform');
           changed = true;
         }
       }

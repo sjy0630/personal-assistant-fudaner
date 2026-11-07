@@ -148,6 +148,8 @@ export interface Task {
   source: 'elearning' | 'assistant' | 'user';
   /** 可验证的闭环条件（PRD §5.7） */
   verify?: VerifyCondition;
+  /** 用户在本地标记为完成（平台作业：组作业由组长提交等）；与平台上的完成状态分开记录 */
+  localDone?: boolean;
 }
 
 export type VerifyCondition = { type: 'assignment_submitted'; itemId: string };

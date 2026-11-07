@@ -71,6 +71,57 @@ describe('作业完成状态', () => {
   });
 });
 
+describe('本地标记与平台状态分开记录（Codex 审查 #13）', () => {
+  it('平台上撤销了「标记为完成」、本地也没标记过 → 重新同步后恢复为未完成', async () => {
+    const el = new StubElearning();
+    el.marked = true;
+    const app = await start(el);
+    await app.syncAll(NOW);
+    const item = app.repo.listItems({ kind: 'assignment' })[0];
+    expect(buildToday(app.repo, NOW).deadlines[0].done).toBe(true);
+
+    el.marked = false;
+    await app.syncAll(new Date(NOW.getTime() + 60_000));
+    expect(app.repo.taskForItem(item.id)?.status).toBe('todo');
+    expect(buildToday(app.repo, NOW).deadlines[0].done).toBe(false);
+  });
+
+  it('本地标记过完成的，平台状态怎么变都保持完成；本地撤销后跟随平台', async () => {
+    const app = await start(new StubElearning());
+    await app.syncAll(NOW);
+    const item = app.repo.listItems({ kind: 'assignment' })[0];
+    app.repo.markItemDone(item.id, true);
+    await app.syncAll(new Date(NOW.getTime() + 60_000));
+    expect(app.repo.taskForItem(item.id)).toMatchObject({ status: 'done', localDone: true });
+
+    app.repo.markItemDone(item.id, false);
+    await app.syncAll(new Date(NOW.getTime() + 120_000));
+    expect(app.repo.taskForItem(item.id)).toMatchObject({ status: 'todo', localDone: false });
+  });
+
+  it('本地标记作业完成后，约好的跟进自动取消，到点不会再问', async () => {
+    const app = await start(new StubElearning());
+    await app.syncAll(NOW);
+    const item = app.repo.listItems({ kind: 'assignment' })[0];
+    app.repo.addFollowup({ topic: 'Team project 写完了吗', dueAt: new Date(NOW.getTime() + 3_600_000).toISOString(), itemId: item.id, verify: { type: 'assignment_submitted', itemId: item.id } });
+
+    app.repo.markItemDone(item.id, true);
+    expect(app.repo.pendingFollowups()).toHaveLength(0);
+    await app.engine.tick(new Date(NOW.getTime() + 2 * 3_600_000));
+    expect(posted.some((m) => m.content.includes('Team project 写完了吗'))).toBe(false);
+  });
+
+  it('在目标页打勾（用户操作）同样算本地完成，并取消跟进', async () => {
+    const app = await start(new StubElearning());
+    await app.syncAll(NOW);
+    const item = app.repo.listItems({ kind: 'assignment' })[0];
+    app.repo.addFollowup({ topic: '跟进', dueAt: new Date(NOW.getTime() + 3_600_000).toISOString(), itemId: item.id });
+    app.repo.setTaskStatus(app.repo.taskForItem(item.id)!.id, 'done');
+    expect(app.repo.taskForItem(item.id)?.localDone).toBe(true);
+    expect(app.repo.pendingFollowups()).toHaveLength(0);
+  });
+});
+
 describe('邮件「已处理」', () => {
   it('助理可以用 mark_item_done 把邮件从「待回复」里移出，重新同步后仍然保持', async () => {
     const mail = new DemoMailClient(() => NOW);

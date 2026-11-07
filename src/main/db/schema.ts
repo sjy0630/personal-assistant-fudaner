@@ -1,5 +1,5 @@
 /** 本地数据库结构（PRD §7.7）。修改后请同步 src/shared/types.ts。 */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA = /* sql */ `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS goals (
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, goal_id TEXT, item_id TEXT UNIQUE, title TEXT NOT NULL, due_at TEXT,
-  status TEXT NOT NULL DEFAULT 'todo', source TEXT NOT NULL, verify TEXT, reminders_sent TEXT NOT NULL DEFAULT '[]'
+  status TEXT NOT NULL DEFAULT 'todo', source TEXT NOT NULL, verify TEXT, reminders_sent TEXT NOT NULL DEFAULT '[]',
+  local_done INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS followups (
   id TEXT PRIMARY KEY, topic TEXT NOT NULL, due_at TEXT NOT NULL, item_id TEXT,
@@ -88,3 +89,12 @@ CREATE TABLE IF NOT EXISTS calendar (date TEXT PRIMARY KEY, week_no INTEGER, pha
 -- 全局搜索（FTS5，trigram 分词，适合中文）
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(object_type UNINDEXED, object_id UNINDEXED, title, body, tokenize='trigram');
 `;
+
+/**
+ * 已有数据库的增量迁移：CREATE TABLE IF NOT EXISTS 不会给旧表加新列，这里逐个补上。
+ * 只做向后兼容的加列，不删列、不改列。
+ */
+export const COLUMN_MIGRATIONS: { table: string; column: string; ddl: string }[] = [
+  // v2：用户在本地把平台作业标记为完成（组作业由组长提交等），与平台上的完成状态分开记录
+  { table: 'tasks', column: 'local_done', ddl: 'ALTER TABLE tasks ADD COLUMN local_done INTEGER NOT NULL DEFAULT 0' },
+];
