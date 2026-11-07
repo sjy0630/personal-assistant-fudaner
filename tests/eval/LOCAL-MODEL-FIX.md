@@ -57,3 +57,19 @@ npx vitest run --config tests/eval/vitest.config.ts tests/eval/goal-receipt.eval
 源码与验证提交 `cd43023` 已推送至 `ai/local-loop-memory-fix`；[草稿 PR #16](https://github.com/sjy0630/personal-assistant-fudaner/pull/16) 已创建，尚待用户界面复测后转为正式审核，未合并 main。完整补丁另存为 `D:/agent开发/ai-delivery/local-loop-memory-fix.patch`。
 
 目标回执追加修复仍同步至同一分支和草稿 PR #16。L 已合并旧 AI PR #10；F1/F2 冲突已由 #11 解决，旧交付文档中对应待办已经过时。本次后续重点：新回执界面确认、资源保存/后台工单、M 正式数据及 DeepSeek 验收。
+
+## 追加：自定义名称目标的父ID兜底（2026-11-07 晚）
+
+用户在应用中输入“帮我创建一个名为“回执验收临时目标”的长期目标，并在这个目标下添加“检查回执”任务。暂时不设置截止日期。”，回执显示目标和任务均未成功。`named-goal-before.json` 复现：Qwen 把 `goal_id` 写成“目标 id”占位符，失败后又重复创建同名目标。仅精简提示词与工具集（`focusGoalOperation`）后复测仍失败，模型改为把目标标题当 `goal_id`。
+
+- `src/main/ai/goal-receipt.ts` 新增 `createGoalTurn`：合法 id 原样保留；标题形式的 `goal_id` 先匹配本轮新建目标，其次匹配唯一同名已有目标；仅在自包含操作且本轮只新建一个目标时，把无法识别（或在“这个目标下”语境中省略）的父目标指向该目标。涉及已有目标的请求不做猜测，错误照实报告。
+- 同一轮同名 `create_goal` 被拒绝并把真实 id 返回给模型，不再重复建目标。
+- 纠正后的参数如实显示在工具记录里；回执仍只依据数据库实际保存结果。
+- `tests/goal-receipt.test.ts` 新增 6 项；原两项“失败后重试/失败不宣称成功”改用非法 due_at 制造失败（原 `goal_id: 'missing'` 现会被纠正）。
+
+验证：`npm run check` 通过（38 个文件、440 项测试、类型检查、构建）。本机 Qwen `named-goal.eval.ts` 连续 3 次通过，每次约 4 秒，`named-goal-after.json` 为最后一次。`goal-receipt.eval.ts`（GRE）复测通过，约 4 秒，`goal-receipt-results.json` 已被本次结果覆盖（上文“约23.36秒、先失败后重试”为旧快照描述）。均为单场景虚构数据，不代表 T1/T6 整体质量；界面重启后的确认仍待用户完成。
+
+```powershell
+$env:EVAL_NAMED_GOAL='1'; $env:EVAL_PHASE='after'
+npx vitest run --config tests/eval/vitest.config.ts tests/eval/named-goal.eval.ts
+```

@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-11-07T10:14:40.780Z",
+  "phase": "after",
+  "model": "local:qwen2.5:7b",
+  "prompt": "帮我创建一个名为“回执验收临时目标”的长期目标，并在这个目标下添加“检查回执”任务。暂时不设置截止日期。",
+  "checks": {
+    "exactGoal": true,
+    "exactTask": true,
+    "actualParent": true,
+    "noDueDate": true,
+    "exchangeUntouched": true,
+    "receiptAndCard": true,
+    "noWrongVisibleGoal": true
+  },
+  "elapsedMs": 3764,
+  "requests": [
+    {
+      "toolCount": 3,
+      "messageCount": 2,
+      "inputCharacters": 1896
+    },
+    {
+      "toolCount": 3,
+      "messageCount": 5,
+      "inputCharacters": 3033
+    }
+  ],
+  "tools": [
+    {
+      "name": "fudaner_local__create_goal",
+      "args": {
+        "title": "回执验收临时目标",
+        "level": "long_term",
+        "description": "检查回执"
+      },
+      "ok": true,
+      "result": "{\n  \"id\": \"5a6cc5c8-993e-438a-b460-c9cb97d8224b\",\n  \"level\": \"long_term\",\n  \"title\": \"回执验收临时目标\",\n  \"description\": \"检查回执\",\n  \"status\": \"active\",\n  \"createdBy\": \"assistant\",\n  \"createdAt\": \"2026-11-07T10:14:39.703Z\"\n}"
+    },
+    {
+      "name": "fudaner_local__add_task",
+      "args": {
+        "goal_id": "5a6cc5c8-993e-438a-b460-c9cb97d8224b",
+        "title": "检查回执"
+      },
+      "ok": true,
+      "result": "{\n  \"id\": \"291d55eb-9950-4550-9f15-07b2ffb0b66c\",\n  \"goalId\": \"5a6cc5c8-993e-438a-b460-c9cb97d8224b\",\n  \"title\": \"检查回执\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"回执验收临时目标\"\n}"
+    }
+  ],
+  "content": "已创建长期目标「回执验收临时目标」。\n\n已保存任务「检查回执」，所属目标「回执验收临时目标」，暂未设置截止日期。",
+  "goals": [
+    {
+      "id": "5a6cc5c8-993e-438a-b460-c9cb97d8224b",
+      "level": "long_term",
+      "title": "回执验收临时目标",
+      "description": "检查回执",
+      "status": "active",
+      "createdBy": "assistant",
+      "createdAt": "2026-11-07T10:14:39.703Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "291d55eb-9950-4550-9f15-07b2ffb0b66c",
+      "goalId": "5a6cc5c8-993e-438a-b460-c9cb97d8224b",
+      "title": "检查回执",
+      "status": "todo",
+      "source": "assistant",
+      "localDone": false
+    }
+  ],
+  "rawText": "已成功创建长期目标“回执验收临时目标”，并在该目标下添加了“检查回执”任务。该任务暂无截止日期。",
+  "runtime": {
+    "models": [
+      {
+        "name": "qwen2.5:7b",
+        "model": "qwen2.5:7b",
+        "size": 4755397016,
+        "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen2",
+          "families": [
+            "qwen2"
+          ],
+          "parameter_size": "7.6B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-11-07T18:19:40.7791991+08:00",
+        "size_vram": 4755397016,
+        "context_length": 4096,
+        "runner": "llamacpp"
+      }
+    ]
+  },
+  "limitations": [
+    "Exact user wording plus 20 synthetic historical messages in an isolated in-memory database; no application settings, account data or keys are read.",
+    "Character counts are not tokenizer counts and do not prove runtime truncation. Memory/summary generation disabled to isolate native tool execution.",
+    "Single non-GRE case; not all T1/T6 tasks or formal model quality."
+  ]
+}

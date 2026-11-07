@@ -13,7 +13,7 @@ import { memoryOutput } from './validation';
 import { createToolPolicy } from './tool-policy';
 import { memoryWriteProblem } from './memory-policy';
 import { queryArguments, queryRange, queryResultContext, shanghaiTime } from './query-context';
-import { goalReceipt, needsGoalReceipt } from './goal-receipt';
+import { goalReceipt, needsGoalReceipt, focusGoalOperation, goalOperationPrompt, goalOperationTool, goalToolContext, createGoalTurn } from './goal-receipt';
 
 const MAX_STEPS = 8;
 
@@ -218,6 +218,8 @@ export class ChatAgent {
 
   private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
     const receiptMode = needsGoalReceipt(llm.label, text);
+    const focusedGoal = focusGoalOperation(llm.label, text, refs.length > 0);
+    const goalTurn = receiptMode ? createGoalTurn(this.repo, text, focusedGoal) : undefined;
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
     const nowIso = new Date().toISOString();
@@ -227,14 +229,14 @@ export class ChatAgent {
       && !/邮件|邮箱|资源|资料|目标|记忆|公告|学分|教师|老师|助教|考试范围|课程详情|规划|计划|帮我安排|请安排/u.test(text);
     const scheduleTools = new Set(['fudaner_local__get_today', 'fudaner_local__list_deadlines']);
     const range = scheduleLookup ? queryRange(text, nowIso) : undefined;
-    const system = [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso }), this.summarizer.context(),
+    const system = focusedGoal ? goalOperationPrompt(nowIso) : [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso }), this.summarizer.context(),
       readOnlyRequest ? '本轮用户只要求查询，工具仅可读取。先调用相关查询工具；查今天的课程时间与近期DDL可一次调用 get_today。结果足够后立即回答原问题，不创建目标或任务，不写记忆。' : '',
       scheduleLookup ? '日期展示使用工具返回的 dueAtShanghai（上海本地时间），不要再使用原始 dueAt 的UTC小时。课程 state=已结束 必须写出“已结束”。' : '',
       range ? `本轮明确的查询范围：${shanghaiTime(range.from)} 至 ${shanghaiTime(range.to)}（上海时间；校历周日起算）。list_deadlines 的起止时间由程序按此范围校正。` : '',
     ].filter(Boolean).join('\n\n');
     const standaloneQuery = scheduleLookup && !refs.length && !/刚才|上面|上述|那个|那门|这门|这些|那些/u.test(text)
       && (!!range || !/ddl|截止|作业/i.test(text));
-    const history = standaloneQuery ? [] : this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
+    const history = standaloneQuery || focusedGoal ? [] : this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -244,19 +246,22 @@ export class ChatAgent {
     const result = await runAgentLoop({
       llm, hub: this.hub, tools: this.hub.llmTools((server, tool) => {
         const name = `${server.replace(/-/g, '_')}__${tool}`;
-        return policy.filter(server, tool) && (!readOnlyRequest || this.hub.isReadOnly(name)) && (!scheduleLookup || scheduleTools.has(name));
+        return policy.filter(server, tool) && (!readOnlyRequest || this.hub.isReadOnly(name)) && (!scheduleLookup || scheduleTools.has(name)) && (!focusedGoal || goalOperationTool(name));
       }), messages,
       authorizeTool: (name, args) => {
         const denied = policy.authorize(name, args);
         if (denied) return denied;
+        if (focusedGoal && !goalOperationTool(name)) return '本轮只处理创建目标、添加任务和核对目标ID，未执行其他操作。';
+        const duplicateGoal = goalTurn?.duplicate(name, args);
+        if (duplicateGoal) return duplicateGoal;
         if (readOnlyRequest && this.hub.isReadOnly?.(name) !== true) return '本轮仅允许查询，未执行写操作。请根据已查到的数据回答。';
         if (scheduleLookup && !scheduleTools.has(name)) return '本轮课程和DDL查询请使用 get_today、list_deadlines 或 list_assignments。';
         const [server, tool] = name.split('__');
         if (server === 'fudaner_local' && tool === 'remember') return memoryWriteProblem(text, typeof args.content === 'string' ? args.content : '', this.repo.listMemories());
       },
       recoverRepeatedReads: true,
-      normalizeToolArgs: scheduleLookup ? (name, args) => queryArguments(text, name, args, nowIso) : undefined,
-      toolContext: scheduleLookup ? result => queryResultContext(result, nowIso) : undefined,
+      normalizeToolArgs: scheduleLookup ? (name, args) => queryArguments(text, name, args, nowIso) : goalTurn ? (name, args) => goalTurn.normalize(name, args) : undefined,
+      toolContext: scheduleLookup ? result => queryResultContext(result, nowIso) : focusedGoal ? goalToolContext : undefined,
       initialReads: standaloneQuery ? [
         ...(/课程|课表|几点|什么课/u.test(text) ? [{ name: 'fudaner_local__get_today', args: {} }] : []),
         ...(/ddl|截止|作业/i.test(text) ? [{ name: 'fudaner_local__list_deadlines', args: range ?? { from: nowIso, to: new Date(Date.parse(nowIso) + 7 * 86_400_000).toISOString() } }] : []),
@@ -264,6 +269,7 @@ export class ChatAgent {
       signal: run.controller.signal,
       onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
       onToolResult: (result) => {
+        goalTurn?.record(result);
         for (const card of readItemCards(this.repo, result)) if (run.itemCards.size < 5) run.itemCards.set(card.id, card);
       },
       onDelta: (text) => { if (!receiptMode) { run.view.content += text; run.view.version++; this.publish(); } },

@@ -34,7 +34,7 @@ describe('目标回执与数据库实际保存结果一致', () => {
     const wrong = '任务添加成功，已经加入到申请2027春季交换的目标下。';
     s.script([
       (_m, options) => { options?.onDelta?.('先创建一个交换目标。'); return call('create_goal', { title: '准备GRE', level: 'long_term' }); },
-      () => call('add_task', { goal_id: 'missing', title: '完成一套 GRE 模考' }),
+      () => call('add_task', { goal_id: s.gre().id, title: '完成一套 GRE 模考', due_at: '下周' }),
       () => call('add_task', { goal_id: s.gre().id, title: '完成一套 GRE 模考' }),
       (_m, options) => { expect(options?.onDelta).toBeTypeOf('function'); options?.onDelta?.(wrong); return answer(wrong); },
     ]);
@@ -53,7 +53,7 @@ describe('目标回执与数据库实际保存结果一致', () => {
   it('任务未成功时不宣称已完成，即使模型声称目标和任务都成功', async () => {
     const s = await setup(); s.script([
       () => call('create_goal', { title: '准备GRE', level: 'long_term' }),
-      () => call('add_task', { goal_id: 'missing', title: '模考' }),
+      () => call('add_task', { goal_id: s.gre().id, title: '模考', due_at: '下周' }),
       (_m, o) => { o?.onDelta?.('全部完成。'); return answer('全部完成。'); },
     ]);
     const reply = await s.agent.handleUserMessage(prompt);
@@ -141,6 +141,62 @@ describe('目标回执与数据库实际保存结果一致', () => {
     const s = await setup(); s.script([() => call('create_goal', { title: '准备GRE', level: 'long_term' }), () => answer('已创建。')]);
     const reply = await s.agent.handleUserMessage(text);
     expect(reply.content).toContain('已创建长期目标'); expect(reply.content).not.toContain('任务尚未添加成功');
+  });
+
+  describe('本轮父目标 ID 程序兜底', () => {
+    const named = '帮我创建一个名为“回执验收临时目标”的长期目标，并在这个目标下添加“检查回执”任务。暂时不设置截止日期。';
+    const created = (s: Awaited<ReturnType<typeof setup>>) => s.repo.listGoals().find(g => g.title === '回执验收临时目标')!;
+
+    it.each(['回执验收临时目标', '「回执验收临时目标」', '目标 id'])('把标题或占位符形式的 goal_id 纠正为本轮新建目标：%s', async goalId => {
+      const s = await setup(); s.script([
+        () => call('create_goal', { title: '回执验收临时目标', level: 'long_term' }),
+        () => call('add_task', { goal_id: goalId, title: '检查回执' }),
+        () => answer('完成。'),
+      ]);
+      const reply = await s.agent.handleUserMessage(named);
+      const tasks = s.repo.listTasks({ goalId: created(s).id });
+      expect(tasks.map(t => t.title)).toEqual(['检查回执']);
+      expect(reply.toolCalls.find(t => t.name === 'add_task')).toMatchObject({ ok: true, args: { goal_id: created(s).id } });
+      expect(reply.content).toContain('所属目标「回执验收临时目标」');
+      expect(s.repo.listTasks({ goalId: s.exchange.id })).toEqual([]);
+    });
+
+    it('省略 goal_id 但用户要求放在这个目标下时挂到本轮唯一新建目标', async () => {
+      const s = await setup(); s.script([
+        () => call('create_goal', { title: '回执验收临时目标', level: 'long_term' }),
+        () => call('add_task', { title: '检查回执' }),
+        () => answer('完成。'),
+      ]);
+      await s.agent.handleUserMessage(named);
+      expect(s.repo.listTasks({ goalId: created(s).id }).map(t => t.title)).toEqual(['检查回执']);
+    });
+
+    it('同名目标本轮不重复创建，并把真实 id 告诉模型', async () => {
+      const s = await setup(); s.script([
+        () => call('create_goal', { title: '回执验收临时目标', level: 'long_term' }),
+        () => call('create_goal', { title: '回执验收临时目标', level: 'long_term' }),
+        messages => { expect(String(messages.at(-1)?.content)).toContain(created(s).id); return call('add_task', { goal_id: created(s).id, title: '检查回执' }); },
+        () => answer('完成。'),
+      ]);
+      const reply = await s.agent.handleUserMessage(named);
+      expect(s.repo.listGoals().filter(g => g.title === '回执验收临时目标')).toHaveLength(1);
+      expect(reply.toolCalls.filter(t => t.name === 'create_goal').map(t => t.ok)).toEqual([true, false]);
+      expect(reply.content.match(/已创建长期目标/gu)).toHaveLength(1);
+    });
+
+    it('涉及已有目标时不把未知 ID 猜到新目标上，只按唯一标题匹配已有目标', async () => {
+      const text = '帮我创建一个长期目标“准备GRE”，再给已有的“申请2027春季交换”目标添加“写个人陈述”任务。';
+      const s = await setup(); s.script([
+        () => call('create_goal', { title: '准备GRE', level: 'long_term' }),
+        () => call('add_task', { goal_id: 'missing', title: '写个人陈述' }),
+        () => call('add_task', { goal_id: '申请2027春季交换', title: '写个人陈述' }),
+        () => answer('完成。'),
+      ]);
+      const reply = await s.agent.handleUserMessage(text);
+      expect(reply.toolCalls.filter(t => t.name === 'add_task').map(t => t.ok)).toEqual([false, true]);
+      expect(s.repo.listTasks({ goalId: s.exchange.id }).map(t => t.title)).toEqual(['写个人陈述']);
+      expect(s.repo.listTasks({ goalId: s.gre().id })).toEqual([]);
+    });
   });
 
   it.each(['请解释如何创建目标和添加任务', '不要创建目标，只添加任务', '给已有目标添加任务'])('不把非创建操作套进新建回执：%s', text => expect(needsGoalReceipt('local:fixture', text)).toBe(false));
