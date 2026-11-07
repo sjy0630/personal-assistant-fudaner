@@ -666,8 +666,10 @@ export class Repo {
     this.db.run('DELETE FROM attention_budget WHERE date = ?', date);
   }
 
+  /** 整体替换校历（校历是由 calendar.ts 生成的派生数据，旧的日期行要一起清掉） */
   setCalendar(days: { date: string; weekNo?: number; phase: SemesterPhase; note?: string }[]): void {
     this.db.tx(() => {
+      this.db.run('DELETE FROM calendar');
       for (const d of days) this.db.run('INSERT OR REPLACE INTO calendar (date, week_no, phase, note) VALUES (?, ?, ?, ?)', d.date, d.weekNo, d.phase, d.note);
     });
   }
