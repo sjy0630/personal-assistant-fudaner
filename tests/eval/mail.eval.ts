@@ -10,10 +10,12 @@ import { DemoElearningClient, DemoMailClient } from '../../src/main/demo/demo';
 import { nullChannels } from '../../src/main/engine/channels';
 import { score, validateSamples, type MailSample, type Metric, type Prediction } from './metrics';
 
-const fixtureUrl = new URL('../fixtures/mails.json', import.meta.url);
-const metadataUrl = new URL('../fixtures/mails.meta.json', import.meta.url);
-const resultUrl = new URL('./results.json', import.meta.url);
-const materialUrl = new URL('./MATERIALS-REPORT.md', import.meta.url);
+// EVAL_DATASET=human 使用人工标注集（mails.human.json），结果另存，不覆盖演示集结果。
+const human = process.env.EVAL_DATASET === 'human';
+const fixtureUrl = new URL(human ? '../fixtures/mails.human.json' : '../fixtures/mails.json', import.meta.url);
+const metadataUrl = new URL(human ? '../fixtures/mails.human.meta.json' : '../fixtures/mails.meta.json', import.meta.url);
+const resultUrl = new URL(human ? './results-human.json' : './results.json', import.meta.url);
+const materialUrl = new URL(human ? './MATERIALS-REPORT-HUMAN.md' : './MATERIALS-REPORT.md', import.meta.url);
 type Kind = 'cloud' | 'local';
 type DatasetMetadata = {
   datasetId: string; provenance: string; independentHumanLabels: boolean; formalCompetitionDataset: boolean;
@@ -38,6 +40,16 @@ function modelConfig(): { kind: Kind; client: LlmClient } | null {
   const apiKey = kind === 'cloud' ? process.env.EVAL_API_KEY : '';
   if (kind === 'cloud' && !apiKey) throw new Error('云端评测需由用户在本机设置 EVAL_API_KEY；不要粘贴或提交密钥');
   return { kind, client: new OpenAiCompatClient({ baseURL, model, apiKey: apiKey ?? '' }, kind) };
+}
+
+/** EVAL_KIND=cloud 时可再用 EVAL_LOCAL_BASE_URL / EVAL_LOCAL_MODEL 同时评估本机模型，一次输出完整三行表。 */
+function modelConfigs(): { kind: Kind; client: LlmClient }[] {
+  const primary = modelConfig();
+  const baseURL = process.env.EVAL_LOCAL_BASE_URL, model = process.env.EVAL_LOCAL_MODEL;
+  if (primary?.kind !== 'cloud' || !baseURL || !model) return primary ? [primary] : [];
+  const url = new URL(baseURL);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password) throw new Error('EVAL_LOCAL_BASE_URL 仅允许无凭据的本机回环地址');
+  return [primary, { kind: 'local', client: new OpenAiCompatClient({ baseURL, model, apiKey: '' }, 'local') }];
 }
 
 function timedClient(client: LlmClient, calls: CallTiming[]): LlmClient {
@@ -119,11 +131,13 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
   expect(metadata.timeZone).toBe('Asia/Shanghai');
   const now = new Date(metadata.referenceNow);
   expect(Number.isFinite(now.getTime())).toBe(true);
-  const configured = modelConfig();
+  const configs = modelConfigs();
+  const configured = configs.length > 0;
   const rules = await evaluate(samples, now, 'rules', null);
-  const model = configured ? await evaluate(samples, now, configured.kind, configured.client) : null;
-  const runs = [rules, ...(model ? [model] : [])];
-  const table = [rules, ...(['cloud', 'local'] as const).map((kind) => model?.kind === kind ? model : null)].map((run, index) => ({
+  const models: Awaited<ReturnType<typeof evaluate>>[] = [];
+  for (const config of configs) models.push(await evaluate(samples, now, config.kind, config.client));
+  const runs = [rules, ...models];
+  const table = [rules, ...(['cloud', 'local'] as const).map((kind) => models.find((run) => run.kind === kind) ?? null)].map((run, index) => ({
     '模式': run?.requestedModel ?? (index === 1 ? '云端模型：未运行' : '本地模型：未运行'),
     '实际来源': run ? `${run.actualModel}; model=${run.metrics.sourceCounts.model ?? 0}, rules=${run.metrics.sourceCounts.rules ?? 0}` : '未选择该模式',
     '分类': run ? format(run.metrics.category) : '—',
@@ -149,7 +163,7 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
       targets: { category: 0.85, deadline: 0.9, association: 0.8, formalValidation: false },
     },
     machine: { cpu: cpus()[0]?.model ?? 'unknown', memoryGiB: round(totalmem() / 1024 ** 3), node: process.version, platform: process.platform, gpu: 'Not auto-detected; verify separately before reporting GPU inference.' },
-    skipped: (['cloud', 'local'] as const).filter((kind) => model?.kind !== kind).map((kind) => ({ kind, reason: 'not explicitly configured for this invocation' })),
+    skipped: (['cloud', 'local'] as const).filter((kind) => !models.some((run) => run.kind === kind)).map((kind) => ({ kind, reason: 'not explicitly configured for this invocation' })),
     runs,
   };
   await writeFile(resultUrl, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
@@ -166,7 +180,7 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
     '评测方法：读取虚构邮件及标注，使用相同课程总表分别评估规则和明确配置的模型分类；分类按单标签比较。规则行与模型行的截止字段均由生产代码共用的确定性 extractDeadline 从邮件原文提取，按上海时区精确到分钟，双方为空也计对，不代表独立的模型日期抽取准确率。关联使用现有 linkMail 规则，对课程与作业成对比对，并单列关联正负例；没有实现模型版作业关联。', '',
     '耗时是每批8封、含首次加载与失败重试的流水线墙钟时间；不是 token/s，也不能据此证明模型全部驻留GPU。规则回退会单独计数；回退结果不能当作模型准确率。', '',
     `机器实测：${result.machine.cpu}，物理内存 ${result.machine.memoryGiB} GiB，${result.machine.platform}，${result.machine.node}；显卡和GPU驻留须另行验证。`, '',
-    '本次未做正式样本泛化验证、跨模型统计显著性检验、真实账号数据测试；不得在说明书中填成正式达标。完整错例与调用耗时见 results.json。', '',
+    `本次未做正式样本泛化验证、跨模型统计显著性检验、真实账号数据测试；不得在说明书中填成正式达标。完整错例与调用耗时见 ${human ? 'results-human.json' : 'results.json'}。`, '',
   ].join('\n');
   await writeFile(materialUrl, report, 'utf8');
   console.log(warning);

@@ -1,0 +1,4959 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-07T11:59:46.497Z",
+  "dataset": {
+    "datasetId": "human-labeled-2026-11-07-v1",
+    "provenance": "40 封全新虚构邮件：正文由 AI 起草（不取自演示邮件，调提示词时未使用），标签由团队成员在不看任何程序或模型结果的情况下逐封人工标注（2026-11-07T11:54:38.385Z）。",
+    "independentHumanLabels": true,
+    "formalCompetitionDataset": true,
+    "sampleCount": 40,
+    "referenceNow": "2026-11-08T10:00:00+08:00",
+    "timeZone": "Asia/Shanghai",
+    "labelPolicy": [
+      "分类五选一，只选最主要的；定义见 docs/MATERIALS.md 第 4 节。",
+      "截止时间只标“在此之前完成某事”的时间点；活动、讲座、考试举行时间不算截止；只给日期按当天 23:59；相对日期按发送时间换算；多个截止取与收件人最直接相关的一个。",
+      "课程与作业只能从演示数据的 6 门课及其作业中选择，没有则为 null。",
+      "标注备注：H001：这封邮件需要综合其他小组的回复，回复无明确截止时间，应该是需要尽快。；H008：无明确截止时间，但应在周五晚上前回复；H016：3 天内领取；H019：11/10 15:30 是面谈时间，不是截止时间；H025：无明确截止时间，但应在周六晚上前回复；H039：无明确截止时间，但应尽早回复",
+      "第一轮标注后，标注者对照邮件原文与标注说明复核了 13 封可疑标注（挑选依据仅为原文与说明，未参考模型输出），最终修改 9 封：H006（category）、H011（category）、H012（deadline）、H016（deadline）、H019（deadline）、H022（category）、H023（category）、H030（deadline）、H038（deadline）。"
+    ],
+    "limitations": [
+      "单人标注，未做双人一致性复核。",
+      "邮件为虚构文本，由 AI 起草，分布按材料手册建议设计，不代表真实邮箱的类别分布。",
+      "截止与关联两项使用生产代码中的确定性规则，模型只影响分类和课程提示。"
+    ]
+  },
+  "sampleCount": 40,
+  "distribution": {
+    "category": {
+      "reply": 6,
+      "action": 8,
+      "course": 14,
+      "notice": 5,
+      "other": 7
+    },
+    "deadlinePositive": 20,
+    "deadlineNegative": 20,
+    "assignmentPositive": 12,
+    "assignmentNegative": 28
+  },
+  "method": {
+    "deadline": "Both rows use the production deterministic extractDeadline grounded in mail text, not model date extraction. Asia/Shanghai exact minute; null==null; invalid timestamps are wrong. Date-only textual deadlines use the documented 23:59 convention.",
+    "association": "Exact course and assignment pair from linkMail rules; model courseHint may assist course lookup. No model assignment linker is implemented.",
+    "fallback": "metrics includes fallbacks with explicit sourceCounts; modelOnlyMetrics selects items whose classification source is model, but their dates and associations still use common deterministic rules. A fallback-only run is not model accuracy.",
+    "timing": "Fixed batches of 8, total pipeline wall time divided by logical batch count includes retries and cold start; API call durations are also recorded.",
+    "targets": {
+      "category": 0.85,
+      "deadline": 0.9,
+      "association": 0.8,
+      "formalValidation": false
+    }
+  },
+  "machine": {
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13650HX",
+    "memoryGiB": 23.73,
+    "node": "v24.14.1",
+    "platform": "win32",
+    "gpu": "Not auto-detected; verify separately before reporting GPU inference."
+  },
+  "skipped": [],
+  "runs": [
+    {
+      "kind": "rules",
+      "requestedModel": "rules",
+      "actualModel": "rules",
+      "status": "complete",
+      "metrics": {
+        "category": {
+          "correct": 21,
+          "total": 40,
+          "accuracy": 0.525
+        },
+        "deadline": {
+          "correct": 31,
+          "total": 40,
+          "accuracy": 0.775
+        },
+        "course": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "assignment": {
+          "correct": 30,
+          "total": 40,
+          "accuracy": 0.75
+        },
+        "association": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 2,
+            "total": 12,
+            "accuracy": 0.16666666666666666
+          },
+          "negative": {
+            "correct": 26,
+            "total": 28,
+            "accuracy": 0.9285714285714286
+          },
+          "precision": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 12,
+          "total": 20,
+          "accuracy": 0.6
+        },
+        "deadlineNegative": {
+          "correct": 19,
+          "total": 20,
+          "accuracy": 0.95
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 4,
+            "total": 6,
+            "accuracy": 0.6666666666666666
+          },
+          "action": {
+            "correct": 3,
+            "total": 8,
+            "accuracy": 0.375
+          },
+          "course": {
+            "correct": 10,
+            "total": 14,
+            "accuracy": 0.7142857142857143
+          },
+          "notice": {
+            "correct": 0,
+            "total": 5,
+            "accuracy": 0
+          },
+          "other": {
+            "correct": 4,
+            "total": 7,
+            "accuracy": 0.5714285714285714
+          }
+        },
+        "sourceCounts": {
+          "rules": 40
+        },
+        "errors": [
+          {
+            "id": "H003",
+            "subject": "关于开展 2026 年国家励志奖学金申请工作的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H003",
+              "category": "notice",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H004",
+            "subject": "校园卡余额不足提醒",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H004",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H005",
+            "subject": "Essay Draft 2 – peer review guidelines",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-12T11:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H005",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H006",
+            "subject": "关于统一身份认证密码定期更新的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H006",
+              "category": "other",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H007",
+            "subject": "【讲座】数据结构在工业级搜索引擎中的应用",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H007",
+              "category": "notice",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H008",
+            "subject": "周六一起去图书馆复习线代吗",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H008",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H009",
+            "subject": "数分作业 6 题目勘误",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "H009",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H012",
+            "subject": "大学物理 习题 9 已发布",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-17T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 9"
+            },
+            "actual": {
+              "id": "H012",
+              "category": "course",
+              "deadline": "2026-11-17T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H014",
+            "subject": "2027 秋季学期赴东京大学交换项目说明会",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H014",
+              "category": "notice",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H015",
+            "subject": "线代 HW 7 提交方式调整",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-13T10:00+08:00",
+              "course": "线性代数",
+              "assignment": "线代 HW 7"
+            },
+            "actual": {
+              "id": "H015",
+              "category": "course",
+              "deadline": "2026-11-13T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H016",
+            "subject": "您的包裹已到达驿站",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-08T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H016",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H017",
+            "subject": "宿舍安全检查及违规电器清理通知",
+            "expected": {
+              "category": "notice",
+              "deadline": "2026-11-07T22:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H017",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H019",
+            "subject": "Please confirm your one-on-one conference time",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H019",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H020",
+            "subject": "第十届学生创新创业大赛报名启动",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H020",
+              "category": "notice",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H021",
+            "subject": "关于 Lab 5 补交",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "H021",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈",
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H022",
+            "subject": "账户安全提醒：检测到新的登录",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H022",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H024",
+            "subject": "数据结构期中考试范围与答疑安排",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null
+            },
+            "actual": {
+              "id": "H024",
+              "category": "action",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H026",
+            "subject": "古籍特藏展“书香千年”开幕",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H026",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H027",
+            "subject": "数分作业 5 成绩已发布",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 5"
+            },
+            "actual": {
+              "id": "H027",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H030",
+            "subject": "Reminder: Reading Response 4",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Reading Response 4"
+            },
+            "actual": {
+              "id": "H030",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H031",
+            "subject": "关于加入课题组的意向",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-06T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H031",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H032",
+            "subject": "线性代数朋辈辅导答疑开放预约",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H032",
+              "category": "other",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H033",
+            "subject": "2026 年学生体质健康测试预约通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H033",
+              "category": "other",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H034",
+            "subject": "大学物理 习题 8 第 3 题提示",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "H034",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H037",
+            "subject": "Fwd: Lab 6 分组名单",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 6：二叉树"
+            },
+            "actual": {
+              "id": "H037",
+              "category": "course",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H038",
+            "subject": "请提交实验室安全培训合格证明",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H038",
+              "category": "notice",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H039",
+            "subject": "Language exchange partner?",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H039",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H040",
+            "subject": "线代 HW 6 讲评与常见错误",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": "线代 HW 6"
+            },
+            "actual": {
+              "id": "H040",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "rules"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "modelOnlyMetrics": null,
+      "diagnostics": null,
+      "timing": {
+        "totalMs": 10.77,
+        "logicalBatches": 5,
+        "averageLogicalBatchMs": 2.15,
+        "apiCalls": 0,
+        "averageApiCallMs": null,
+        "calls": [],
+        "includesColdStart": "First model call may include Ollama loading; no warm-up is excluded."
+      },
+      "predictions": [
+        {
+          "id": "H001",
+          "category": "reply",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H002",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": "数据结构",
+          "assignment": "Lab 6：二叉树",
+          "source": "rules"
+        },
+        {
+          "id": "H003",
+          "category": "notice",
+          "deadline": "2026-11-12T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H004",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H005",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H006",
+          "category": "other",
+          "deadline": "2026-11-09T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H007",
+          "category": "notice",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H008",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H009",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H010",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H011",
+          "category": "action",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H012",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H013",
+          "category": "reply",
+          "deadline": "2026-11-08T20:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H014",
+          "category": "notice",
+          "deadline": "2026-11-25T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H015",
+          "category": "course",
+          "deadline": "2026-11-13T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H016",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H017",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H018",
+          "category": "course",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H019",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H020",
+          "category": "notice",
+          "deadline": "2026-11-30T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H021",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": "Lab 5：链表与栈",
+          "source": "rules"
+        },
+        {
+          "id": "H022",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H023",
+          "category": "action",
+          "deadline": "2026-11-05T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H024",
+          "category": "action",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H025",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H026",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H027",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H028",
+          "category": "action",
+          "deadline": "2026-11-15T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H029",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H030",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H031",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H032",
+          "category": "other",
+          "deadline": null,
+          "course": "线性代数",
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H033",
+          "category": "other",
+          "deadline": "2026-11-14T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H034",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H035",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H036",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H037",
+          "category": "course",
+          "deadline": "2026-11-08T12:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H038",
+          "category": "notice",
+          "deadline": "2026-11-10T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H039",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        },
+        {
+          "id": "H040",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "rules"
+        }
+      ]
+    },
+    {
+      "kind": "cloud",
+      "requestedModel": "cloud:deepseek-chat",
+      "actualModel": "cloud:deepseek-chat",
+      "status": "complete",
+      "metrics": {
+        "category": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "deadline": {
+          "correct": 31,
+          "total": 40,
+          "accuracy": 0.775
+        },
+        "course": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "assignment": {
+          "correct": 30,
+          "total": 40,
+          "accuracy": 0.75
+        },
+        "association": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 2,
+            "total": 12,
+            "accuracy": 0.16666666666666666
+          },
+          "negative": {
+            "correct": 26,
+            "total": 28,
+            "accuracy": 0.9285714285714286
+          },
+          "precision": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 12,
+          "total": 20,
+          "accuracy": 0.6
+        },
+        "deadlineNegative": {
+          "correct": 19,
+          "total": 20,
+          "accuracy": 0.95
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 6,
+            "total": 6,
+            "accuracy": 1
+          },
+          "action": {
+            "correct": 7,
+            "total": 8,
+            "accuracy": 0.875
+          },
+          "course": {
+            "correct": 11,
+            "total": 14,
+            "accuracy": 0.7857142857142857
+          },
+          "notice": {
+            "correct": 2,
+            "total": 5,
+            "accuracy": 0.4
+          },
+          "other": {
+            "correct": 2,
+            "total": 7,
+            "accuracy": 0.2857142857142857
+          }
+        },
+        "sourceCounts": {
+          "model": 40
+        },
+        "errors": [
+          {
+            "id": "H004",
+            "subject": "校园卡余额不足提醒",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H004",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H005",
+            "subject": "Essay Draft 2 – peer review guidelines",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-12T11:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H005",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H007",
+            "subject": "【讲座】数据结构在工业级搜索引擎中的应用",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H007",
+              "category": "notice",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H009",
+            "subject": "数分作业 6 题目勘误",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "H009",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H012",
+            "subject": "大学物理 习题 9 已发布",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-17T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 9"
+            },
+            "actual": {
+              "id": "H012",
+              "category": "course",
+              "deadline": "2026-11-17T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H014",
+            "subject": "2027 秋季学期赴东京大学交换项目说明会",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H014",
+              "category": "notice",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H015",
+            "subject": "线代 HW 7 提交方式调整",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-13T10:00+08:00",
+              "course": "线性代数",
+              "assignment": "线代 HW 7"
+            },
+            "actual": {
+              "id": "H015",
+              "category": "course",
+              "deadline": "2026-11-13T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H016",
+            "subject": "您的包裹已到达驿站",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-08T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H016",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H017",
+            "subject": "宿舍安全检查及违规电器清理通知",
+            "expected": {
+              "category": "notice",
+              "deadline": "2026-11-07T22:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H017",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H019",
+            "subject": "Please confirm your one-on-one conference time",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H019",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H020",
+            "subject": "第十届学生创新创业大赛报名启动",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H020",
+              "category": "notice",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H021",
+            "subject": "关于 Lab 5 补交",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "H021",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈",
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H022",
+            "subject": "账户安全提醒：检测到新的登录",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H022",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H027",
+            "subject": "数分作业 5 成绩已发布",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 5"
+            },
+            "actual": {
+              "id": "H027",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H030",
+            "subject": "Reminder: Reading Response 4",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Reading Response 4"
+            },
+            "actual": {
+              "id": "H030",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H031",
+            "subject": "关于加入课题组的意向",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-06T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H031",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H032",
+            "subject": "线性代数朋辈辅导答疑开放预约",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H032",
+              "category": "notice",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H034",
+            "subject": "大学物理 习题 8 第 3 题提示",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "H034",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H035",
+            "subject": "您的邮箱容量即将用满",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H035",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H036",
+            "subject": "2027 届毕业生秋季校园双选会",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H036",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H037",
+            "subject": "Fwd: Lab 6 分组名单",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 6：二叉树"
+            },
+            "actual": {
+              "id": "H037",
+              "category": "reply",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H038",
+            "subject": "请提交实验室安全培训合格证明",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H038",
+              "category": "action",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H040",
+            "subject": "线代 HW 6 讲评与常见错误",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": "线代 HW 6"
+            },
+            "actual": {
+              "id": "H040",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "modelOnlyMetrics": {
+        "category": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "deadline": {
+          "correct": 31,
+          "total": 40,
+          "accuracy": 0.775
+        },
+        "course": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "assignment": {
+          "correct": 30,
+          "total": 40,
+          "accuracy": 0.75
+        },
+        "association": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 2,
+            "total": 12,
+            "accuracy": 0.16666666666666666
+          },
+          "negative": {
+            "correct": 26,
+            "total": 28,
+            "accuracy": 0.9285714285714286
+          },
+          "precision": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 12,
+          "total": 20,
+          "accuracy": 0.6
+        },
+        "deadlineNegative": {
+          "correct": 19,
+          "total": 20,
+          "accuracy": 0.95
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 6,
+            "total": 6,
+            "accuracy": 1
+          },
+          "action": {
+            "correct": 7,
+            "total": 8,
+            "accuracy": 0.875
+          },
+          "course": {
+            "correct": 11,
+            "total": 14,
+            "accuracy": 0.7857142857142857
+          },
+          "notice": {
+            "correct": 2,
+            "total": 5,
+            "accuracy": 0.4
+          },
+          "other": {
+            "correct": 2,
+            "total": 7,
+            "accuracy": 0.2857142857142857
+          }
+        },
+        "sourceCounts": {
+          "model": 40
+        },
+        "errors": [
+          {
+            "id": "H004",
+            "subject": "校园卡余额不足提醒",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H004",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H005",
+            "subject": "Essay Draft 2 – peer review guidelines",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-12T11:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H005",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H007",
+            "subject": "【讲座】数据结构在工业级搜索引擎中的应用",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H007",
+              "category": "notice",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H009",
+            "subject": "数分作业 6 题目勘误",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "H009",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H012",
+            "subject": "大学物理 习题 9 已发布",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-17T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 9"
+            },
+            "actual": {
+              "id": "H012",
+              "category": "course",
+              "deadline": "2026-11-17T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H014",
+            "subject": "2027 秋季学期赴东京大学交换项目说明会",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H014",
+              "category": "notice",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H015",
+            "subject": "线代 HW 7 提交方式调整",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-13T10:00+08:00",
+              "course": "线性代数",
+              "assignment": "线代 HW 7"
+            },
+            "actual": {
+              "id": "H015",
+              "category": "course",
+              "deadline": "2026-11-13T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H016",
+            "subject": "您的包裹已到达驿站",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-08T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H016",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H017",
+            "subject": "宿舍安全检查及违规电器清理通知",
+            "expected": {
+              "category": "notice",
+              "deadline": "2026-11-07T22:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H017",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H019",
+            "subject": "Please confirm your one-on-one conference time",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H019",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H020",
+            "subject": "第十届学生创新创业大赛报名启动",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H020",
+              "category": "notice",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H021",
+            "subject": "关于 Lab 5 补交",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "H021",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈",
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H022",
+            "subject": "账户安全提醒：检测到新的登录",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H022",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H027",
+            "subject": "数分作业 5 成绩已发布",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 5"
+            },
+            "actual": {
+              "id": "H027",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H030",
+            "subject": "Reminder: Reading Response 4",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Reading Response 4"
+            },
+            "actual": {
+              "id": "H030",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H031",
+            "subject": "关于加入课题组的意向",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-06T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H031",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H032",
+            "subject": "线性代数朋辈辅导答疑开放预约",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H032",
+              "category": "notice",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H034",
+            "subject": "大学物理 习题 8 第 3 题提示",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "H034",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H035",
+            "subject": "您的邮箱容量即将用满",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H035",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H036",
+            "subject": "2027 届毕业生秋季校园双选会",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H036",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H037",
+            "subject": "Fwd: Lab 6 分组名单",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 6：二叉树"
+            },
+            "actual": {
+              "id": "H037",
+              "category": "reply",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H038",
+            "subject": "请提交实验室安全培训合格证明",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H038",
+              "category": "action",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H040",
+            "subject": "线代 HW 6 讲评与常见错误",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": "线代 HW 6"
+            },
+            "actual": {
+              "id": "H040",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "diagnostics": {
+        "batches": 5,
+        "modelBatches": 5,
+        "failedBatches": 0,
+        "invalidItems": 0,
+        "fallbackItems": 0,
+        "retriedBatches": 0,
+        "errors": []
+      },
+      "timing": {
+        "totalMs": 19139.48,
+        "logicalBatches": 5,
+        "averageLogicalBatchMs": 3827.9,
+        "apiCalls": 5,
+        "averageApiCallMs": 3824.81,
+        "calls": [
+          {
+            "elapsedMs": 4206.24,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 4026.7,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 3416.27,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 3593.11,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 3881.72,
+            "status": "completed"
+          }
+        ],
+        "includesColdStart": "First model call may include Ollama loading; no warm-up is excluded."
+      },
+      "predictions": [
+        {
+          "id": "H001",
+          "category": "reply",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H002",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": "数据结构",
+          "assignment": "Lab 6：二叉树",
+          "source": "model"
+        },
+        {
+          "id": "H003",
+          "category": "action",
+          "deadline": "2026-11-12T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H004",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H005",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H006",
+          "category": "action",
+          "deadline": "2026-11-09T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H007",
+          "category": "notice",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H008",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H009",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H010",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H011",
+          "category": "action",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H012",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H013",
+          "category": "reply",
+          "deadline": "2026-11-08T20:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H014",
+          "category": "notice",
+          "deadline": "2026-11-25T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H015",
+          "category": "course",
+          "deadline": "2026-11-13T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H016",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H017",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H018",
+          "category": "course",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H019",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H020",
+          "category": "notice",
+          "deadline": "2026-11-30T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H021",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": "Lab 5：链表与栈",
+          "source": "model"
+        },
+        {
+          "id": "H022",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H023",
+          "category": "action",
+          "deadline": "2026-11-05T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H024",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H025",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H026",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H027",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H028",
+          "category": "action",
+          "deadline": "2026-11-15T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H029",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H030",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H031",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H032",
+          "category": "notice",
+          "deadline": null,
+          "course": "线性代数",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H033",
+          "category": "action",
+          "deadline": "2026-11-14T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H034",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H035",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H036",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H037",
+          "category": "reply",
+          "deadline": "2026-11-08T12:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H038",
+          "category": "action",
+          "deadline": "2026-11-10T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H039",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H040",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        }
+      ]
+    },
+    {
+      "kind": "local",
+      "requestedModel": "local:qwen2.5:7b",
+      "actualModel": "local:qwen2.5:7b",
+      "status": "complete",
+      "metrics": {
+        "category": {
+          "correct": 19,
+          "total": 40,
+          "accuracy": 0.475
+        },
+        "deadline": {
+          "correct": 31,
+          "total": 40,
+          "accuracy": 0.775
+        },
+        "course": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "assignment": {
+          "correct": 30,
+          "total": 40,
+          "accuracy": 0.75
+        },
+        "association": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 2,
+            "total": 12,
+            "accuracy": 0.16666666666666666
+          },
+          "negative": {
+            "correct": 26,
+            "total": 28,
+            "accuracy": 0.9285714285714286
+          },
+          "precision": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 12,
+          "total": 20,
+          "accuracy": 0.6
+        },
+        "deadlineNegative": {
+          "correct": 19,
+          "total": 20,
+          "accuracy": 0.95
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 1,
+            "total": 6,
+            "accuracy": 0.16666666666666666
+          },
+          "action": {
+            "correct": 2,
+            "total": 8,
+            "accuracy": 0.25
+          },
+          "course": {
+            "correct": 11,
+            "total": 14,
+            "accuracy": 0.7857142857142857
+          },
+          "notice": {
+            "correct": 3,
+            "total": 5,
+            "accuracy": 0.6
+          },
+          "other": {
+            "correct": 2,
+            "total": 7,
+            "accuracy": 0.2857142857142857
+          }
+        },
+        "sourceCounts": {
+          "model": 40
+        },
+        "errors": [
+          {
+            "id": "H001",
+            "subject": "数据结构课程项目中期答辩时间征询",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null
+            },
+            "actual": {
+              "id": "H001",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H003",
+            "subject": "关于开展 2026 年国家励志奖学金申请工作的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H003",
+              "category": "notice",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H004",
+            "subject": "校园卡余额不足提醒",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H004",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H005",
+            "subject": "Essay Draft 2 – peer review guidelines",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-12T11:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H005",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H007",
+            "subject": "【讲座】数据结构在工业级搜索引擎中的应用",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H007",
+              "category": "notice",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H008",
+            "subject": "周六一起去图书馆复习线代吗",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H008",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H009",
+            "subject": "数分作业 6 题目勘误",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "H009",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H010",
+            "subject": "本周精选：大学生如何高效管理时间",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H010",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H011",
+            "subject": "2026 秋季学期期中教学评价开放通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-20T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H011",
+              "category": "notice",
+              "deadline": "2026-11-20T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H012",
+            "subject": "大学物理 习题 9 已发布",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-17T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 9"
+            },
+            "actual": {
+              "id": "H012",
+              "category": "course",
+              "deadline": "2026-11-17T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H013",
+            "subject": "Fwd: 寒假科研实习面试时间确认",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-08T20:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H013",
+              "category": "action",
+              "deadline": "2026-11-08T20:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H014",
+            "subject": "2027 秋季学期赴东京大学交换项目说明会",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H014",
+              "category": "notice",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H015",
+            "subject": "线代 HW 7 提交方式调整",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-13T10:00+08:00",
+              "course": "线性代数",
+              "assignment": "线代 HW 7"
+            },
+            "actual": {
+              "id": "H015",
+              "category": "course",
+              "deadline": "2026-11-13T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H016",
+            "subject": "您的包裹已到达驿站",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-08T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H016",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H017",
+            "subject": "宿舍安全检查及违规电器清理通知",
+            "expected": {
+              "category": "notice",
+              "deadline": "2026-11-07T22:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H017",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H019",
+            "subject": "Please confirm your one-on-one conference time",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H019",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H020",
+            "subject": "第十届学生创新创业大赛报名启动",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H020",
+              "category": "notice",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H021",
+            "subject": "关于 Lab 5 补交",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "H021",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈",
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H022",
+            "subject": "账户安全提醒：检测到新的登录",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H022",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H023",
+            "subject": "请确认本学期选课结果",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-05T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H023",
+              "category": "notice",
+              "deadline": "2026-11-05T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H027",
+            "subject": "数分作业 5 成绩已发布",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 5"
+            },
+            "actual": {
+              "id": "H027",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H030",
+            "subject": "Reminder: Reading Response 4",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Reading Response 4"
+            },
+            "actual": {
+              "id": "H030",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H031",
+            "subject": "关于加入课题组的意向",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-06T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H031",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H032",
+            "subject": "线性代数朋辈辅导答疑开放预约",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H032",
+              "category": "notice",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H033",
+            "subject": "2026 年学生体质健康测试预约通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H033",
+              "category": "notice",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H034",
+            "subject": "大学物理 习题 8 第 3 题提示",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "H034",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H036",
+            "subject": "2027 届毕业生秋季校园双选会",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H036",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H037",
+            "subject": "Fwd: Lab 6 分组名单",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 6：二叉树"
+            },
+            "actual": {
+              "id": "H037",
+              "category": "course",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H038",
+            "subject": "请提交实验室安全培训合格证明",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H038",
+              "category": "action",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H039",
+            "subject": "Language exchange partner?",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H039",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H040",
+            "subject": "线代 HW 6 讲评与常见错误",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": "线代 HW 6"
+            },
+            "actual": {
+              "id": "H040",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "modelOnlyMetrics": {
+        "category": {
+          "correct": 19,
+          "total": 40,
+          "accuracy": 0.475
+        },
+        "deadline": {
+          "correct": 31,
+          "total": 40,
+          "accuracy": 0.775
+        },
+        "course": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7
+        },
+        "assignment": {
+          "correct": 30,
+          "total": 40,
+          "accuracy": 0.75
+        },
+        "association": {
+          "correct": 28,
+          "total": 40,
+          "accuracy": 0.7,
+          "method": "linkMail rules; model rows may supply courseHint, not a model assignment linker",
+          "positive": {
+            "correct": 2,
+            "total": 12,
+            "accuracy": 0.16666666666666666
+          },
+          "negative": {
+            "correct": 26,
+            "total": 28,
+            "accuracy": 0.9285714285714286
+          },
+          "precision": {
+            "correct": 2,
+            "total": 2,
+            "accuracy": 1
+          }
+        },
+        "deadlinePositive": {
+          "correct": 12,
+          "total": 20,
+          "accuracy": 0.6
+        },
+        "deadlineNegative": {
+          "correct": 19,
+          "total": 20,
+          "accuracy": 0.95
+        },
+        "categoryByLabel": {
+          "reply": {
+            "correct": 1,
+            "total": 6,
+            "accuracy": 0.16666666666666666
+          },
+          "action": {
+            "correct": 2,
+            "total": 8,
+            "accuracy": 0.25
+          },
+          "course": {
+            "correct": 11,
+            "total": 14,
+            "accuracy": 0.7857142857142857
+          },
+          "notice": {
+            "correct": 3,
+            "total": 5,
+            "accuracy": 0.6
+          },
+          "other": {
+            "correct": 2,
+            "total": 7,
+            "accuracy": 0.2857142857142857
+          }
+        },
+        "sourceCounts": {
+          "model": 40
+        },
+        "errors": [
+          {
+            "id": "H001",
+            "subject": "数据结构课程项目中期答辩时间征询",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null
+            },
+            "actual": {
+              "id": "H001",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H003",
+            "subject": "关于开展 2026 年国家励志奖学金申请工作的通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H003",
+              "category": "notice",
+              "deadline": "2026-11-12T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H004",
+            "subject": "校园卡余额不足提醒",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H004",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H005",
+            "subject": "Essay Draft 2 – peer review guidelines",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-12T11:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H005",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H007",
+            "subject": "【讲座】数据结构在工业级搜索引擎中的应用",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H007",
+              "category": "notice",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H008",
+            "subject": "周六一起去图书馆复习线代吗",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H008",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H009",
+            "subject": "数分作业 6 题目勘误",
+            "expected": {
+              "category": "action",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 6"
+            },
+            "actual": {
+              "id": "H009",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H010",
+            "subject": "本周精选：大学生如何高效管理时间",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H010",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H011",
+            "subject": "2026 秋季学期期中教学评价开放通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-20T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H011",
+              "category": "notice",
+              "deadline": "2026-11-20T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H012",
+            "subject": "大学物理 习题 9 已发布",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-17T12:00+08:00",
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 9"
+            },
+            "actual": {
+              "id": "H012",
+              "category": "course",
+              "deadline": "2026-11-17T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H013",
+            "subject": "Fwd: 寒假科研实习面试时间确认",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-08T20:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H013",
+              "category": "action",
+              "deadline": "2026-11-08T20:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H014",
+            "subject": "2027 秋季学期赴东京大学交换项目说明会",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H014",
+              "category": "notice",
+              "deadline": "2026-11-25T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H015",
+            "subject": "线代 HW 7 提交方式调整",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-13T10:00+08:00",
+              "course": "线性代数",
+              "assignment": "线代 HW 7"
+            },
+            "actual": {
+              "id": "H015",
+              "category": "course",
+              "deadline": "2026-11-13T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H016",
+            "subject": "您的包裹已到达驿站",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-08T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H016",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H017",
+            "subject": "宿舍安全检查及违规电器清理通知",
+            "expected": {
+              "category": "notice",
+              "deadline": "2026-11-07T22:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H017",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H019",
+            "subject": "Please confirm your one-on-one conference time",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "学术英语写作",
+              "assignment": "Essay Draft 2"
+            },
+            "actual": {
+              "id": "H019",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H020",
+            "subject": "第十届学生创新创业大赛报名启动",
+            "expected": {
+              "category": "other",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H020",
+              "category": "notice",
+              "deadline": "2026-11-30T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H021",
+            "subject": "关于 Lab 5 补交",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-09T23:59+08:00",
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈"
+            },
+            "actual": {
+              "id": "H021",
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 5：链表与栈",
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H022",
+            "subject": "账户安全提醒：检测到新的登录",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H022",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H023",
+            "subject": "请确认本学期选课结果",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-05T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H023",
+              "category": "notice",
+              "deadline": "2026-11-05T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H027",
+            "subject": "数分作业 5 成绩已发布",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数学分析 III",
+              "assignment": "数分作业 5"
+            },
+            "actual": {
+              "id": "H027",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H030",
+            "subject": "Reminder: Reading Response 4",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T23:59+08:00",
+              "course": "学术英语写作",
+              "assignment": "Reading Response 4"
+            },
+            "actual": {
+              "id": "H030",
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H031",
+            "subject": "关于加入课题组的意向",
+            "expected": {
+              "category": "reply",
+              "deadline": "2026-11-06T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H031",
+              "category": "action",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": false,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H032",
+            "subject": "线性代数朋辈辅导答疑开放预约",
+            "expected": {
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H032",
+              "category": "notice",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": true,
+              "association": false
+            }
+          },
+          {
+            "id": "H033",
+            "subject": "2026 年学生体质健康测试预约通知",
+            "expected": {
+              "category": "action",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H033",
+              "category": "notice",
+              "deadline": "2026-11-14T23:59+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H034",
+            "subject": "大学物理 习题 8 第 3 题提示",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "大学物理 B",
+              "assignment": "大学物理 习题 8"
+            },
+            "actual": {
+              "id": "H034",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H036",
+            "subject": "2027 届毕业生秋季校园双选会",
+            "expected": {
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H036",
+              "category": "notice",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H037",
+            "subject": "Fwd: Lab 6 分组名单",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "数据结构",
+              "assignment": "Lab 6：二叉树"
+            },
+            "actual": {
+              "id": "H037",
+              "category": "course",
+              "deadline": "2026-11-08T12:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": false,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          },
+          {
+            "id": "H038",
+            "subject": "请提交实验室安全培训合格证明",
+            "expected": {
+              "category": "course",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H038",
+              "category": "action",
+              "deadline": "2026-11-10T17:00+08:00",
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H039",
+            "subject": "Language exchange partner?",
+            "expected": {
+              "category": "reply",
+              "deadline": null,
+              "course": null,
+              "assignment": null
+            },
+            "actual": {
+              "id": "H039",
+              "category": "other",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": false,
+              "deadline": true,
+              "course": true,
+              "assignment": true,
+              "association": true
+            }
+          },
+          {
+            "id": "H040",
+            "subject": "线代 HW 6 讲评与常见错误",
+            "expected": {
+              "category": "course",
+              "deadline": null,
+              "course": "线性代数",
+              "assignment": "线代 HW 6"
+            },
+            "actual": {
+              "id": "H040",
+              "category": "course",
+              "deadline": null,
+              "course": null,
+              "assignment": null,
+              "source": "model"
+            },
+            "correct": {
+              "category": true,
+              "deadline": true,
+              "course": false,
+              "assignment": false,
+              "association": false
+            }
+          }
+        ]
+      },
+      "diagnostics": {
+        "batches": 5,
+        "modelBatches": 5,
+        "failedBatches": 0,
+        "invalidItems": 0,
+        "fallbackItems": 0,
+        "retriedBatches": 0,
+        "errors": []
+      },
+      "timing": {
+        "totalMs": 91018.97,
+        "logicalBatches": 5,
+        "averageLogicalBatchMs": 18203.79,
+        "apiCalls": 5,
+        "averageApiCallMs": 18202.99,
+        "calls": [
+          {
+            "elapsedMs": 25852.77,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 16354.88,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 16829.44,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 15628.33,
+            "status": "completed"
+          },
+          {
+            "elapsedMs": 16349.51,
+            "status": "completed"
+          }
+        ],
+        "includesColdStart": "First model call may include Ollama loading; no warm-up is excluded."
+      },
+      "predictions": [
+        {
+          "id": "H001",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H002",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": "数据结构",
+          "assignment": "Lab 6：二叉树",
+          "source": "model"
+        },
+        {
+          "id": "H003",
+          "category": "notice",
+          "deadline": "2026-11-12T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H004",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H005",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H006",
+          "category": "action",
+          "deadline": "2026-11-09T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H007",
+          "category": "notice",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H008",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H009",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H010",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H011",
+          "category": "notice",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H012",
+          "category": "course",
+          "deadline": "2026-11-17T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H013",
+          "category": "action",
+          "deadline": "2026-11-08T20:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H014",
+          "category": "notice",
+          "deadline": "2026-11-25T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H015",
+          "category": "course",
+          "deadline": "2026-11-13T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H016",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H017",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H018",
+          "category": "course",
+          "deadline": "2026-11-20T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H019",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H020",
+          "category": "notice",
+          "deadline": "2026-11-30T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H021",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": "Lab 5：链表与栈",
+          "source": "model"
+        },
+        {
+          "id": "H022",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H023",
+          "category": "notice",
+          "deadline": "2026-11-05T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H024",
+          "category": "course",
+          "deadline": null,
+          "course": "数据结构",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H025",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H026",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H027",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H028",
+          "category": "action",
+          "deadline": "2026-11-15T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H029",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H030",
+          "category": "reply",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H031",
+          "category": "action",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H032",
+          "category": "notice",
+          "deadline": null,
+          "course": "线性代数",
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H033",
+          "category": "notice",
+          "deadline": "2026-11-14T23:59:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H034",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H035",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H036",
+          "category": "notice",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H037",
+          "category": "course",
+          "deadline": "2026-11-08T12:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H038",
+          "category": "action",
+          "deadline": "2026-11-10T17:00:00+08:00",
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H039",
+          "category": "other",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        },
+        {
+          "id": "H040",
+          "category": "course",
+          "deadline": null,
+          "course": null,
+          "assignment": null,
+          "source": "model"
+        }
+      ]
+    }
+  ]
+}

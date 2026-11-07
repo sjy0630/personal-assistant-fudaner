@@ -103,8 +103,8 @@ export function createLocalServer(
 
   server.registerTool('list_deadlines', {
     description: '列出某个时间范围内的 DDL（作业截止）及提交状态',
-    inputSchema: { from: z.string().optional().describe('ISO 时间，默认现在'), to: z.string().describe('ISO 时间') }, annotations: ro,
-  }, async ({ from, to }) => json(repo.listItems({ kind: 'assignment', dueAfter: from ?? new Date().toISOString(), dueBefore: to })
+    inputSchema: { from: z.string().optional().describe('ISO 时间，默认现在'), to: z.string().describe('ISO 时间'), pending_only: z.boolean().optional().describe('true 时只列未完成作业') }, annotations: ro,
+  }, async ({ from, to, pending_only }) => json(repo.listItems({ kind: 'assignment', done: pending_only ? false : undefined, dueAfter: from ?? new Date().toISOString(), dueBefore: to })
     .map((i) => ({ id: i.id, title: i.title, course: i.courseId ? repo.getCourse(i.courseId)?.name : undefined, dueAt: i.dueAt, submitted: i.done }))));
 
   server.registerTool('create_goal', {
@@ -128,7 +128,7 @@ export function createLocalServer(
     }
     const t = repo.addTask({ goalId, title: a.title, dueAt, source: 'assistant' });
     channels.changed('goals');
-    return json(t);
+    return json({ ...t, goalTitle: t.goalId ? repo.getGoal(t.goalId)?.title : undefined });
   });
 
   if (chatOnly) {

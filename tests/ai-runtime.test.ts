@@ -257,12 +257,52 @@ describe('T6 后台工单完成条件', () => {
     const state = await execute([
       () => calls(['fudan_mail__search_mail', { query: '交换' }]),
       () => calls(['fudaner_local__save_resource', { title: '部分材料清单', content: '# 部分清单\n- 成绩单\n尚待核对其他材料。' }]),
-      ...Array.from({ length: 6 }, () => () => calls(['fudan_mail__search_mail', { query: '交换' }])),
+      ...Array.from({ length: 10 }, () => () => calls(['fudan_mail__search_mail', { query: '交换' }])),
     ]);
     expect(state.result?.status).toBe('failed');
     expect(state.posted[0].content).toContain('步骤达到上限');
     expect(state.app.repo.listResources()).toHaveLength(1);
     expect(state.result?.resultResourceId).toBeUndefined();
+  });
+
+  it('查到资料却没保存就结束时，提示一次保存，保存后工单完成', async () => {
+    let nudged = false;
+    const state = await execute([
+      () => calls(['fudan_mail__search_mail', { query: '交换' }]),
+      () => answer('我已经整理好了。'),
+      (messages) => {
+        nudged = messages.some((m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('你还没有调用 save_resource'));
+        return calls(['fudaner_local__save_resource', { title: '交换材料清单', content: '# 交换材料清单\n- 成绩单（待核实）' }]);
+      },
+      () => answer('已保存。'),
+    ]);
+    expect(nudged).toBe(true);
+    expect(state.result?.status).toBe('done');
+  });
+
+  it('提示保存后仍不保存，工单如实失败', async () => {
+    const state = await execute([
+      () => calls(['fudan_mail__search_mail', { query: '交换' }]),
+      () => answer('我已经整理好了。'),
+      () => answer('整理完了。'),
+    ]);
+    expect(state.result?.status).toBe('failed');
+    expect(state.posted[0].content).toContain('尚未成功保存成果');
+  });
+
+  it('步数将尽时提示立即保存，模型据此保存后工单完成', async () => {
+    let noticeSeen = false;
+    const state = await execute([
+      ...Array.from({ length: 10 }, () => () => calls(['fudan_mail__search_mail', { query: '交换' }])),
+      (messages) => {
+        noticeSeen = messages.some((m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('执行步数即将用完'));
+        return calls(['fudaner_local__save_resource', { title: '交换材料清单', content: '# 交换材料清单\n- 成绩单（待核实）' }]);
+      },
+      () => answer('已保存交换材料清单。'),
+    ]);
+    expect(noticeSeen).toBe(true);
+    expect(state.result?.status).toBe('done');
+    expect(state.app.repo.getResource(state.result!.resultResourceId!)?.title).toBe('交换材料清单');
   });
 
   it('模型异常报告不回显服务端敏感错误详情', async () => {

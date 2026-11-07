@@ -151,9 +151,10 @@ export class Repo {
     if (filter.done !== undefined) { where.push('done = ?'); params.push(filter.done ? 1 : 0); }
     if (filter.category) { where.push('ai_category = ?'); params.push(filter.category); }
     if (filter.since) { where.push('published_at >= ?'); params.push(filter.since); }
-    if (filter.query) {
+    // 空格分隔的多个关键词逐个匹配（全部命中才返回），不要求整句原样出现。
+    for (const term of filter.query?.trim().split(/\s+/).filter(Boolean) ?? []) {
       where.push('(title LIKE ? OR body LIKE ? OR sender LIKE ?)');
-      params.push(`%${filter.query}%`, `%${filter.query}%`, `%${filter.query}%`);
+      params.push(`%${term}%`, `%${term}%`, `%${term}%`);
     }
     const sql = `SELECT * FROM items ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY COALESCE(due_at, published_at) ${filter.dueBefore || filter.dueAfter ? 'ASC' : 'DESC'} LIMIT ?`;
@@ -678,9 +679,12 @@ export class Repo {
          FROM search_index WHERE ${matches} LIMIT ?`, terms[0], ...terms.flatMap((term) => [term, term]), limit,
       );
     }
-    return rows
+    const hits = rows
       .map((r) => ({ type: r.object_type, id: r.object_id, title: r.title, snippet: r.snip ?? '' }) as SearchHit)
       .filter((h) => !types || types.includes(h.type));
+    // 多个关键词同时命中为空时，退回任一关键词命中，避免“复习 讲义 提纲”这类查询因一个词缺失而什么都找不到。
+    if (hits.length || terms.length < 2) return hits;
+    return [...new Map(terms.flatMap((term) => this.search(term, types, limit)).map((h) => [`${h.type}:${h.id}`, h])).values()].slice(0, limit);
   }
 
   // ---------------- 主动引擎 ----------------
