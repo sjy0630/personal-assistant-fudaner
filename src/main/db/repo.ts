@@ -375,7 +375,7 @@ export class Repo {
     return row ? { untilMsgId: row.until_msg_id, untilCreatedAt: row.created_at, summary: row.summary } : undefined;
   }
   addSummary(untilMsgId: string, summary: string): void {
-    const content = Array.from(summary.trim()).slice(0, 300).join('');
+    const content = Array.from(summary.trim()).slice(0, 1000).join('');
     if (!content || !this.getMessage(untilMsgId)) throw new Error('摘要内容或覆盖消息无效。');
     this.db.run('INSERT INTO conversation_summaries (id,until_msg_id,summary) VALUES (?,?,?)', newId(), untilMsgId, content);
   }

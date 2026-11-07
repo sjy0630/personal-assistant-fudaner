@@ -134,15 +134,15 @@ describe('早期对话滚动摘要', () => {
     expect(repo.latestSummary()).toBeUndefined();
   });
 
-  it('模型输出按Unicode字符限300字，且不保存带工具调用的响应', async () => {
+  it('模型输出按Unicode字符限1000字，且不保存带工具调用的响应', async () => {
     const { repo, chat, worker } = setup();
     add(repo, 0, 60);
     chat.mockResolvedValueOnce({ ...reply('不应保留'), toolCalls: [{ id: '1', name: 'forget', arguments: '{}' }] });
     await worker.runInBackground();
     expect(repo.latestSummary()).toBeUndefined();
-    chat.mockResolvedValueOnce(reply('中😀'.repeat(200)));
+    chat.mockResolvedValueOnce(reply('中😀'.repeat(600)));
     await worker.runInBackground();
-    expect(Array.from(repo.latestSummary()!.summary)).toHaveLength(300);
+    expect(Array.from(repo.latestSummary()!.summary)).toHaveLength(1000);
     expect(repo.latestSummary()!.summary.endsWith('😀')).toBe(true);
   });
 

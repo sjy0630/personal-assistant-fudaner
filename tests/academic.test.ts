@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extractTables, readProgramCompletion, readSelectedCourses, summarizeProgramTables, tablesToText } from '../src/main/sources/academic';
+import { extractTables, modulesFromJson, profileFactsFromText, readProgramCompletion, readSelectedCourses, summarizeProgramTables, tablesToText } from '../src/main/sources/academic';
 import type { CampusReader } from '../src/main/sources/timetable-sync';
 import { AppContext } from '../src/main/app-context';
 import { nullChannels } from '../src/main/engine/channels';
@@ -44,6 +44,44 @@ describe('培养方案完成情况', () => {
   });
 });
 
+describe('培养方案：数据接口里的分类树', () => {
+  const tree = {
+    student: { major: { nameZh: '工科试验班（集成电路产教融合班）' }, department: { nameZh: '集成电路与微纳电子创新学院' }, grade: '2025' },
+    root: {
+      nameZh: '培养方案', requireCredits: 150, passedCredits: 53, takingCredits: 16.5,
+      children: [
+        { nameZh: '通识教育', requireCredits: 46, passedCredits: 20, children: [{ nameZh: '核心课程', requireCredits: 28, passedCredits: 12 }] },
+        { nameZh: '专业必修', requireCredits: 60, passedCredits: 25 },
+      ],
+    },
+  };
+
+  it('按层级认出各类别的要求、已获、在修学分', () => {
+    expect(modulesFromJson(tree)).toEqual([
+      { name: '培养方案', required: 150, earned: 53, remaining: 97, taking: 16.5 },
+      { name: '　通识教育', required: 46, earned: 20, remaining: 26 },
+      { name: '　　核心课程', required: 28, earned: 12, remaining: 16 },
+      { name: '　专业必修', required: 60, earned: 25, remaining: 35 },
+    ]);
+  });
+
+  it('接口只有汇总时，再读页面表格', async () => {
+    const reader: CampusReader = {
+      getText: async (url) => ({ url, status: url.includes('/json/') ? 200 : 404, text: JSON.stringify({ requireCredits: 150, passedCredits: 53 }) }),
+      render: async () => programPage,
+    };
+    const r = await readProgramCompletion(reader, '1');
+    expect(r.source).toBe('page');
+    expect(r.modules.map((m) => m.name)).toEqual(['通识教育', '专业必修']);
+    expect(r.text).toContain('数据接口汇总');
+  });
+
+  it('从教务数据里认出院系、专业、年级', () => {
+    const text = 'student.major.nameZh: 工科试验班（集成电路产教融合班）\nstudent.department.nameZh: 集成电路与微纳电子创新学院\nstudent.grade: 2025';
+    expect(profileFactsFromText(text)).toEqual({ department: '集成电路与微纳电子创新学院', major: '工科试验班（集成电路产教融合班）', grade: '2025' });
+  });
+});
+
 describe('选课结果', () => {
   const semesterPage = `<select id="allSemesters"><option value="521" selected>2026-2027学年1学期</option></select><script>var semesters = JSON.parse('[{"id":541,"name":"2026-2027学年2学期"},{"id":521,"name":"2026-2027学年1学期"}]');</script>`;
   const printData = (activities: unknown[]) => JSON.stringify({ studentTableVms: [{ id: 1, activities }] });
@@ -68,6 +106,18 @@ describe('选课结果', () => {
 describe('接进应用', () => {
   const cleanups: (() => Promise<void>)[] = [];
   afterEach(async () => { for (const c of cleanups.splice(0)) await c(); });
+  it('用教务系统的信息补全「关于我」，改了什么说一声', async () => {
+    const posted: string[] = [];
+    const ctx = new AppContext({ dbPath: ':memory:', channels: { ...nullChannels, messagePosted: (m) => posted.push(m.content) }, elearning: () => null, mail: () => null });
+    cleanups.push(() => ctx.close());
+    ctx.repo.setProfile({ school: '微电子' });
+    ctx.learnProfile({ department: '集成电路与微纳电子创新学院', major: '工科试验班（集成电路产教融合班）', grade: '2025', degree: '本科' });
+    expect(ctx.repo.getProfile()).toMatchObject({ school: '集成电路与微纳电子创新学院', major: '工科试验班（集成电路产教融合班）', grade: '2025级', degree: '本科' });
+    expect(posted[0]).toContain('专业：工科试验班');
+    ctx.learnProfile({ department: '集成电路与微纳电子创新学院', grade: '2025' });
+    expect(posted).toHaveLength(1);
+  });
+
   it('培养方案完成情况按敏感内容处理；选课结果可以直接查', async () => {
     const ctx = new AppContext({ dbPath: ':memory:', channels: nullChannels, elearning: () => null, mail: () => null });
     cleanups.push(() => ctx.close());

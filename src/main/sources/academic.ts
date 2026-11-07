@@ -41,7 +41,7 @@ export function tablesToText(tables: PageTable[], max = 8000): string {
 
 export interface ProgramCompletion {
   /** 学分相关的汇总行：类别、要求、已获得（能识别表头时） */
-  modules: { name: string; required?: number; earned?: number; remaining?: number }[];
+  modules: { name: string; required?: number; earned?: number; remaining?: number; taking?: number }[];
   /** 页面表格的文本（识别不了表头时也有） */
   text: string;
   source: 'json' | 'page';
@@ -70,22 +70,68 @@ export function summarizeProgramTables(tables: PageTable[]): ProgramCompletion['
 
 /** 数据接口返回的 JSON：不认识结构时，把它压平成「路径: 值」的文本交给模型 */
 function flattenJson(value: unknown, prefix = '', out: string[] = [], depth = 0): string[] {
-  if (out.length > 400 || depth > 6) return out;
-  if (Array.isArray(value)) value.slice(0, 80).forEach((v, i) => flattenJson(v, `${prefix}[${i}]`, out, depth + 1));
+  if (out.length > 800 || depth > 9) return out;
+  if (Array.isArray(value)) value.slice(0, 150).forEach((v, i) => flattenJson(v, `${prefix}[${i}]`, out, depth + 1));
   else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) flattenJson(v, prefix ? `${prefix}.${k}` : k, out, depth + 1);
   else if (value !== null && value !== undefined && value !== '') out.push(`${prefix}: ${String(value).slice(0, 80)}`);
   return out;
 }
 
+/**
+ * 数据接口里的分类树：找出同时带「名称」和「学分」字段的节点（课程类别 / 模块），按层级列出。
+ * 字段名不固定，按常见写法匹配：名称 name / nameZh / typeName / moduleName；
+ * 要求 requireCredits / requiredCredits / minCredits；已获 passedCredits / acquiredCredits / finishedCredits / completedCredits；
+ * 在修 takingCredits / studyingCredits。
+ */
+export function modulesFromJson(data: unknown): ProgramCompletion['modules'] {
+  const out: ProgramCompletion['modules'] = [];
+  const pick = (o: Record<string, unknown>, re: RegExp) => {
+    for (const [k, v] of Object.entries(o)) if (re.test(k)) { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined; if (n !== undefined) return n; }
+    return undefined;
+  };
+  const nameOf = (o: Record<string, unknown>) => {
+    for (const k of ['nameZh', 'name', 'typeName', 'moduleName', 'courseTypeName', 'groupName', 'title']) {
+      const v = o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (v && typeof v === 'object' && typeof (v as { nameZh?: unknown }).nameZh === 'string') return (v as { nameZh: string }).nameZh;
+    }
+    return undefined;
+  };
+  const walk = (v: unknown, depth: number) => {
+    if (out.length >= 80 || depth > 8) return;
+    if (Array.isArray(v)) { v.forEach((x) => walk(x, depth)); return; }
+    if (!v || typeof v !== 'object') return;
+    const o = v as Record<string, unknown>;
+    const name = nameOf(o);
+    const required = pick(o, /^(require|required|min|need)\w*credit/i);
+    const earned = pick(o, /^(passed|acquired|finished|completed|obtain|earned|got)\w*credit/i);
+    const taking = pick(o, /^(taking|studying|selected|inProgress|current)\w*credit/i);
+    let next = depth;
+    if (name && (required !== undefined || earned !== undefined)) {
+      out.push({ name: `${'　'.repeat(Math.min(depth, 3))}${name}`, required, earned, remaining: required !== undefined && earned !== undefined ? Math.max(0, Math.round((required - earned) * 10) / 10) : undefined, ...(taking !== undefined ? { taking } : {}) });
+      next = depth + 1;
+    }
+    for (const child of Object.values(o)) if (child && typeof child === 'object') walk(child, next);
+  };
+  walk(data, 0);
+  return out;
+}
+
 export async function readProgramCompletion(reader: CampusReader, studentId: string): Promise<ProgramCompletion> {
   const now = new Date().toISOString();
+  let jsonFallback: ProgramCompletion | undefined;
   for (const url of [`${PROGRAM_PAGE}/json/${studentId}`, `${PROGRAM_PAGE}/info/${studentId}`]) {
     try {
       const res = await reader.getText(url);
       if (res.status >= 400) continue;
       try {
         const data = JSON.parse(res.text) as unknown;
-        return { modules: [], text: flattenJson(data).join('\n').slice(0, 8000), source: 'json', updatedAt: now };
+        const modules = modulesFromJson(data);
+        const result: ProgramCompletion = { modules, text: flattenJson(data).join('\n').slice(0, 12000), source: 'json', updatedAt: now };
+        if (modules.length > 1) return result;
+        // 只有汇总、没有分类明细：再看页面表格
+        jsonFallback = result;
+        continue;
       } catch { /* 不是 JSON，看看是不是带表格的页面 */ }
       const tables = extractTables(res.text);
       if (tables.length) return { modules: summarizeProgramTables(tables), text: tablesToText(tables), source: 'page', updatedAt: now };
@@ -93,11 +139,19 @@ export async function readProgramCompletion(reader: CampusReader, studentId: str
       if ((e as Error).name === 'NeedLoginError') throw e;
     }
   }
-  if (!reader.render) throw new Error('教务系统没有返回培养方案完成情况。');
-  const html = await reader.render(PROGRAM_PAGE, (h) => /<table/i.test(h) && /学分/.test(h));
+  if (!reader.render) {
+    if (jsonFallback) return jsonFallback;
+    throw new Error('教务系统没有返回培养方案完成情况。');
+  }
+  const html = await reader.render(PROGRAM_PAGE, (h) => /<table/i.test(h) && /学分/.test(h)).catch(() => '');
   const tables = extractTables(html);
-  if (!tables.length) throw new Error('没有在教务系统里读到培养方案完成情况（页面可能还没开放或改版了）。');
-  return { modules: summarizeProgramTables(tables), text: tablesToText(tables), source: 'page', updatedAt: now };
+  if (!tables.length) {
+    if (jsonFallback) return jsonFallback;
+    throw new Error('没有在教务系统里读到培养方案完成情况（页面可能还没开放或改版了）。');
+  }
+  const modules = summarizeProgramTables(tables);
+  // 页面表格和数据接口的汇总都交给模型
+  return { modules, text: [tablesToText(tables), jsonFallback ? `\n【数据接口汇总】\n${jsonFallback.text.slice(0, 3000)}` : ''].join(''), source: 'page', updatedAt: now };
 }
 
 export interface SelectedCourses {
@@ -150,4 +204,14 @@ export async function readSelectedCourses(reader: CampusReader, which = 'current
     } catch { /* 选课页面读不到不影响选课结果 */ }
   }
   return { semester: target.name, courses, totalCredits: withCredits.length === courses.length && courses.length ? withCredits.reduce((n, c) => n + c.credits!, 0) : undefined, rounds };
+}
+
+/** 从教务数据（压平的 JSON 文本）里认出院系、专业、年级 */
+export function profileFactsFromText(text: string): { department?: string; major?: string; grade?: string } {
+  const find = (re: RegExp) => text.match(re)?.[1]?.trim();
+  return {
+    department: find(/(?:^|\n)[\w.\[\]]*?(?:department|depart|college)(?:Name)?(?:\.nameZh)?: ([^\n]{2,40})/i),
+    major: find(/(?:^|\n)[\w.\[\]]*?major(?:Name)?(?:\.nameZh)?: ([^\n]{2,40})/i),
+    grade: find(/(?:^|\n)[\w.\[\]]*?(?:grade|enrollYear|year)(?:Name)?: (20\d{2})/i),
+  };
 }

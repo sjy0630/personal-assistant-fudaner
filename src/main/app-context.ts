@@ -33,7 +33,7 @@ import { demoSearch } from './demo/demo-campus';
 import { readElectricity, type DormElectricity } from './sources/dorm';
 import { readGpaRank, readGrades, type GpaRank, type GradeReport } from './sources/grades';
 import { demoGrades, demoProgram, demoSelected } from './demo/demo-campus';
-import { readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
+import { profileFactsFromText, readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
 import { readStudentId } from './sources/grades';
 
 /**
@@ -425,6 +425,31 @@ export class AppContext {
     if (degree === '硕士' || degree === '博士') throw new Error('研究生的培养方案和选课在研究生系统里，暂时还读不到。');
   }
 
+  /**
+   * 用教务系统里的权威信息补全「关于我」：空着的补上，和教务系统不一致的以教务系统为准，
+   * 改了什么在对话里说一声（只说一次）。年级写成「2025级」。
+   */
+  learnProfile(facts: { department?: string; major?: string; grade?: string; degree?: '本科' | '硕士' | '博士' }): void {
+    const profile = this.repo.getProfile();
+    const same = (a?: string, b?: string) => !!a && !!b && (a.includes(b) || b.includes(a));
+    const patch: Partial<typeof profile> = {};
+    const changes: string[] = [];
+    const take = (key: 'school' | 'major' | 'grade', value: string | undefined, label: string) => {
+      const v = value?.trim();
+      if (!v || same(profile[key], v)) return;
+      patch[key] = v;
+      changes.push(`${label}：${v}`);
+    };
+    take('school', facts.department, '院系');
+    take('major', facts.major, '专业');
+    take('grade', facts.grade ? (/级$/.test(facts.grade) ? facts.grade : `${facts.grade}级`) : undefined, '年级');
+    if (facts.degree && !profile.degree) { patch.degree = facts.degree; changes.push(`学历：${facts.degree}`); }
+    if (!changes.length) return;
+    this.repo.setProfile(patch);
+    const msg = this.repo.addMessage({ role: 'assistant', content: `我从教务系统看到了你的基本信息，已经更新到「关于我」：${changes.join('；')}。不对的话告诉我，或者到「设置 → 关于我」修改。`, proactive: true, trigger: 'profile-learned' });
+    this.deps.channels.messagePosted(msg);
+  }
+
   /** 培养方案完成情况（缓存 1 小时）。属于学业记录，按敏感内容处理 */
   async programCompletion(opts: { force?: boolean } = {}): Promise<ProgramCompletion> {
     if (this.repo.getSettings().demoMode) return demoProgram();
@@ -433,6 +458,7 @@ export class AppContext {
     this.undergradOnly();
     const r = await readProgramCompletion(this.reader(), await this.studentId());
     this.repo.setKv('program_completion', r);
+    this.learnProfile({ ...profileFactsFromText(r.text), degree: '本科' });
     return r;
   }
 
@@ -453,6 +479,7 @@ export class AppContext {
     const number = this.repo.getProfile().studentNumber ?? (mailUser && /^\d{8,12}$/.test(mailUser) ? mailUser : undefined);
     const rank = await readGpaRank(this.reader(), studentId, number);
     if (!rank) return { total: 0, note: '教务系统没有提供绩点排名（可能还没开放）。' };
+    if (rank.ranking !== undefined) this.learnProfile({ department: rank.department, major: rank.major, grade: rank.grade, degree: '本科' });
     if (rank.ranking === undefined) return { ...rank, note: number ? '排名列表里没有找到你的学号。' : '告诉我你的学号，我才能在排名里找到你（学号只存在本机）。' };
     return rank;
   }
