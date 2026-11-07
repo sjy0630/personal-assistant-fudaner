@@ -63,9 +63,13 @@ const BASE: Record<Trigger['kind'], Rule> = {
   assignment_new: (t) => ({ value: 0.55, urgency: 0.4, action: 'card', draft: `${p(t, 'course')} 发布了新作业「${p(t, 'title')}」，${p(t, 'dueText')}截止。`, reason: '新作业，已加入课程目标' }),
   assignment_changed: (t) => ({ value: 0.7, urgency: 0.6, action: 'chat', draft: `注意：「${p(t, 'title')}」的截止时间改成了 ${p(t, 'dueText')}。`, reason: '截止时间变更' }),
   // 之前提醒过（或约好跟进）的作业交了：马上在对话里确认一句，形成闭环；没提醒过的就攒到早安里
-  assignment_submitted: (t) => t.payload.wasReminded
-    ? { value: 0.5, urgency: 0.2, action: 'chat', draft: `看到「${p(t, 'title')}」已经交了 👍 相关提醒都取消了。`, reason: '之前提醒过的作业已提交，闭环确认' }
-    : { value: 0.3, urgency: 0.1, action: 'digest', draft: `看到「${p(t, 'title')}」已经交了 👍`, reason: '已提交，提醒自动结束' },
+  // doneBy：submitted = 本人有提交记录；marked = 在 eLearning 上标记完成（组作业由组长提交等）或教师免交
+  assignment_submitted: (t) => {
+    const how = t.payload.doneBy === 'marked' ? '在 eLearning 上标记为完成了' : '已经交了';
+    return t.payload.wasReminded
+      ? { value: 0.5, urgency: 0.2, action: 'chat', draft: `看到「${p(t, 'title')}」${how} 👍 相关提醒都取消了。`, reason: '之前提醒过的作业已完成，闭环确认' }
+      : { value: 0.3, urgency: 0.1, action: 'digest', draft: `看到「${p(t, 'title')}」${how} 👍`, reason: '已完成，提醒自动结束' };
+  },
   announcement_new: (t) => ({ value: 0.45, urgency: 0.3, action: 'card', draft: `${p(t, 'course')} 有新公告：「${p(t, 'title')}」。`, reason: '你选的课发了公告' }),
   mail_new: (t, ctx) => {
     const cat = p(t, 'category');

@@ -19,9 +19,22 @@ export interface CanvasAssignment {
   htmlUrl: string;
   /** 'online' 表示网上提交；'on_paper' / 'none' 表示线下或无需提交 */
   submissionTypes: string[];
+  /** 本人有提交记录（已提交 / 已评分 / 待审阅） */
   submitted: boolean;
   submittedAt?: string;
   updatedAt?: string;
+  /**
+   * 在 eLearning 上被标记为完成但不一定有本人提交记录，例如：
+   * - 学生在「待办 / 计划」里勾选了「标记为完成」（组作业由组长提交、线下提交等）；
+   * - 单元（模块）里要求「标记为完成」的作业，已点过完成；
+   * - 教师设置了免交（excused）。
+   */
+  markedDone?: boolean;
+}
+
+/** 作业在平台上是否算完成：有提交记录，或已标记完成 / 免交 */
+export function isAssignmentDone(a: Pick<CanvasAssignment, 'submitted' | 'markedDone'>): boolean {
+  return a.submitted || !!a.markedDone;
 }
 
 export interface CanvasAnnouncement {
@@ -139,13 +152,46 @@ export class CanvasClient implements ElearningClient {
     return courses;
   }
 
+  /** 「待办 / 计划」里被勾选为完成的作业 ID（一次同步内缓存 1 分钟，避免每门课重复请求） */
+  private plannerMarks?: { at: number; ids: Promise<Set<string>> };
+
+  private markedInPlanner(): Promise<Set<string>> {
+    if (!this.plannerMarks || Date.now() - this.plannerMarks.at > 60_000) {
+      type Override = { plannable_type: string; plannable_id: number | string; marked_complete?: boolean };
+      const ids = this.get<Override[]>('/planner/overrides')
+        .then((rows) => new Set(rows.filter((o) => o.plannable_type === 'assignment' && o.marked_complete).map((o) => String(o.plannable_id))))
+        // 计划功能未开放或无权限时，不影响作业同步
+        .catch((error) => {
+          if ([403, 404].includes((error as { status?: number }).status ?? 0)) return new Set<string>();
+          throw error;
+        });
+      this.plannerMarks = { at: Date.now(), ids };
+    }
+    return this.plannerMarks.ids;
+  }
+
+  /** 单元（模块）里要求「标记为完成」且已完成的作业 ID */
+  private async markedInModules(courseId: string): Promise<Set<string>> {
+    type Module = { items?: { type: string; content_id?: number | string; completion_requirement?: { type: string; completed?: boolean } }[] };
+    try {
+      const modules = await this.get<Module[]>(`/courses/${courseId}/modules`, { 'include[]': ['items'] });
+      return new Set(modules.flatMap((m) => m.items ?? [])
+        .filter((i) => i.type === 'Assignment' && i.content_id != null && i.completion_requirement?.type === 'must_mark_done' && i.completion_requirement.completed)
+        .map((i) => String(i.content_id)));
+    } catch (error) {
+      if ([403, 404].includes((error as { status?: number }).status ?? 0)) return new Set<string>();
+      throw error;
+    }
+  }
+
   async listAssignments(courseId: string): Promise<CanvasAssignment[]> {
     type Raw = {
       id: number; course_id: number; name: string; description?: string; due_at?: string;
       html_url: string; submission_types: string[]; updated_at?: string;
-      submission?: { workflow_state: string; submitted_at?: string };
+      submission?: { workflow_state: string; submitted_at?: string; excused?: boolean };
     };
     const raw = await this.get<Raw[]>(`/courses/${courseId}/assignments`, { 'include[]': ['submission'] });
+    const [planner, modules] = await Promise.all([this.markedInPlanner(), this.markedInModules(courseId)]);
     return raw.map((a) => ({
       id: String(a.id),
       courseId: String(a.course_id),
@@ -157,6 +203,7 @@ export class CanvasClient implements ElearningClient {
       submitted: !!a.submission && ['submitted', 'graded', 'pending_review'].includes(a.submission.workflow_state),
       submittedAt: a.submission?.submitted_at,
       updatedAt: a.updated_at,
+      markedDone: planner.has(String(a.id)) || modules.has(String(a.id)) || a.submission?.excused === true,
     }));
   }
 

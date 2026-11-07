@@ -1,5 +1,5 @@
 import { parseCourseCode, } from '@fudaner/mcp-fudan-courses';
-import type { ElearningClient } from '@fudaner/mcp-fudan-elearning';
+import { isAssignmentDone, type ElearningClient } from '@fudaner/mcp-fudan-elearning';
 import type { Repo } from '../db/repo';
 import { fmt } from '../engine/engine';
 
@@ -33,19 +33,24 @@ export async function syncElearning(client: ElearningClient, repo: Repo, now = n
       const thread = `course:${course.code}`;
 
       for (const a of assignments.get(c.id) ?? []) {
+        // 完成 = 本人有提交记录，或在 eLearning 上已标记完成（组作业由组长提交、线下提交）/ 教师免交
+        const done = isAssignmentDone(a);
         const { item, created, changedFields } = repo.upsertItem({
           source: 'elearning', kind: 'assignment', sourceId: a.id, title: a.name, body: stripHtml(a.description ?? ''),
-          url: a.htmlUrl, publishedAt: a.updatedAt ?? now.toISOString(), dueAt: a.dueAt, courseId: course.id, done: a.submitted,
+          url: a.htmlUrl, publishedAt: a.updatedAt ?? now.toISOString(), dueAt: a.dueAt, courseId: course.id, done,
         });
-        repo.upsertTaskForItem({ goalId: goal.id, itemId: item.id, title: a.name, dueAt: a.dueAt, done: a.submitted, verify: { type: 'assignment_submitted', itemId: item.id } });
-        const payload = { itemId: item.id, title: a.name, course: course.name, dueAt: a.dueAt, dueText: a.dueAt ? fmt(a.dueAt) : '未定' };
+        repo.upsertTaskForItem({ goalId: goal.id, itemId: item.id, title: a.name, dueAt: a.dueAt, done, verify: { type: 'assignment_submitted', itemId: item.id } });
+        const payload = {
+          itemId: item.id, title: a.name, course: course.name, dueAt: a.dueAt, dueText: a.dueAt ? fmt(a.dueAt) : '未定',
+          doneBy: a.submitted ? 'submitted' : a.markedDone ? 'marked' : undefined,
+        };
         if (created && (!firstSync || isRecent(a.updatedAt))) {
           add({ source: 'elearning', kind: 'assignment_new', sourceRef: a.id, threadKey: thread, payload });
         }
         if (!created && changedFields.includes('dueAt')) {
           add({ source: 'elearning', kind: 'assignment_changed', sourceRef: `${a.id}:${a.dueAt}`, threadKey: thread, payload: { ...payload, dueChanged: true } });
         }
-        if (!created && changedFields.includes('done') && a.submitted) {
+        if (!created && changedFields.includes('done') && done) {
           add({ source: 'elearning', kind: 'assignment_submitted', sourceRef: a.id, threadKey: thread, payload });
         }
       }
