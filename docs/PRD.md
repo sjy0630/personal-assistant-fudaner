@@ -186,6 +186,9 @@
 | [fudan-courseflow](https://github.com/kniphofia1/fudan-courseflow) | Docker | eLearning 课件下载 + iCourse 本地转写与摘要 | 证明本地 ASR（SenseVoice）在普通 CPU 上可行 |
 | DanXi（旦夕） | 手机 App | 课表、校园卡、树洞等校园工具 | 工具型应用，没有智能体能力 |
 
+| [thu-cli](https://github.com/bill810975/thu-cli)（清华，source-available，含 BSL 1.1 派生代码） | Rust 命令行 + Codex skill | 清华 Info / 网络学堂的课程、作业、课表、一卡通、图书馆、邮箱等；体育场馆预约、报销草稿与提交（写操作需 `--confirm`）；保存凭据自动续期 | 本身没有智能体，是给 Codex 等编程智能体用的工具层，相当于本产品的 MCP 层。证明「校园服务做成智能体工具」有需求；它保存密码换自动续期，本产品不保存密码，取舍不同 |
+| 复旦社区 MCP 服务：[danta-mcp](https://github.com/likangxian1007/danta-mcp)（GPL-3.0）、[FudanMailBox_MCP](https://github.com/BuddyKang/FudanMailBox_MCP)（MIT）、[fudan-library-mcp](https://github.com/LvDAO/fudan-library-mcp)（MIT）、[ehall](https://github.com/H4S2O8/ehall)（未声明协议） | 独立 MCP 服务（多为 Python） | 树洞与旦克课程评价检索；学生邮箱收发信；图书馆文献检索与全文索引；一卡通、宿舍电量、体育场馆预约 | 都是单点工具，需要用户自己配置到 Claude / Codex 等客户端，多数要求把学号密码写进环境变量。本产品可以作为它们的「宿主」：后续支持在设置里接入外部 MCP 服务（§7.5） |
+| [fdudash](https://github.com/FDU-Utils/fdudash)（GPL-3.0） | 本地 Node 服务 + 网页 / Tauri | 复旦仪表盘：待办、课表、eLearning、考试、空教室、天气 | 查询型仪表盘，没有智能体 |
 | Muse / Dots 等通用 AI 伴侣 | App | 记忆、主动对话、陪伴 | 体验是我们的参照；但它们接触不到复旦的平台和数据 |
 | [dsh-superagent](https://github.com/deepseek-ai/dsh-superagent-prototype)（DeepSeek 开源，研究原型，MIT） | 基于 DeepSeek Harness 的插件 | 面向 GitHub / 飞书的主动型编程智能体：监听事件、评估是否接活、在独立会话中执行、回到原对话交付 | 借鉴其「最少注意力」理念和领域模型，作为我们智能体运行架构的参考（§7.8） |
 
@@ -632,6 +635,13 @@
 - 对话工具：`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`。
 - 全部只读，不改动选课、不提交任何表单。学校接口地址和返回格式参考了同学开源的 FduNav-Desktop（AGPL-3.0），代码为本项目独立实现。
 
+### 5.8.4 定时提醒与定时任务 · 11/7 新增
+
+- 用户在对话里说「每天 22:00 提醒我背单词」「每周一 8 点帮我汇总通知和 DDL」，助理用 `create_reminder` 创建；也可在「设置 → 助理 → 定时提醒」手动添加、暂停、删除（`list_reminders`、`cancel_reminder`）。
+- 两种：**提醒**（到点弹系统通知 + 对话消息）；**定时任务**（到点由助理按用户写好的要求自动完成，结果作为主动消息发到对话里，不伪造用户消息；没接模型时退回成提醒）。
+- 重复规则：一次、每天、工作日、每周几。用户自己设的，到点必达：不占注意力预算、不受静默时段限制；「暂停提醒 1 小时」期间顺延；电脑睡眠错过超过 12 小时的跳过、只排下一次。
+- 和 `schedule_followup`（助理根据用户的计划主动约的一次跟进）互补。
+
 ### 5.9 随叫随到 · P1
 
 - 全局快捷键（如 `Alt + Space`）唤出一个小对话框，随时问一句；需要展开时跳转到主对话。
@@ -840,7 +850,24 @@ interface FudanAuth {
 | `fudan-courses` | `list_courses()`、`get_course(code)`：返回该课程在各平台的数据汇总（作业、公告、相关邮件、回放） | P0 |
 | `fudaner-local` | **记忆**：`remember(content, type)`、`recall(query)`、`forget(id)`、`get_profile()`<br>**目标**：`list_goals(level?)`、`create_goal(title, level, due?)`、`add_task(goal_id, title, due?)`、`update_progress(id, status)`、`list_deadlines(range)`、`schedule_followup(topic, at, ref?)`<br>**动态**：`push_feed_card(type, title, body, reason, refs, actions)`<br>**资源库**：`save_resource(title, content, course?)`、`search_resources(query, course?)`、`read_resource(id, range?)`<br>**搜索**：`search_all(query, types?)` | P0 |
 | `fudan-icourse` | `list_replays(course?)`、`search_transcript(query, course?)`、`get_replay_summary(id)` | P1 |
-| `fudan-jwfw`（教务） | `get_timetable()`、`get_exams()` | P2 |
+| `fudan-jwfw`（教务） | `get_timetable()`、`get_exams()` | P2（11/7 已实现，工具暂在 fudaner-local） |
+
+**现状（11/7）：**
+
+| MCP 服务 | 已实现的工具 | 数据从哪来 | 说明 |
+|---|---|---|---|
+| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`（可带 `refresh` 先实时同步）、`get_assignment`、`list_announcements` | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
+| `fudan-mail`（独立包） | `search_mail`、`get_mail`、`list_action_required` | 本地库（IMAP 同步） | 只读，不发信 |
+| `fudan-courses`（独立包） | `list_courses`、`get_course` | 本地库 | 跨平台课程总表 |
+| `fudaner-local` | 记忆、目标、动态、资源库、搜索，以及 11/7 新增的校园工具：`search_notices`、`get_notice`、`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`、`import_article`、`list_activities`、`add_activity_to_plan` | 本地库；图书馆、校园卡实时查询 | 校园工具先放在这里，决赛前拆成独立包 |
+| `fudan-icourse` | — | — | 未实现 |
+
+- 课表、考试、校园卡的客户端已经写好（`src/main/sources/`），但工具还在 `fudaner-local` 里；决赛前拆成 `mcp-fudan-jwfw`（课表、考试）、`mcp-fudan-notices`（官网通知）、`mcp-fudan-campus`（校园卡、图书馆）三个独立包。
+- 所有服务目前都只能在应用内运行（InMemoryTransport），还没有 stdio 入口，不能直接配到 Claude / Codex 里用。
+- **外部 MCP 服务（11/7 已实现）**：「设置 → 扩展服务」可以接入社区做好的复旦 MCP 服务，以子进程（stdio）运行，旦旦直接调用。预设三个：复旦图书馆文献检索（fudan-library-mcp）、旦挞树洞与旦克课程评价（danta-mcp）、ehall 宿舍电量与场馆空闲；也可以添加自定义服务。
+  - 账号由各服务自己保存（它们的配置脚本、.env、系统钥匙串），Fudaner 不读取、不保存；
+  - 只开放查询类工具：预设按工具名白名单（ehall 的预约、取消，旦挞会写本机文件的报告工具都不开放），自定义服务默认只开放标了只读的工具；没开放的工具模型看不到也调不到；
+  - 子进程环境不带应用的 API Key 等变量；工具结果当作外部数据；后台工单执行器不接入外部服务。
 
 **每个连接器分两层：**
 

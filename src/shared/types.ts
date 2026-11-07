@@ -297,6 +297,26 @@ export interface Ticket {
 
 export type SemesterPhase = 'regular' | 'course_selection' | 'midterm' | 'pre_exam' | 'exam' | 'holiday';
 
+/** 定时提醒（到点提醒一句）或定时任务（到点让助理按 prompt 做一件事，结果发到对话里） */
+export type ReminderRepeat =
+  | { type: 'once'; at: string }
+  | { type: 'daily'; time: string }
+  | { type: 'weekly'; time: string; weekdays: number[] };
+export interface Reminder {
+  id: string;
+  title: string;
+  kind: 'remind' | 'task';
+  /** 提醒：提醒的话（可省略，用标题）；任务：到时要助理做的事 */
+  prompt?: string;
+  repeat: ReminderRepeat;
+  /** 下一次触发时间；一次性的触发后为空 */
+  nextAt?: string;
+  enabled: boolean;
+  lastRunAt?: string;
+  createdBy: 'chat' | 'manual';
+  createdAt: string;
+}
+
 export interface Followup {
   id: string;
   topic: string;
@@ -324,9 +344,38 @@ export interface Settings {
   feeds?: FeedSource[];
   /** 关注的学校和院系官网通知来源 id；未设置时默认教务处 + 本人院系 */
   noticeSources?: string[];
+  /** 接入的外部 MCP 服务（社区做的复旦校园服务等），见 src/main/mcp/external.ts */
+  externalMcp?: ExternalMcpConfig[];
 }
 
 export interface FeedSource { url: string; name?: string }
+
+export type ExternalMcpPreset = 'fudan-library' | 'danta' | 'ehall' | 'custom';
+export interface ExternalMcpConfig {
+  /** 唯一 id，小写字母数字和短横线 */
+  id: string;
+  preset: ExternalMcpPreset;
+  name: string;
+  enabled: boolean;
+  /** 预设里需要本地目录的服务（旦挞、ehall）：用户克隆到的文件夹 */
+  dir?: string;
+  /** 自定义服务：启动命令、参数、工作目录 */
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  /** 自定义服务：默认只开放标了只读的工具；勾选后开放全部工具 */
+  allowAllTools?: boolean;
+}
+
+export interface ExternalMcpStatus {
+  id: string;
+  name: string;
+  state: 'off' | 'connecting' | 'ok' | 'error';
+  tools: string[];
+  /** 因为可能修改数据而没有开放的工具 */
+  blocked: string[];
+  error?: string;
+}
 
 export type PlatformName = 'elearning' | 'icourse' | 'mail';
 export interface PlatformState { platform: PlatformName; status: 'ok' | 'need_login' | 'unavailable' | 'not_configured' | 'demo'; message?: string; checkedAt?: string }

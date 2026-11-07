@@ -1,5 +1,5 @@
 import type {
-  Item,
+  Item, ExternalMcpConfig, ExternalMcpStatus, Reminder, ReminderRepeat,
   ChatMessage, CardRef, EvalRecord, FeedCard, Goal, Memory, PlatformState, Profile, Resource,
   SearchHit, Settings, Task, Ticket, TodayOverview, ToolCallView,
 } from './types';
@@ -71,6 +71,19 @@ export interface FudanerApi {
     importExams(): Promise<{ exams: number; added: number }>;
     library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
     cardBalance(): Promise<{ balance: number; at: string }>;
+  };
+  external: {
+    /** 预设服务的说明（名称、能做什么、准备步骤、仓库、协议） */
+    presets(): Promise<{ preset: string; name: string; summary: string; repo: string; license: string; setup: string[]; needsDir: boolean; dirHint?: string }[]>;
+    status(): Promise<ExternalMcpStatus[]>;
+    /** 保存配置并重新连接，返回连接结果 */
+    save(configs: ExternalMcpConfig[]): Promise<ExternalMcpStatus[]>;
+  };
+  reminders: {
+    list(): Promise<Reminder[]>;
+    add(r: { title: string; kind: Reminder['kind']; prompt?: string; repeat: ReminderRepeat }): Promise<Reminder>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+    remove(id: string): Promise<void>;
   };
   notices: {
     /** 全部可选来源，以及是否已关注、上次读取的问题 */

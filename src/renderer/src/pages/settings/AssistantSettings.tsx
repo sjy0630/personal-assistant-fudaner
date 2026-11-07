@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { toggleObserveRule, validateQuietHours } from '../settings-state';
 import { Feedback, Loading, same, useLoad, useTask, type PanelProps } from './support';
 import styles from './Settings.module.css';
+import { RemindersPanel } from './RemindersPanel';
 
 const STYLES = [
   ['warm', '温和体贴', '我们一起理一下安排，先从最着急的事开始。'],
@@ -230,6 +231,7 @@ export function AssistantSettings({ onDirty, onBusy }: PanelProps) {
           </button>
         </section>
       </fieldset>
+      <RemindersPanel onBusy={onBusy} />
       <Feedback {...task} />
     </>
   );

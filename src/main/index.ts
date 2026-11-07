@@ -148,6 +148,8 @@ app.whenReady().then(async () => {
   if (process.env.FUDANER_DEMO === '1' && !ctx.repo.getSettings().demoMode) ctx.repo.setSettings({ demoMode: true });
   if (ctx.repo.getSettings().demoMode) seedDemoProfile(ctx.repo);
   await ctx.start();
+  // 外部 MCP 服务在后台连接，不拖慢启动
+  void ctx.reloadExternal().catch(() => undefined);
 
   // 调度：引擎每 10 秒处理一次事件；平台每 30 分钟同步一次（加随机抖动，PRD §9）
   let paused = 0;
@@ -162,6 +164,8 @@ app.whenReady().then(async () => {
     clearInterval(engineTimer);
     engineTimer = setInterval(async () => {
       if (Date.now() < paused) return;
+      // 定时提醒 / 定时任务（用户自己设的，暂停提醒期间顺延）
+      await ctx.runReminders().catch((e) => console.error('[reminders]', e));
       await ctx.engine.tick().catch((e) => console.error('[engine]', e));
       await ctx.executor.runNext().catch((e) => console.error('[executor]', e));
     }, 10_000);
