@@ -7,7 +7,8 @@ import type { LlmTool } from '../ai/llm';
 interface Connected {
   name: string;
   client: Client;
-  tools: { name: string; description?: string; inputSchema: Record<string, unknown> }[];
+  /** readOnly 来自服务声明的 readOnlyHint，只供本地循环判断，不发给模型 */
+  tools: { name: string; description?: string; inputSchema: Record<string, unknown>; readOnly: boolean }[];
   /** 外部服务（独立进程）：调用超时更长 */
   external?: boolean;
 }
@@ -28,7 +29,7 @@ export class McpHub {
     const client = new Client({ name: `fudaner-agent→${name}`, version: '0.1.0' });
     await client.connect(clientT);
     const { tools } = await client.listTools();
-    this.servers.push({ name, client, tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown> })) });
+    this.servers.push({ name, client, tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown>, readOnly: t.annotations?.readOnlyHint === true })) });
   }
 
   /**
@@ -51,7 +52,7 @@ export class McpHub {
       const open = tools.filter((t) => allow({ name: t.name, annotations: t.annotations as { readOnlyHint?: boolean } | undefined }));
       this.servers.push({
         name, client, external: true,
-        tools: open.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown> })),
+        tools: open.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown>, readOnly: t.annotations?.readOnlyHint === true })),
       });
       return { tools: open.map((t) => t.name), blocked: tools.filter((t) => !open.includes(t)).map((t) => t.name) };
     } catch (e) {
@@ -80,6 +81,12 @@ export class McpHub {
           function: { name: `${s.name.replace(/-/g, '_')}__${t.name}`, description: `[${s.name}] ${t.description ?? ''}`, parameters: t.inputSchema },
         })),
     );
+  }
+
+  /** 只信任服务注册的只读标记；未知工具和写工具都不能复用执行结果。 */
+  isReadOnly(qualified: string): boolean {
+    const [srv, tool] = qualified.split('__');
+    return this.servers.find(s => s.name.replace(/-/g, '_') === srv)?.tools.find(t => t.name === tool)?.readOnly === true;
   }
 
   /** 调用工具，返回文本结果 */

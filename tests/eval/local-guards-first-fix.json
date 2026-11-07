@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-11-07T08:38:34.356Z",
+  "phase": "after",
+  "model": "local:qwen2.5:7b",
+  "referenceNow": "2026-11-07T08:21:00.000Z",
+  "results": [
+    {
+      "prompt": "这周有哪些 DDL？",
+      "content": "leton\n{\"name\": \"fudaner_local__list_deadlines\", \"arguments\": {\"to\": \"2026-11-12T23:59:59.999Z\"}}\n</tool_call>",
+      "tools": [],
+      "checks": {
+        "finishedAnswer": true,
+        "queried": false,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": false
+      },
+      "elapsedMs": 12449
+    },
+    {
+      "prompt": "请先调用工具查询：\n1. 今天有哪些课程，分别几点开始、几点结束？\n2. 从今天起未来7天，有哪些未完成作业及截止时间？\n只根据查询结果回答。已经结束的课程请注明，不要补充没有查到的安排。",
+      "content": "leton\n{\"name\": \"fudaner_local__get_today\", \"arguments\": {\"date\": \"2026-11-07\"}}\n</tool_call>",
+      "tools": [],
+      "checks": {
+        "finishedAnswer": true,
+        "queried": false,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": false,
+        "queriedCourses": false,
+        "courseTimes": false,
+        "endedCourses": false
+      },
+      "elapsedMs": 1642
+    }
+  ],
+  "actualMcpCalls": [],
+  "limitations": [
+    "Two fixed fictitious screenshot scenarios only; not formal mail accuracy, full tool/work-order acceptance or a rendered Electron UI check.",
+    "Memory extraction enabled; summary model disabled to isolate the reported symptoms. API calls capped at 40s and 1500 tokens."
+  ]
+}

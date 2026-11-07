@@ -12,9 +12,26 @@ import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
 import { recallForTurn, recallQuery } from './context-recall';
 import { createToolPolicy, SENSITIVE_TOOLS } from './tool-policy';
+import { memoryWriteProblem } from './memory-policy';
+import { lexicalScore } from './memory-recall';
+import { queryArguments, queryRange, queryResultContext, shanghaiTime } from './query-context';
+import { goalReceipt, needsGoalReceipt, focusGoalOperation, goalOperationPrompt, goalOperationTool, goalToolContext, createGoalTurn } from './goal-receipt';
 import { changeNoticeFollows } from '../notices/sync';
 
 const MAX_STEPS = 8;
+
+/** 明确的查询问句只读；包含实际写入要求时仍保留原有工具能力。 */
+function lookupOnly(text: string): boolean {
+  const request = text.replace(/(?:不要|不必|不用|先别|禁止|无需)[^，。；\n]*/gu, '');
+  return /查询|查看|查一下|列出|哪些|什么|几点|是否|[?？]/u.test(request)
+    && !/创建|新建|添加|新增|保存|存下|存到|记住|删除|移除|标记|设为|设置|修改|改成|更新|提醒我|安排跟进|启动|执行|整理|生成/u.test(request);
+}
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  return JSON.stringify(value);
+}
 
 export interface LoopResult {
   content: string; toolCalls: ToolCallView[]; cards: CardRef[];
@@ -32,21 +49,41 @@ export async function runAgentLoop(opts: {
   onCards?: (cards: CardRef[]) => void;
   onToolResult?: (result: Awaited<ReturnType<McpHub['call']>>) => void;
   authorizeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
+  recoverRepeatedReads?: boolean;
+  normalizeToolArgs?: (name: string, args: Record<string, unknown>) => Record<string, unknown>;
+  toolContext?: (text: string) => string;
+  initialReads?: { name: string; args: Record<string, unknown> }[];
+  /** 最多模型轮数，默认 MAX_STEPS。 */
+  maxSteps?: number;
+  /** 只剩最后两轮时追加一次的收尾提示（例如后台工单要求立即保存成果）。 */
+  finishNotice?: string;
   signal?: AbortSignal;
 }): Promise<LoopResult> {
   const { llm, hub, tools, messages } = opts;
   const calls: ToolCallView[] = [];
   const cards: CardRef[] = [];
   let streamedContent = '';
-  for (let step = 0; step < MAX_STEPS; step++) {
+  const readResults = new Map<string, Awaited<ReturnType<McpHub['call']>>>();
+  const maxSteps = opts.maxSteps ?? MAX_STEPS;
+  let noticed = false;
+  for (let step = opts.initialReads?.length ? -1 : 0; step < maxSteps; step++) {
     opts.signal?.throwIfAborted();
+    if (opts.finishNotice && !noticed && step >= maxSteps - 2) {
+      noticed = true;
+      messages.push({ role: 'system', content: opts.finishNotice });
+    }
     let round = '';
     const emit = (text: string) => {
       if (!text) return;
       if (!round && streamedContent) { streamedContent += '\n\n'; opts.onDelta?.('\n\n'); }
       round += text; streamedContent += text; opts.onDelta?.(text);
     };
-    const r = await llm.chat(messages, { tools, temperature: 0.5, signal: opts.signal, onDelta: opts.onDelta ? emit : undefined });
+    const r = step === -1
+      ? { content: '', toolCalls: opts.initialReads!.map(read => {
+        if (!hub.isReadOnly(read.name)) throw new Error('预查询只能使用明确标记为只读的工具');
+        return { id: `query-${randomUUID()}`, name: read.name, arguments: JSON.stringify(read.args) };
+      }) }
+      : await llm.chat(messages, { tools, temperature: 0.5, signal: opts.signal, onDelta: opts.onDelta ? emit : undefined });
     opts.signal?.throwIfAborted();
     if (opts.onDelta && !round && r.content) emit(r.content);
     if (r.toolCalls.length === 0) return { content: opts.onDelta ? streamedContent : r.content, toolCalls: calls, cards, finishReason: 'answer' };
@@ -54,22 +91,34 @@ export async function runAgentLoop(opts: {
       role: 'assistant', content: r.content || null,
       tool_calls: r.toolCalls.map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.arguments } })),
     });
+    let repeatedRead = false;
+    let executed = false;
     for (const tc of r.toolCalls) {
       opts.signal?.throwIfAborted();
       // Function calling 的参数必须是完整 JSON 对象，不能从残缺文本中“修复”出写操作。
       let parsed: unknown;
       try { parsed = JSON.parse(tc.arguments); } catch { throw new Error('工具参数不完整，未执行'); }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('工具参数不完整，未执行');
-      const args = parsed as Record<string, unknown>;
+      const args = opts.normalizeToolArgs?.(tc.name, parsed as Record<string, unknown>) ?? parsed as Record<string, unknown>;
       const [server, tool] = tc.name.split('__');
       const view: ToolCallView = { id: tc.id, name: tool ?? tc.name, server: (server ?? '').replace(/_/g, '-'), args };
       opts.onTool?.(view);
       const denied = opts.authorizeTool?.(tc.name, args);
+      const readOnly = opts.recoverRepeatedReads && opts.hub.isReadOnly?.(tc.name) === true && args.refresh !== true;
+      const key = `${server}__${tool}:${canonical(args)}`;
+      const cached = !denied && readOnly ? readResults.get(key) : undefined;
+      if (!denied && !cached) {
+        // 写操作可能改变后续查询结果；即使它报错，也不能继续复用旧快照。
+        if (!readOnly) readResults.clear();
+        executed = true;
+      }
       const res: Awaited<ReturnType<McpHub['call']>> = denied
         ? { server: view.server, tool: view.name, ok: false, text: denied }
-        : await hub.call(tc.name, args);
+        : cached ?? await hub.call(tc.name, args);
+      if (cached) repeatedRead = true;
+      if (readOnly && res.ok) readResults.set(key, res);
       view.ok = res.ok;
-      view.summary = res.text.slice(0, 120);
+      view.summary = `${cached ? '复用本轮查询结果：' : ''}${res.text}`.slice(0, 120);
       calls.push(view);
       if (res.ok && res.server === 'fudaner-local') {
         const created = cardsFromTool(res.tool, res.text);
@@ -79,8 +128,27 @@ export async function runAgentLoop(opts: {
       if (res.ok) opts.onToolResult?.(res);
       opts.onTool?.(view);
       opts.signal?.throwIfAborted();
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, res.text.slice(0, 12000)) });
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, (opts.toolContext?.(res.text) ?? res.text).slice(0, 12000)) });
       shrinkOldToolResults(messages);
+    }
+    if (repeatedRead && !executed) {
+      // 已有相同查询结果却继续请求时，只给一次不带工具的收尾机会。
+      // 不执行模型在收尾阶段仍然提出的写操作，也不将它冒充为成功。
+      let finalText = '';
+      const emitFinal = (text: string) => {
+        if (!text) return;
+        if (!finalText && streamedContent) { streamedContent += '\n\n'; opts.onDelta?.('\n\n'); }
+        finalText += text; streamedContent += text; opts.onDelta?.(text);
+      };
+      const final = await llm.chat([...messages, { role: 'system', content: '本轮重复请求的只读查询已经成功，结果就在上方工具消息中。现在停止调用工具，直接依据已查到的数据回答用户原问题；没有查到的部分明确说明未知，不编造，不宣称未执行的写操作成功。' }], {
+        tools: [], temperature: 0, maxTokens: 1500, signal: opts.signal, onDelta: opts.onDelta ? emitFinal : undefined,
+      });
+      opts.signal?.throwIfAborted();
+      if (opts.onDelta && !finalText && final.content) emitFinal(final.content);
+      if (!final.toolCalls.length && final.content.trim()) return { content: opts.onDelta ? streamedContent : final.content, toolCalls: calls, cards, finishReason: 'answer' };
+      const note = '查询结果已取得，但模型仍重复请求工具，尚未完成回答。';
+      if (opts.onDelta) emitFinal(`\n\n${note}`);
+      return { content: opts.onDelta ? streamedContent : note, toolCalls: calls, cards, finishReason: 'step_limit' };
     }
   }
   const end = '这件事步骤有点多，我先停在这里。要我继续吗？';
@@ -97,7 +165,7 @@ function cardsFromTool(tool: string, text: string): CardRef[] {
   const title = typeof j.title === 'string' ? j.title : undefined;
   if (tool === 'save_resource') return [{ type: 'resource', id: j.id, title: title ?? '资源', subtitle: '已存入资源库' }];
   if (tool === 'create_goal') return [{ type: 'goal', id: j.id, title: title ?? '目标', subtitle: '新目标' }];
-  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: typeof j.dueAt === 'string' && Number.isFinite(Date.parse(j.dueAt)) ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
+  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: [typeof j.goalTitle === 'string' && j.goalTitle ? `所属：${j.goalTitle}` : '', typeof j.dueAt === 'string' && Number.isFinite(Date.parse(j.dueAt)) ? `截止 ${fmt(j.dueAt)}` : ''].filter(Boolean).join(' · ') || '新任务' }];
   return [];
 }
 
@@ -211,7 +279,7 @@ export class ChatAgent {
       if (llm) this.publish();
       const reply = llm ? await this.withModel(llm, text, refs) : this.withoutModel(text);
       this.channels.messagePosted(reply);
-      if (llm) void this.extractMemories(userMsg, reply);
+      if (llm) void this.extractMemories(userMsg);
       return reply;
     } catch (error) {
       // 超出上下文长度：只带最近几条消息自动重试一次
@@ -285,24 +353,38 @@ export class ChatAgent {
   }
 
   private async withModel(llm: LlmClient, text: string, refs: CardRef[], scheduled?: { title: string }): Promise<ChatMessage> {
+    const receiptMode = needsGoalReceipt(llm.label, text);
+    const focusedGoal = focusGoalOperation(llm.label, text, refs.length > 0);
+    const goalTurn = receiptMode ? createGoalTurn(this.repo, text, focusedGoal) : undefined;
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
+    const nowIso = new Date().toISOString();
     const policy = createToolPolicy(this.repo, llm);
     const platforms = await this.platformStatus().catch(() => []);
-    // 多取一些，主动消息被过滤后仍有足够的对话
-    const history = this.repo.recentMessages(30).filter((m) => m.role !== 'tool');
+    const readOnlyRequest = llm.label.startsWith('local:') && lookupOnly(text) && typeof this.hub.isReadOnly === 'function';
+    const scheduleLookup = readOnlyRequest && /ddl|截止|作业|课程|课表|几点|什么课/i.test(text)
+      && !/邮件|邮箱|资源|资料|目标|记忆|公告|学分|教师|老师|助教|考试范围|课程详情|规划|计划|帮我安排|请安排/u.test(text);
+    const scheduleTools = new Set(['fudaner_local__get_today', 'fudaner_local__list_deadlines']);
+    const range = scheduleLookup ? queryRange(text, nowIso) : undefined;
+    const standaloneQuery = scheduleLookup && !refs.length && !/刚才|上面|上述|那个|那门|这门|这些|那些/u.test(text)
+      && (!!range || !/ddl|截止|作业/i.test(text));
+    // 多取一些，主动消息被过滤后仍有足够的对话；单独的课表 / DDL 查询和建目标不带历史
+    const history = standaloneQuery || focusedGoal ? [] : this.repo.recentMessages(30).filter((m) => m.role !== 'tool');
     // 按这句话找回相关的记忆和更早的对话（最近 30 条本来就在上下文里，不重复找）
     const previousUser = [...(scheduled ? history : history.slice(0, -1))].reverse().find((m) => m.role === 'user')?.content;
-    const recall = await recallForTurn(this.repo, recallQuery(text, previousUser), { embedder: embedderFor(this.repo.getSettings()), skipRecent: 30 })
+    const recall = focusedGoal ? { memories: [], earlier: '' } : await recallForTurn(this.repo, recallQuery(text, previousUser), { embedder: embedderFor(this.repo.getSettings()), skipRecent: 30 })
       .catch(() => ({ memories: this.repo.recallMemories(text), earlier: '' }));
-    // 顺序：不常变的在前（规则、画像、记忆），常变的在后（状态、时间、摘要、找回的旧对话、最近查过的数据），
+    // 顺序：不常变的在前（规则、画像、记忆），常变的在后（状态、时间、摘要、找回的旧对话、最近查过的数据、本轮限制），
     // 前缀不变时模型服务可以复用缓存，更快也更省钱
-    const system = [
+    const system = focusedGoal ? goalOperationPrompt(nowIso) : [
       policy.mailInstructions(),
-      personaPrompt({ profile, memories: recall.memories, today, nowIso: new Date().toISOString(), platforms }),
+      personaPrompt({ profile, memories: recall.memories, today, nowIso, platforms }),
       this.summarizer.context(),
-      recall.earlier,
+      standaloneQuery ? '' : recall.earlier,
       recentFactsText(this.repo.getKv<ToolFact[]>('recent_tool_facts', [])),
+      readOnlyRequest ? '本轮用户只要求查询，工具仅可读取。先调用相关查询工具；查今天的课程时间与近期DDL可一次调用 get_today。结果足够后立即回答原问题，不创建目标或任务，不写记忆。' : '',
+      scheduleLookup ? '日期展示使用工具返回的 dueAtShanghai（上海本地时间），不要再使用原始 dueAt 的UTC小时。课程 state=已结束 必须写出“已结束”。' : '',
+      range ? `本轮明确的查询范围：${shanghaiTime(range.from)} 至 ${shanghaiTime(range.to)}（上海时间；校历周日起算）。list_deadlines 的起止时间由程序按此范围校正。` : '',
     ].filter(Boolean).join('\n\n');
     const facts: ToolFact[] = [];
     const messages: LlmMessage[] = [
@@ -313,25 +395,47 @@ export class ChatAgent {
     ];
     const run = this.active!;
     const result = await runAgentLoop({
-      llm, hub: this.hub, tools: this.hub.llmTools(policy.filter), messages,
-      authorizeTool: policy.authorize,
+      llm, hub: this.hub, tools: this.hub.llmTools((server, tool) => {
+        const name = `${server.replace(/-/g, '_')}__${tool}`;
+        return policy.filter(server, tool) && (!readOnlyRequest || this.hub.isReadOnly(name)) && (!scheduleLookup || scheduleTools.has(name)) && (!focusedGoal || goalOperationTool(name));
+      }), messages,
+      authorizeTool: (name, args) => {
+        const denied = policy.authorize(name, args);
+        if (denied) return denied;
+        if (focusedGoal && !goalOperationTool(name)) return '本轮只处理创建目标、添加任务和核对目标ID，未执行其他操作。';
+        const duplicateGoal = goalTurn?.duplicate(name, args);
+        if (duplicateGoal) return duplicateGoal;
+        if (readOnlyRequest && this.hub.isReadOnly?.(name) !== true) return '本轮仅允许查询，未执行写操作。请根据已查到的数据回答。';
+        if (scheduleLookup && !scheduleTools.has(name)) return '本轮课程和DDL查询请使用 get_today、list_deadlines 或 list_assignments。';
+        const [server, tool] = name.split('__');
+        if (server === 'fudaner_local' && tool === 'remember') return memoryWriteProblem(text, typeof args.content === 'string' ? args.content : '', this.repo.listMemories());
+      },
+      recoverRepeatedReads: true,
+      normalizeToolArgs: scheduleLookup ? (name, args) => queryArguments(text, name, args, nowIso) : goalTurn ? (name, args) => goalTurn.normalize(name, args) : undefined,
+      toolContext: scheduleLookup ? result => queryResultContext(result, nowIso) : focusedGoal ? goalToolContext : undefined,
+      initialReads: standaloneQuery ? [
+        ...(/课程|课表|几点|什么课/u.test(text) ? [{ name: 'fudaner_local__get_today', args: {} }] : []),
+        ...(/ddl|截止|作业/i.test(text) ? [{ name: 'fudaner_local__list_deadlines', args: range ?? { from: nowIso, to: new Date(Date.parse(nowIso) + 7 * 86_400_000).toISOString() } }] : []),
+      ] : undefined,
       signal: run.controller.signal,
       onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
       onToolResult: (result) => {
+        goalTurn?.record(result);
         for (const card of readItemCards(this.repo, result)) if (run.itemCards.size < 5) run.itemCards.set(card.id, card);
         // 记下这轮查到的数据，下一轮还能用（敏感工具的结果不记）
         if (!SENSITIVE_TOOLS.includes(result.tool) && !/^(remember|forget|create_|add_|update_|follow_|cancel_|mark_|schedule_|save_|push_|start_|import_|download_)/.test(result.tool)) {
           facts.push({ tool: `${result.server}/${result.tool}`, text: result.text.replace(/\s+/g, ' ').slice(0, 700), at: new Date().toISOString() });
         }
       },
-      onDelta: (text) => { run.view.content += text; run.view.version++; this.publish(); },
+      onDelta: (text) => { if (!receiptMode) { run.view.content += text; run.view.version++; this.publish(); } },
       onTool: (call) => {
         const index = run.view.toolCalls.findIndex((t) => t.id === call.id);
         if (index < 0) run.view.toolCalls.push(structuredClone(call)); else run.view.toolCalls[index] = structuredClone(call);
         run.view.version++; this.publish(); this.channels.toolProgress(run.view.id, call);
       },
     });
-    const content = result.content || '模型没有返回正文，请重试。';
+    const content = receiptMode ? goalReceipt(this.repo, result.cards, text, result.finishReason === 'answer') : result.content || '模型没有返回正文，请重试。';
+    if (receiptMode) { run.view.content = content; run.view.version++; this.publish(); }
     if (facts.length) {
       const previous = this.repo.getKv<ToolFact[]>('recent_tool_facts', []);
       this.repo.setKv('recent_tool_facts', [...previous, ...facts].slice(-8));
@@ -428,7 +532,7 @@ export class ChatAgent {
   }
 
   /** 每轮对话后由本地模型判断有没有值得长期记住的信息（PRD §5.6） */
-  private async extractMemories(userMsg: ChatMessage, reply: ChatMessage): Promise<void> {
+  private async extractMemories(userMsg: ChatMessage): Promise<void> {
     const llm = this.router.for('memory_extract');
     if (!llm) return;
     try {
@@ -437,17 +541,18 @@ export class ChatAgent {
       if (!epoch) { epoch = randomUUID(); this.repo.setKv(epochKey, epoch); }
       const known = this.repo.listMemories().slice(0, 80);
       const existing = known.map((m, i) => `[${i + 1}] (${m.type}) ${m.content}`).join('\n');
-      const r = await llm.chat([{ role: 'user', content: memoryExtractPrompt({ dialog: `用户：${userMsg.content}\n助理：${reply.content}`, existing }) }], { json: true, temperature: 0 });
+      const r = await llm.chat([{ role: 'user', content: memoryExtractPrompt({ dialog: `用户：${userMsg.content}`, existing }) }], { json: true, temperature: 0 });
       const parsed = memoryOutput.safeParse(parseJsonLoose<unknown>(r.content));
       if (!parsed.success || r.toolCalls.length) return;
       const current = this.repo.getMessage(userMsg.id);
       if (this.repo.getKv<string | null>(epochKey, null) !== epoch || !current || current.createdAt !== userMsg.createdAt || current.content !== userMsg.content) return;
       const j = parsed.data;
-      const added = (j?.memories ?? []).flatMap((m) => m.op === 'add' ? [this.repo.addMemory({
+      // 新增：只接受本轮用户明确说出的原话（memoryWriteProblem）
+      const added = (j?.memories ?? []).flatMap((m) => m.op !== 'add' || memoryWriteProblem(userMsg.content, m.content, this.repo.listMemories()) ? [] : [this.repo.addMemory({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         type: m.type as any, content: m.content, source: 'chat', sourceMsgId: userMsg.id,
         expiresAt: m.expires_days ? new Date(Date.now() + m.expires_days * 86_400_000).toISOString() : undefined,
-      })] : []);
+      })]);
       const created = added.filter((memory) => memory.sourceMsgId === userMsg.id);
       // 改写已有记忆：只改仍然存在、内容确实变了的那条；手动记的也可以改，但会告诉用户、可以撤销
       const updated: { id: string; before: string; after: string }[] = [];
@@ -456,6 +561,8 @@ export class ChatAgent {
         const target = known[m.target - 1];
         const current = target && this.repo.listMemories().find((x) => x.id === target.id);
         if (!current || current.content === m.content || updated.some((u) => u.id === current.id)) continue;
+        // 改写也要有依据：用户这句不是提问，并且同时说到了旧记忆和新说法里的内容
+        if (/[?？]|吗$|是否|要不要|该不该/u.test(userMsg.content.trim()) || lexicalScore(userMsg.content, current.content) < 1 || lexicalScore(userMsg.content, m.content) < 1) continue;
         this.repo.updateMemory(current.id, m.content);
         updated.push({ id: current.id, before: current.content, after: m.content });
       }

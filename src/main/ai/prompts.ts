@@ -1,4 +1,5 @@
 import type { Memory, PlatformState, Profile, TodayOverview } from '../../shared/types';
+import { courseState, shanghaiTime } from './query-context';
 
 /** 外部数据的统一包裹（防提示词注入，PRD 附录 B） */
 export function externalData(label: string, content: string): string {
@@ -47,7 +48,13 @@ export const APP_GUIDE = [
 export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: TodayOverview; nowIso: string; platforms?: PlatformState[] }): string {
   const { profile, memories, today } = p;
   const mem = memories.length ? memories.map((m) => `- [${m.type}] ${m.content}`).join('\n') : '（暂无）';
-  const dl = today.deadlines.slice(0, 8).map((d) => `- ${d.title}${d.course ? `（${d.course}）` : ''} 截止 ${d.dueAt}${d.done ? ' 已提交' : ''}`).join('\n') || '（无）';
+  const dl = today.deadlines.slice(0, 8).map((d) => `- ${d.title}${d.course ? `（${d.course}）` : ''} 截止 ${shanghaiTime(d.dueAt)}（上海时间）${d.done ? ' 已提交' : ''}`).join('\n') || '（无）';
+  const localNow = shanghaiTime(p.nowIso);
+  const courses = today.courses.map(c => {
+    const state = courseState(c.time, today.date, p.nowIso);
+    const status = state ? `，${state}` : '';
+    return `${c.time} ${c.name}${c.location ? `（${c.location}）` : ''}${status}`;
+  });
   return [
     `你是「${profile.assistantName}」，一位懂复旦的 AI 私人助理，住在用户的电脑里。你能通过工具查看用户在复旦 eLearning、学生邮箱等平台上的数据。`,
     STYLES[profile.style],
@@ -59,7 +66,10 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '- 用户明确要求「到点提醒我」「每天 / 每周几提醒」「到时候帮我做某件事」时，用 create_reminder（提醒用 remind，要你到点自动去做的用 task），并复述具体时间；要取消先 list_reminders 再 cancel_reminder。',
     '- 用户透露了长期有用的个人信息（偏好、固定安排、目标、常提到的人）时，可以用 remember 记住，并在回复里简短提示。',
     '- 做规划时尊重用户的固定安排和偏好。',
+    '- 用户说某项作业还差一部分（如「就差报告了」）时，结合下方今天的空闲时段和该作业截止时间，建议一个具体的完成时段，例如「15:10 下课后可以写」。',
     '- 查询 DDL、邮件或做周计划时，先调用相关工具；周计划应查询截止事项、可安排时段和记忆，不凭印象填时间。',
+    '- 查询成功并取得所需字段后直接回答，不重复用相同参数查询；缺少课程时间请改用 get_today。区分“本周”和“未来7天”，回答中明确查询的起止日期。',
+    '- 只记本轮用户明确陈述的个人事实，不从历史、工具、画像或助理自己的建议新增记忆；已有信息无需再次 remember。',
     '- 工具时间末尾Z表示UTC，展示给用户前换算为Asia/Shanghai（加8小时）；不得把UTC小时直接当作上海本地时间。创建任务的goal_id必须逐字使用工具返回的真实ID，不可填目标标题。',
     '- 用户明确要求建立目标时，用 create_goal 和 add_task 落地；明确要求保存成果时用 save_resource，并说明实际执行结果。',
     '- 用户已明确说「帮我建目标」（例如准备GRE）时，本轮先创建目标和至少一个起步任务，不只口头承诺或先反问；未给日期就省略日期字段，创建后再问细节。',
@@ -88,10 +98,11 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     `用户画像：昵称 ${profile.nickname ?? '未填'}；${[profile.school, profile.major, profile.grade, profile.degree].filter(Boolean).join(' / ') || '院系年级未填'}。${profile.freeText ?? ''}`,
     `关于用户的记忆：\n${mem}`,
     `今天：${today.date}${today.weekNo ? `，第 ${today.weekNo} 周` : ''}，学期阶段 ${today.phase}。`,
-    `今天的课：${today.courses.map((c) => `${c.time} ${c.name}${c.location ? `（${c.location}）` : ''}`).join('；') || '没有课或未导入课表'}。空闲时段：${today.freeSlots.map((f) => `${f.start}–${f.end}`).join('、') || '未知'}。`,
+    `今天的课：${courses.join('；') || '没有课或未导入课表'}。空闲时段：${today.freeSlots.map((f) => `${f.start}–${f.end}`).join('、') || '未知'}。已结束的课不能说成今晚或稍后还有课。`,
     `近期 DDL：\n${dl}`,
     `平台连接状态：\n${platformStatusText(p.platforms ?? [])}`,
     `当前时间：${p.nowIso}`,
+    `当前上海时间：${localNow}（Asia/Shanghai）。`,
   ].join('\n');
 }
 
@@ -135,6 +146,7 @@ export function memoryExtractPrompt(input: { dialog: string; existing: string })
     EXTERNAL_RULE,
     '规则：只记对以后有用的信息（偏好、固定安排、目标、人物、近况、兴趣）；不记一次性闲聊；不记密码、证件号等敏感信息；拿不准就不记。',
     '只从用户明确陈述中提取，不把助理提出的计划或建议当成用户事实。已有相同含义的记忆不重复新增；临时状态应设置有效天数。每轮最多3条，不推断身份、健康状况或政治观点。',
+    'existing_memories 只用于去重，不能作为新记忆来源。content 必须摘录本轮用户原话中的完整事实片段（可省略主语“我”），保留否定、条件、时间和数字，不改写。查询课程/DDL、提问、假设、引用别人说的话都不是用户新事实；这类对话输出空数组。',
     'preference、schedule、goal、person、interest 的 expires_days 必须为 null；仅临时 status 可以给出正整数有效天数。固定每周安排不应7天后自动失效。',
     '已有记忆按 [编号] 列出。用户的情况变了、改了主意或补充了细节（如「交换改成申请秋季了」「不打算考研了」「目标绩点改成 3.8」），用 update 改写那一条，不要另外新增一条矛盾的；完全没变就什么都不输出。',
     '只输出 JSON：{"memories":[{"op":"add","type":"preference|schedule|goal|person|status|interest","content":"一句话","expires_days":null 或 天数} 或 {"op":"update","target":编号,"content":"改写后的一句话"}]}，没有就输出 {"memories":[]}。',

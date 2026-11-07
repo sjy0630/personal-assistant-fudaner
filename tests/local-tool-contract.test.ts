@@ -102,7 +102,7 @@ describe('本地工具的日期和父对象契约（真实 MCP）', () => {
       } },
     });
     expect(result.cards).toHaveLength(2);
-    expect(result.cards.find((card) => card.type === 'task')?.subtitle).toBe('新任务');
+    expect(result.cards.find((card) => card.type === 'task')?.subtitle).toBe('所属：GRE');
     expect(JSON.stringify(result.cards)).not.toContain('NaN');
   });
 

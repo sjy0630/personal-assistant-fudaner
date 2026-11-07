@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-11-07T08:42:43.792Z",
+  "phase": "after",
+  "model": "local:qwen2.5:7b",
+  "referenceNow": "2026-11-07T08:21:00.000Z",
+  "results": [
+    {
+      "prompt": "这周有哪些 DDL？",
+      "content": "这周的DDL包括：\n\n1. **Lab 5：链表与栈**（数据结构） - 截止于今天（2026年11月7日）15:59。\n2. **大学物理 习题 8**（大学物理 B） - 截止于2026年11月9日04:00。\n3. **Reading Response 4**（学术英语写作） - 截止于2026年11月9日15:59。\n4. **数分作业 6**（数学分析 III） - 截止于2026年11月10日10:00。\n5. **Essay Draft 2**（学术英语写作） - 截止于2026年11月11日15:59。\n6. **线代 HW 7**（线性代数） - 截止于2026年11月12日15:59。\n\n记得合理安排时间哦！",
+      "tools": [
+        {
+          "id": "call_uhdm97pn",
+          "name": "list_deadlines",
+          "server": "fudaner-local",
+          "args": {
+            "from": "2026-11-06T00:00:00.000Z",
+            "to": "2026-11-13T23:59:59.999Z"
+          },
+          "ok": true,
+          "summary": "[\n  {\n    \"id\": \"c3c7fd62-3165-4708-a79b-6eb711068036\",\n    \"title\": \"Lab 5：链表与栈\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"2"
+        }
+      ],
+      "checks": {
+        "finishedAnswer": true,
+        "structuredReply": true,
+        "queried": true,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": false
+      },
+      "elapsedMs": 10129
+    },
+    {
+      "prompt": "请先调用工具查询：\n1. 今天有哪些课程，分别几点开始、几点结束？\n2. 从今天起未来7天，有哪些未完成作业及截止时间？\n只根据查询结果回答。已经结束的课程请注明，不要补充没有查到的安排。",
+      "content": "今天有以下课程：\n- 数学分析 III，08:00–09:40，在 H3109。\n- 数据结构，13:30–15:10，在 H2215。\n\n未来7天内的未完成作业及截止时间如下：\n1. Lab 5：链表与栈（数据结构） - 截止于今天（2026年11月7日）15:59。\n2. 大学物理 习题 8（大学物理 B） - 截止于2026年11月9日04:00。\n3. Reading Response 4（学术英语写作） - 截止于2026年11月9日15:59。\n4. 数分作业 6（数学分析 III） - 截止于2026年11月10日10:00。\n5. Essay Draft 2（学术英语写作） - 截止于2026年11月11日15:59。\n6. 线代 HW 7（线性代数） - 截止于2026年11月12日15:59。\n\n记得合理安排时间，祝你学习顺利！",
+      "tools": [
+        {
+          "id": "call_y6l4tm71",
+          "name": "get_today",
+          "server": "fudaner-local",
+          "args": {
+            "date": "2026-11-07"
+          },
+          "ok": true,
+          "summary": "{\n  \"date\": \"2026-11-07\",\n  \"weekNo\": 9,\n  \"phase\": \"midterm\",\n  \"courses\": [\n    {\n      \"name\": \"数学分析 III\",\n      \"tim"
+        },
+        {
+          "id": "call_omz7dldo",
+          "name": "list_deadlines",
+          "server": "fudaner-local",
+          "args": {
+            "from": "2026-11-07",
+            "to": "2026-11-13"
+          },
+          "ok": true,
+          "summary": "[\n  {\n    \"id\": \"c3c7fd62-3165-4708-a79b-6eb711068036\",\n    \"title\": \"Lab 5：链表与栈\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"2"
+        }
+      ],
+      "checks": {
+        "finishedAnswer": true,
+        "structuredReply": true,
+        "queried": true,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": false,
+        "queriedCourses": true,
+        "courseTimes": true,
+        "endedCourses": false
+      },
+      "elapsedMs": 11892
+    }
+  ],
+  "actualMcpCalls": [
+    {
+      "name": "fudaner_local__list_deadlines",
+      "args": {
+        "from": "2026-11-06T00:00:00.000Z",
+        "to": "2026-11-13T23:59:59.999Z"
+      },
+      "ok": true
+    },
+    {
+      "name": "fudaner_local__get_today",
+      "args": {
+        "date": "2026-11-07"
+      },
+      "ok": true
+    },
+    {
+      "name": "fudaner_local__list_deadlines",
+      "args": {
+        "from": "2026-11-07",
+        "to": "2026-11-13"
+      },
+      "ok": true
+    }
+  ],
+  "limitations": [
+    "Two fixed fictitious screenshot scenarios only; not formal mail accuracy, full tool/work-order acceptance or a rendered Electron UI check.",
+    "Memory extraction enabled; summary model disabled to isolate the reported symptoms. API calls capped at 40s and 1500 tokens."
+  ]
+}

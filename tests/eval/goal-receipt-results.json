@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-11-07T14:22:24.646Z",
+  "model": "local:qwen2.5:7b",
+  "prompt": "我想准备 GRE，帮我建一个长期目标，并在这个目标下添加“完成一套 GRE 模考”的任务。暂时不设置截止日期。",
+  "checks": {
+    "oneNewGreGoal": true,
+    "oneExactTask": true,
+    "actualParentIsGre": true,
+    "exchangeUntouched": true,
+    "dateNotInvented": true,
+    "truthfulReceipt": true,
+    "truthfulVisibleStream": true,
+    "truthfulCard": true,
+    "persistedReply": true
+  },
+  "elapsedMs": 5824,
+  "content": "已创建长期目标「准备 GRE」。\n\n已保存任务「完成一套 GRE 模考」，所属目标「准备 GRE」，暂未设置截止日期。",
+  "cards": [
+    {
+      "type": "goal",
+      "id": "25540b97-a593-4066-8e90-328ad8457c88",
+      "title": "准备 GRE",
+      "subtitle": "新目标",
+      "undoToken": "2100bf09f2af73bc438ee90a56af63f33226b0f7dfdb03d385f874a601e64a29"
+    },
+    {
+      "type": "task",
+      "id": "44d40f9a-ef40-4fe1-9b64-943a4fe0e597",
+      "title": "完成一套 GRE 模考",
+      "subtitle": "所属：准备 GRE",
+      "undoToken": "c422201e902d87550fad855578c9bcce971e4f06ca4ace6e664a73c51da098b1"
+    }
+  ],
+  "goals": [
+    {
+      "id": "25540b97-a593-4066-8e90-328ad8457c88",
+      "level": "long_term",
+      "title": "准备 GRE",
+      "status": "active",
+      "createdBy": "assistant",
+      "createdAt": "2026-11-07T14:22:22.730Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "44d40f9a-ef40-4fe1-9b64-943a4fe0e597",
+      "goalId": "25540b97-a593-4066-8e90-328ad8457c88",
+      "title": "完成一套 GRE 模考",
+      "status": "todo",
+      "source": "assistant",
+      "localDone": false
+    }
+  ],
+  "tools": [
+    {
+      "name": "fudaner_local__create_goal",
+      "args": {
+        "level": "long_term",
+        "title": "准备 GRE"
+      },
+      "ok": true,
+      "result": "{\n  \"id\": \"25540b97-a593-4066-8e90-328ad8457c88\",\n  \"level\": \"long_term\",\n  \"title\": \"准备 GRE\",\n  \"status\": \"active\",\n  \"createdBy\": \"assistant\",\n  \"createdAt\": \"2026-11-07T14:22:22.730Z\"\n}"
+    },
+    {
+      "name": "fudaner_local__add_task",
+      "args": {
+        "goal_id": "25540b97-a593-4066-8e90-328ad8457c88",
+        "title": "完成一套 GRE 模考"
+      },
+      "ok": true,
+      "result": "{\n  \"id\": \"44d40f9a-ef40-4fe1-9b64-943a4fe0e597\",\n  \"goalId\": \"25540b97-a593-4066-8e90-328ad8457c88\",\n  \"title\": \"完成一套 GRE 模考\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"准备 GRE\"\n}"
+    }
+  ],
+  "rawModelText": "已成功创建“准备 GRE”的长期目标，并在该目标下添加了“完成一套 GRE 模考”的任务。该任务暂无截止日期。",
+  "limitations": [
+    "Single fixed fictitious GRE scenario, not formal T1/T6 acceptance or rendered Electron verification.",
+    "Production ChatAgent and full MCP tool set; memory extraction and summary are disabled to isolate the goal receipt. No application configuration/database, real accounts or keys are read.",
+    "Success text is generated from persisted Repo objects; this does not certify free-form model narration accuracy."
+  ]
+}
