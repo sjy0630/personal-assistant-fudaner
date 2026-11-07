@@ -106,6 +106,25 @@ export class DemoElearningClient implements ElearningClient {
     return demoAssignments(this.now()).filter((a) => a.courseId === courseId).map((a) => (this.submitted.has(a.id) ? { ...a, submitted: true, submittedAt: this.now().toISOString() } : a));
   }
   async listAnnouncements(courseIds: string[]) { return demoAnnouncements(this.now()).filter((a) => courseIds.includes(a.courseId)); }
+  /** 演示课件（虚构）：每门课两个文件 */
+  async listFiles(courseId: string) {
+    const course = demoCourses().find((c) => c.id === courseId);
+    const name = course?.name ?? '课程';
+    return [
+      { id: `${courseId}01`, name: `${name} 第5讲 讲义（演示）.md`, size: 2048, contentType: 'text/markdown', updatedAt: this.now().toISOString(), folder: '课件' },
+      { id: `${courseId}02`, name: `${name} 课程大纲（演示）.md`, size: 1024, contentType: 'text/markdown', updatedAt: this.now().toISOString(), folder: '课程信息' },
+    ];
+  }
+  async downloadFile(fileId: string) {
+    const course = demoCourses().find((c) => fileId.startsWith(c.id));
+    const name = course?.name ?? '课程';
+    const lecture = fileId.endsWith('01');
+    const text = lecture
+      ? `# ${name} 第5讲（演示讲义）\n\n本讲内容为虚构示例。\n\n## 要点\n- 概念一：定义与例子\n- 概念二：常见错误\n- 课后练习：第 3、5 题\n`
+      : `# ${name} 课程大纲（演示）\n\n- 平时作业 40%\n- 期中 20%\n- 期末 40%\n`;
+    return { name: `${name} ${lecture ? '第5讲 讲义' : '课程大纲'}（演示）.md`, contentType: 'text/markdown', data: new TextEncoder().encode(text) };
+  }
+
   /** 演示「闭环」：模拟用户在 eLearning 上交了作业 */
   submit(assignmentId: string) { this.submitted.add(assignmentId); }
   reset() { this.submitted.clear(); }

@@ -26,6 +26,8 @@ export interface FudanerApi {
     list(filter?: { type?: string; includeId?: string }): Promise<FeedCard[]>;
     dismiss(id: string, reason?: string): Promise<void>;
     act(id: string, action: string): Promise<void>;
+    /** 现在整理一次动态 */
+    refresh(): Promise<{ campus: number; news: number; skipped?: string }>;
   };
   goals: {
     list(): Promise<{ goals: Goal[]; tasks: Task[] }>;
@@ -93,7 +95,7 @@ export interface FudanerApi {
   };
   notices: {
     /** 全部可选来源，以及是否已关注、上次读取的问题 */
-    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; error?: string }[]>;
+    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; why?: string; auto: boolean; error?: string }[]>;
     list(query?: string): Promise<Item[]>;
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;

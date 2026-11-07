@@ -7,7 +7,8 @@ import type { Item } from '../../shared/types';
 import type { ImportResult } from '../activities/sync';
 import type { LiteratureQuery, LiteratureRecord } from '../sources/library-search';
 import type { TreeholeApi } from '../sources/treehole';
-import { noticeView } from '../notices/sync';
+import { changeNoticeFollows, noticeFollowState, noticeView } from '../notices/sync';
+import { findNoticeSource, NOTICE_SOURCES } from '../notices/sources';
 import { describeRepeat, nextOccurrence, validateRepeat } from '../engine/reminders';
 import type { ReminderRepeat } from '../../shared/types';
 
@@ -166,6 +167,48 @@ export function createLocalServer(
   }
 
   if (chatOnly) {
+    // ---------- 通过对话调整设置：画像、关注的官网通知 ----------
+    server.registerTool('update_profile', {
+      description: '更新用户画像（院系、专业、年级、学历、昵称）。用户在对话里说「我是经院大二的」「我在读研」时使用；院系和学历会影响自动关注哪些官网通知、读哪个系统的课表。改了什么要告诉用户',
+      inputSchema: {
+        nickname: z.string().max(30).optional(), school: z.string().max(40).optional().describe('院系全称或常用简称，如「经济学院」'),
+        major: z.string().max(40).optional(), grade: z.string().max(20).optional().describe('如「大二」「研一」'),
+        degree: z.enum(['本科', '硕士', '博士']).optional(),
+      },
+    }, async (a) => {
+      const patch: Record<string, unknown> = Object.fromEntries(Object.entries(a).filter(([, v]) => v !== undefined && v !== ''));
+      // 「经院」「计院」这类简称存成全称，方便认出本院系的通知
+      if (typeof patch.school === 'string') {
+        const s = findNoticeSource(patch.school);
+        if (s?.group === '院系') patch.school = s.name;
+      }
+      if (!Object.keys(patch).length) throw new Error('没有要更新的内容。');
+      repo.setProfile(patch);
+      const follow = noticeFollowState(repo);
+      return json({ ok: true, profile: repo.getProfile(), notices: follow.mode === 'auto' ? `已按新的画像自动关注：${follow.following.map((s) => s.name).join('、')}` : undefined });
+    });
+
+    server.registerTool('list_notice_sources', {
+      description: '查看现在关注了哪些学校和院系官网通知（auto 表示按院系、学历、兴趣自动选的，并附理由），以及还可以关注哪些',
+      inputSchema: {}, annotations: ro,
+    }, async () => {
+      const state = noticeFollowState(repo);
+      const on = new Set(state.following.map((s) => s.id));
+      return json({ ...state, available: NOTICE_SOURCES.filter((s) => !on.has(s.id)).map((s) => `${s.name}（${s.group}）`) });
+    });
+
+    server.registerTool('follow_notice_sources', {
+      description: '关注或取消关注学校和院系的官网通知。用户说「也关注一下国际交流处」「别推保卫处的了」，或者聊到兴趣（想交换 → 国际合作与交流处；想保研 → 研究生院和本院系）时使用，并告诉用户改了什么。名称可以用简称',
+      inputSchema: {
+        follow: z.array(z.string()).optional().describe('要关注的来源名称或 id，如「国际合作与交流处」「经院」'),
+        unfollow: z.array(z.string()).optional(),
+      },
+    }, async (a) => {
+      const r = changeNoticeFollows(repo, a.follow, a.unfollow);
+      channels.changed('feed');
+      return json({ ...r, note: r.unknown.length ? `没找到：${r.unknown.join('、')}。可以用 list_notice_sources 看可选的来源。` : undefined });
+    });
+
     // ---------- 定时提醒 / 定时任务 ----------
     server.registerTool('create_reminder', {
       description: '创建定时提醒或定时任务。用户说「每天 22:00 提醒我背单词」「明早 8 点叫我交表」「每周一早上帮我汇总上周的通知和本周 DDL」时使用。'

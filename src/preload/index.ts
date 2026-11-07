@@ -21,7 +21,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   references: { open: call('references.open') } as FudanerApi['references'],
   copyText: call('copyText') as FudanerApi['copyText'],
   today: call('today') as FudanerApi['today'],
-  feed: { list: call('feed.list'), dismiss: call('feed.dismiss'), act: call('feed.act') } as FudanerApi['feed'],
+  feed: { list: call('feed.list'), dismiss: call('feed.dismiss'), act: call('feed.act'), refresh: call('feed.refresh') } as FudanerApi['feed'],
   goals: { list: call('goals.list'), setTaskStatus: call('goals.setTaskStatus') } as FudanerApi['goals'],
   library: { list: call('library.list'), get: call('library.get'), upload: call('library.upload'), remove: call('library.remove') } as FudanerApi['library'],
   search: call('search') as FudanerApi['search'],
