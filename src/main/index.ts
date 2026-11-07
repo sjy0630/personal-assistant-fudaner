@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, clipboard, nativeImage, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, nativeImage, safeStorage, shell, dialog } from 'electron';
 import { join } from 'node:path';
 import { DEFAULT_FUDAN_STUDENT_IMAP, ImapMailClient } from '@fudaner/mcp-fudan-mail';
 import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
@@ -70,6 +70,13 @@ function createWindow() {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false },
   });
   win.on('ready-to-show', () => win?.show());
+  // 排查白屏用：界面进程崩溃、页面加载失败、界面里的报错，都打印到运行 npm run dev 的终端
+  win.webContents.on('render-process-gone', (_e, d) => console.error(`[Fudaner] 界面进程退出：${d.reason}（退出码 ${d.exitCode}）`));
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => console.error(`[Fudaner] 页面加载失败：${desc}（${code}）${url}`));
+  win.webContents.on('console-message', (e) => {
+    const m = e as unknown as { level?: string; message?: string; sourceId?: string; lineNumber?: number };
+    if (m.level === 'error') console.error(`[Fudaner 界面] ${m.message}${m.sourceId ? `（${m.sourceId}:${m.lineNumber}）` : ''}`);
+  });
   // did-finish-load 触发时 isLoadingMainFrame 仍可能为 true，等加载状态结束再送达。
   win.webContents.on('did-stop-loading', flushNotificationNavigation);
   // 关闭窗口时最小化到托盘，后台继续同步和提醒
@@ -90,6 +97,14 @@ function createTray(ctx: AppContext, pause: () => void) {
   ]));
   tray.on('click', showWindow);
 }
+
+// 只允许运行一个实例：关窗口后应用还在托盘里运行，再启动一次会和它同时打开同一个数据库。
+// 第二次启动直接把已有窗口调出来，然后退出。
+if (!app.requestSingleInstanceLock()) {
+  console.log('[Fudaner] 已经有一个 Fudaner 在运行（可能在托盘里），已切换到那个窗口。如果它显示不正常，请先在托盘图标菜单里选「退出」，再重新启动。');
+  app.exit(0);
+}
+app.on('second-instance', () => showWindow());
 
 app.whenReady().then(async () => {
   const demoElearning = new DemoElearningClient();
@@ -144,6 +159,12 @@ app.whenReady().then(async () => {
 
   app.on('activate', showWindow);
   app.on('before-quit', () => { quitting = true; void ctx.close(); });
+}).catch((error: unknown) => {
+  // 启动失败（数据库打不开、端口被占等）时给出明确提示，而不是只留一个白窗口或什么都不显示
+  const detail = error instanceof Error ? error.stack ?? error.message : String(error);
+  console.error('[Fudaner] 启动失败：', detail);
+  dialog.showErrorBox('Fudaner 启动失败', `${detail}\n\n如果提示数据库被占用，请先在托盘图标菜单里选「退出」旧的 Fudaner，再重新启动。`);
+  app.exit(1);
 });
 
 app.on('window-all-closed', () => { /* 常驻托盘，不退出 */ });
