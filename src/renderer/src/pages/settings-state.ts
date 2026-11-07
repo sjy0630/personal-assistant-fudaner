@@ -54,3 +54,10 @@ export function cleanMemory(content: string): string {
 export function toggleObserveRule(rules: string[], rule: string, selected: boolean): string[] {
   return selected ? [...new Set([...rules, rule])] : rules.filter((r) => r !== rule);
 }
+
+/** Electron IPC 会给主进程错误添加前缀，只展示面向用户的操作提示。 */
+export function settingsErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
+  return /^请/.test(message) ? message : fallback;
+}

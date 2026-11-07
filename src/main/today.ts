@@ -10,7 +10,8 @@ export function buildToday(repo: Repo, now = new Date()): TodayOverview {
   const in7d = new Date(now.getTime() + 7 * 86_400_000).toISOString();
   const deadlines = repo
     .listItems({ kind: 'assignment', dueAfter: now.toISOString(), dueBefore: in7d, limit: 30 })
-    .map((i) => ({ itemId: i.id, title: i.title, course: i.courseId ? repo.getCourse(i.courseId)?.name : undefined, dueAt: i.dueAt!, done: i.done }));
+    // 完成 = 平台上已完成，或用户在本地把对应任务标记为完成（如组作业由组长提交）
+    .map((i) => ({ itemId: i.id, title: i.title, course: i.courseId ? repo.getCourse(i.courseId)?.name : undefined, dueAt: i.dueAt!, done: i.done || repo.taskForItem(i.id)?.status === 'done' }));
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   weekStart.setHours(0, 0, 0, 0);

@@ -186,7 +186,7 @@ export function ModelSettings({ onDirty, onBusy }: PanelProps) {
         <section className={styles.section}>
           <h2>隐私任务的云端授权</h2>
           <p className={styles.hint}>
-            邮件分类、记忆提取和主动研判优先使用本地模型。只有你明确允许时，模型路由才会为这些任务选择云端服务；本地模型运行中报错不会自动转发。
+            开启后，云端对话可读取所查询邮件的正文和全文搜索片段，这些内容会发送给你配置的云端模型服务。不开启时，云端对话只能查询邮件摘要。邮件分类、记忆提取和主动研判仍优先使用本地模型；未配置本地模型时，开启此项才会使用云端，本地模型报错不会自动转发。
           </p>
           <label className={styles.check}>
             <input
@@ -197,7 +197,7 @@ export function ModelSettings({ onDirty, onBusy }: PanelProps) {
                 task.clear();
               }}
             />
-            没有配置本地模型时，允许将隐私任务交给所选云端服务
+            允许所选云端服务处理邮件正文及其他隐私任务
           </label>
           <button
             type="button"

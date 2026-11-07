@@ -72,7 +72,7 @@ export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?
             {c.done && <div className="done">✓ {c.done}</div>}
             <div className="actions">
               <button onClick={() => quote({ type: 'feed', id: c.id, title: c.title })}>引用到对话</button>
-              {c.actions.filter((a) => a.action !== 'quote' && a.action !== 'dismiss' && (a.action !== 'accept_ticket' || c.status !== 'accepted')).map((a) => (
+              {c.actions.filter((a) => a.action !== 'quote' && a.action !== 'dismiss' && ((a.action !== 'accept_ticket' && a.action !== 'mark_done') || c.status !== 'accepted')).map((a) => (
                 <button key={a.label} className="primary" onClick={() => { setActionError(''); void api.feed.act(c.id, a.action).then(load).catch(() => { setActionError('暂时无法执行该操作。该建议可能已处理。'); load(); }); }}>{a.label}</button>
               ))}
               <button className="ghost" onClick={() => { setReason('这门课不关心'); setOtherReason(''); setError(''); setDismissCard(c); }}>不感兴趣</button>

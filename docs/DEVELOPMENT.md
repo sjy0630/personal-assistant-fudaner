@@ -18,7 +18,7 @@
 | 主动决策记录 | ✅ 可用 | 设置 → 主动决策 |
 | 后台工单 | ✅ 可用 | 无模型时生成模板结果 |
 | MCP 连接层 | ✅ 可用 | 4 个服务进程内运行，智能体通过 MCP 调用 |
-| UIS 登录 / Canvas API / IMAP | ⚠️ 已写、未实测 | 需要真实账号验证，见下文 |
+| UIS 登录 / Canvas API / IMAP | ✅ macOS 真实账号基础流程已验证 | 用户已验证 UIS 登录、eLearning 同步、邮箱同步及邮件正文问答；其他账号、网络及 Windows 环境仍待验证。连接层已补充分页、重试、只读收信及故障恢复测试 |
 | 本地 / 云端模型路由 | ⚠️ 已写、未实测 | 已用本地假服务器测过请求格式和返回解析（`tests/llm.test.ts`）；还需要真实 API Key 和本地 Ollama 验证 |
 | 打包 | ✅ Linux 目录版已验证 | `npm run dist:dir` 打包后能启动；Windows 安装包（`npm run dist`）需要在 Windows 上打 |
 

@@ -108,6 +108,27 @@ export class Repo {
     );
     return { item: this.getItem(prev.id)!, created: false, changedFields: changed };
   }
+  /**
+   * 用户在本地把事项标记为完成 / 已处理，只改应用里的状态，不改邮箱或 eLearning：
+   * - 邮件：done = 已处理（不再出现在「待回复」里）；同步时保留（见 mail-sync）。
+   * - 作业：平台状态以 eLearning 为准，本地完成记在对应任务上（同步不会覆盖已完成的任务）。
+   */
+  markItemDone(id: string, done: boolean): Item | undefined {
+    const item = this.getItem(id);
+    if (!item) return undefined;
+    if (item.kind === 'assignment') {
+      const task = this.taskForItem(id);
+      if (task) this.setTaskStatus(task.id, done ? 'done' : 'todo');
+    } else {
+      this.db.run('UPDATE items SET done=? WHERE id=?', done ? 1 : 0, id);
+      if (done) this.cancelFollowupsForItem(id);
+    }
+    return this.getItem(id);
+  }
+  findSourceItem(source: string, kind: string, sourceId: string): Item | undefined {
+    const row = this.db.get<Row>('SELECT * FROM items WHERE source = ? AND kind = ? AND source_id = ?', source, kind, sourceId);
+    return row ? mapItem(row) : undefined;
+  }
   setItemAi(id: string, ai: { category?: string; summary?: string; action?: string; model?: string }): void {
     this.db.run('UPDATE items SET ai_category=?, ai_summary=?, ai_action=?, ai_model_used=? WHERE id=?', ai.category, ai.summary, ai.action, ai.model, id);
   }
@@ -417,8 +438,12 @@ export class Repo {
   upsertTaskForItem(t: { goalId?: string; itemId: string; title: string; dueAt?: string; done: boolean; verify?: VerifyCondition }): Task {
     const prev = this.db.get<Row>('SELECT * FROM tasks WHERE item_id = ?', t.itemId);
     if (prev) {
-      this.db.run('UPDATE tasks SET title=?, due_at=?, status=CASE WHEN ? THEN ? ELSE status END WHERE id=?',
-        t.title, t.dueAt, t.done ? 1 : 0, 'done', prev.id);
+      // 平台上完成，或用户在本地标记过完成 → done；平台上撤销了完成且本地没标记 → 回到 todo；用户跳过的保持跳过
+      this.db.run(
+        `UPDATE tasks SET title=?, due_at=?,
+           status=CASE WHEN ? OR local_done = 1 THEN 'done' WHEN status = 'skipped' THEN 'skipped' ELSE 'todo' END
+         WHERE id=?`,
+        t.title, t.dueAt, t.done ? 1 : 0, prev.id);
       return this.getTask(prev.id)!;
     }
     const id = newId();
@@ -442,8 +467,24 @@ export class Repo {
     const r = this.db.get<Row>('SELECT * FROM tasks WHERE item_id = ?', itemId);
     return r ? mapTask(r) : undefined;
   }
-  setTaskStatus(id: string, status: Task['status']): void {
-    this.db.run('UPDATE tasks SET status=? WHERE id=?', status, id);
+  /**
+   * 更新任务状态。
+   * - by = 'user'（默认）：用户的操作（目标页打勾、对话里说「写完了」、标记完成）。对平台作业对应的任务，
+   *   同时记下「本地标记完成」，之后同步不会被平台状态覆盖；标记完成时取消这件事的待跟进。
+   * - by = 'platform'：根据平台状态更新（闭环验证），不改本地标记。
+   */
+  setTaskStatus(id: string, status: Task['status'], by: 'user' | 'platform' = 'user'): void {
+    if (by === 'platform') {
+      this.db.run('UPDATE tasks SET status=? WHERE id=?', status, id);
+      return;
+    }
+    this.db.run('UPDATE tasks SET status=?, local_done=CASE WHEN item_id IS NULL THEN local_done ELSE ? END WHERE id=?', status, status === 'done' ? 1 : 0, id);
+    const itemId = this.getTask(id)?.itemId;
+    if (status === 'done' && itemId) this.cancelFollowupsForItem(itemId);
+  }
+  /** 事项已完成 / 已处理：这件事的待跟进不再需要问 */
+  cancelFollowupsForItem(itemId: string): void {
+    this.db.run("UPDATE followups SET status='done' WHERE status='pending' AND item_id=?", itemId);
   }
   listTasks(filter: { goalId?: string; dueBefore?: string; status?: Task['status'] } = {}): Task[] {
     const where: string[] = [];
@@ -702,7 +743,7 @@ function mapGoal(r: Row): Goal {
   return { id: r.id, level: r.level, title: r.title, description: opt(r.description), courseId: opt(r.course_id), dueAt: opt(r.due_at), status: r.status, createdBy: r.created_by, createdAt: r.created_at };
 }
 function mapTask(r: Row): Task {
-  return { id: r.id, goalId: opt(r.goal_id), itemId: opt(r.item_id), title: r.title, dueAt: opt(r.due_at), status: r.status, source: r.source, verify: fromJson(r.verify, undefined) };
+  return { id: r.id, goalId: opt(r.goal_id), itemId: opt(r.item_id), title: r.title, dueAt: opt(r.due_at), status: r.status, source: r.source, verify: fromJson(r.verify, undefined), localDone: !!r.local_done };
 }
 function mapFollowup(r: Row): Followup {
   return { id: r.id, topic: r.topic, dueAt: r.due_at, itemId: opt(r.item_id), status: r.status, verify: fromJson(r.verify, undefined) };

@@ -113,6 +113,13 @@ export function registerIpc(ctx: AppContext, opts: {
     if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
       decideTicket(a.payload.ticketId, true, id);
     }
+    // 在本地标记邮件已处理 / 作业已完成（不改邮箱和 eLearning）
+    if (action === 'mark_done' && typeof a?.payload?.itemId === 'string') {
+      if (!repo.markItemDone(a.payload.itemId, true)) throw new Error('对应的邮件或作业已不存在。');
+      repo.setFeedStatus(id, 'accepted');
+      opts.onChanged?.('feed');
+      opts.onChanged?.('goals');
+    }
   });
 
   handle('goals.list', async () => ({ goals: repo.listGoals(), tasks: repo.listTasks() }));
@@ -185,7 +192,7 @@ export function registerIpc(ctx: AppContext, opts: {
     if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' }));
     return [
       { platform: 'elearning', status: await opts.auth.status('elearning') },
-      { platform: 'icourse', status: await opts.auth.status('icourse') },
+      { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
       { platform: 'mail', status: s.mail?.user && opts.secrets.hasMailPassword() ? 'ok' : 'not_configured' },
     ];
   });
@@ -193,7 +200,7 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('platforms.syncNow', async () => {
     const result = await ctx.syncAll();
     await ctx.engine.tick();
-    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+    if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
   });
 
   handle<[number?], unknown>('decisions', async (limit) => {
@@ -212,7 +219,7 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('dev.tick', async () => {
     const result = await ctx.syncAll();
     await ctx.engine.tick();
-    if (result.errors.length) throw new Error('同步未完成，请检查登录状态、邮箱配置和网络后重试。');
+    if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
     await ctx.executor.runNext();
   });
   const wipe = () => {

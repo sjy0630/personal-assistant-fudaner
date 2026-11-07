@@ -162,7 +162,8 @@ export class ChatAgent {
   private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
-    const system = [personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString() }), this.summarizer.context()].filter(Boolean).join('\n\n');
+    const policy = createToolPolicy(this.repo, llm);
+    const system = [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString() }), this.summarizer.context()].filter(Boolean).join('\n\n');
     const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
@@ -170,7 +171,6 @@ export class ChatAgent {
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
-    const policy = createToolPolicy(this.repo, llm);
     const result = await runAgentLoop({
       llm, hub: this.hub, tools: this.hub.llmTools(policy.filter), messages,
       authorizeTool: policy.authorize,
@@ -196,7 +196,7 @@ export class ChatAgent {
       if (r.type === 'item') {
         const it = this.repo.getItem(r.id);
         if (!it) return externalData('item', '引用的事项已不存在。');
-        const body = it.kind !== 'email' || local ? it.body : [
+        const body = it.kind !== 'email' || allowMailBody ? it.body : [
           it.aiSummary && `摘要：${it.aiSummary}`,
           it.aiAction && `建议操作：${it.aiAction}`,
           !it.aiSummary && (allowMailBody ? it.body : '当前只有邮件主题可用，正文保留在本机。'),
