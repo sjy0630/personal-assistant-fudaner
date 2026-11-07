@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { needsMailPassword, prepareMail } from '../settings-state';
 import { Feedback, Loading, same, useLoad, useTask, type PanelProps } from './support';
 import styles from './Settings.module.css';
+import { CampusPanel } from './CampusPanel';
 
 const EMPTY_MAIL = { user: '', host: 'imap.exmail.qq.com', port: 993 };
 const PLATFORM = { elearning: 'eLearning', icourse: 'iCourse', mail: '学生邮箱' };
@@ -130,6 +131,7 @@ export function AccountSettings({ onDirty, onBusy }: PanelProps) {
           </div>
           {lastSync && <p className={styles.hint}>本页最近一次成功同步：{lastSync}</p>}
         </section>
+        <CampusPanel onBusy={onBusy} demo={saved.demoMode} />
         <section className={styles.section}>
           <h2>学生邮箱</h2>
           <p className={styles.hint}>

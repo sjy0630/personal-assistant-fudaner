@@ -49,6 +49,7 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
     hub.call = async (name, args) => { const r = await call(name, args); tools.push({ name, ok: r.ok, args, result: redact(r.text).slice(0, 1500) }); return r; };
   };
   const shots: Shot[] = [];
+  const budgetLog: string[] = [];
   const run = async (id: string, body: (s: Shot, used: (name: string) => ToolTrace[]) => Promise<void>) => {
     const started = performance.now(); const toolStart = tools.length; const postStart = posted.length;
     const s: Shot = { id, passed: false, elapsedMs: 0, checks: {}, tools: [], posted: [] };
@@ -89,14 +90,20 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
     });
     await run('镜头3-4点提醒', async (s, used) => {
       await chat(s, '好，4 点提醒我');
-      s.checks.scheduled = used('schedule_followup').length > 0;
-      const due = ctx.repo.pendingFollowups().map(f => shanghai(f.dueAt).toISOString().slice(11, 16));
+      // 跟进（schedule_followup）或定时提醒（create_reminder）都算；时间须为 16:00
+      const due = [
+        ...ctx.repo.pendingFollowups().map(f => f.dueAt),
+        ...used('create_reminder').map(t => String(t.args.at ?? '')),
+      ].filter(at => Number.isFinite(Date.parse(at))).map(at => shanghai(at).toISOString().slice(11, 16));
+      s.checks.scheduled = used('schedule_followup').length > 0 || used('create_reminder').length > 0;
       s.checks.at1600 = due.includes('16:00');
-      s.note = `待跟进时间（上海）：${due.join('、') || '无'}`;
+      s.note = `提醒/跟进时间（上海）：${due.join('、') || '无'}`;
     });
     await run('镜头4-补充邮件', async (s) => {
+      const before = posted.length;
       mail.inject(demoLateMail(new Date())); await ctx.syncAll(); await ctx.engine.tick();
-      s.checks.lab5Message = posted.some(m => /Lab 5/.test(m.content) && /补充|PDF|报告/.test(m.content));
+      // 只看这一镜头新出现的消息，避免误把前面对话里提到“报告”的回复算进来
+      s.checks.lab5Message = posted.slice(before).some(m => /Lab 5/.test(m.content) && /补充|PDF/.test(m.content));
     });
     await run('镜头4-交换目标', async (s, used) => {
       const card = ctx.repo.listFeed().find(c => /交换/.test(c.title));
@@ -107,7 +114,8 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
       s.checks.addedTasks = used('add_task').length >= 2;
       const tasks = used('add_task').map(t => { try { return JSON.parse(t.result) as { title: string; dueAt?: string; goalId?: string }; } catch { return undefined; } }).filter(Boolean) as { title: string; dueAt?: string; goalId?: string }[];
       const local = tasks.filter(t => t.dueAt).map(t => shanghai(t.dueAt!));
-      s.checks.avoidsTuesdayEvening = local.every(d => !(d.getUTCDay() === 2 && d.getUTCHours() >= 18));
+      // 当天 23:59 截止只是日期，不算占用周二晚上；只检查安排在周二 18:00–23:00 的具体时段
+      s.checks.avoidsTuesdayEvening = local.every(d => !(d.getUTCDay() === 2 && d.getUTCHours() >= 18 && d.getUTCHours() < 23));
       s.checks.avoidsAfter23 = local.every(d => d.getUTCHours() < 23 || (d.getUTCHours() === 23 && d.getUTCMinutes() === 59));
       s.checks.tasksUnderGoal = tasks.length > 0 && tasks.every(t => t.goalId && ctx.repo.getGoal(t.goalId));
       s.note = tasks.map(t => `${t.title}${t.dueAt ? ` @${shanghai(t.dueAt).toISOString().slice(0, 16)}` : ''}`).join('；');
@@ -132,9 +140,12 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
       const next = ctx.repo.listItems({ kind: 'assignment', done: false, dueAfter: new Date().toISOString(), limit: 1, dueBefore: new Date(Date.now() + 30 * 86_400_000).toISOString() })[0];
       s.checks.hasAssignment = !!next;
       if (!next) return;
-      elearning.submit(next.sourceId); await ctx.syncAll(); await ctx.engine.tick();
-      s.checks.closedLoop = posted.some(m => m.content.includes(next.title) && /交了|已提交|完成/.test(m.content));
-      s.note = `交掉的作业：${next.title}`;
+      const before = posted.length;
+      elearning.submit(next.sourceId); await ctx.syncAll();
+      const evals = await ctx.engine.tick();
+      s.checks.closedLoop = posted.slice(before).some(m => m.content.includes(next.title) && /交了|已提交|完成/.test(m.content));
+      const budget = ctx.repo.getBudget(localDate(new Date()), () => ({ budget: 10, phase: 'regular' }));
+      s.note = `交掉的作业：${next.title}；研判：${evals.map(e => `${e.threadKey} → ${e.decision}（${e.reason}）`).join('；') || '无'}；当日预算 ${budget.spent}/${budget.budget}`;
     });
     await run('镜头7-讲义出题', async (s, used) => {
       const path = fileURLToPath(new URL('../../demo-assets/数据结构-期中复习讲义.pdf', import.meta.url));
@@ -167,6 +178,8 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
       if (saved) s.resource = { title: saved.title, text: saved.text };
       s.note = `询问：${ask.content.slice(0, 80)}`;
     });
+    // 记录占用注意力预算的决策，便于定位“预算不足”类问题
+    budgetLog.push(...ctx.repo.listEvals(300).filter(e => e.attentionCost > 0).reverse().map(e => `${e.createdAt.slice(11, 19)} ${e.threadKey} → ${e.decision} 成本${e.attentionCost}（${e.reason}）`));
   } finally {
     await ctx.close();
     vi.useRealTimers();
@@ -175,7 +188,7 @@ it.runIf(enabled)('云端模型按演示剧本回放镜头 3–8', async () => {
   const report = {
     generatedAt: new Date().toISOString(), model: `cloud:${model.model}`, demoNow: now.toISOString(),
     allowSensitiveToCloud: allowSensitive, localModel: false,
-    passed: shots.filter(s => s.passed).length, total: shots.length, shots,
+    passed: shots.filter(s => s.passed).length, total: shots.length, shots, budgetLog,
     limitations: [
       'Fictitious demo data in an in-memory database following docs/DEMO.md; no application settings, account data or real mail were read; the API key is not stored.',
       allowSensitive ? 'allowSensitiveToCloud is true: mail bodies, classification, assessment and memory extraction may be sent to the cloud model (fictitious demo data only).' : 'Sensitive tasks (mail classification, assessment, memory extraction) stay on rules because no local model is configured and allowSensitiveToCloud is false, matching a cloud-only demo setup.',

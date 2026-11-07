@@ -284,3 +284,11 @@
     gap: 10px;
   }
 }
+
+/* 通知来源勾选：多列紧凑排列 */
+.checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 16px;
+  margin-bottom: 12px;
+}

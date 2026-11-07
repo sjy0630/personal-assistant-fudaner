@@ -178,13 +178,17 @@
 
 | 项目 | 形态 | 能做什么 | 和本产品的关系 |
 |---|---|---|---|
-| **旦旦活动簿** | 微信小程序 | 校园通知/活动聚合 | 通知聚合已经有人做，本产品不在这个方向上竞争 |
+| **旦旦活动簿** | 微信小程序 | 跟踪复旦相关公众号，聚合讲座、招聘、文体活动 | 证明「活动信息差」是真需求；本产品不做大规模公众号抓取，而是把用户关心的活动按兴趣和空闲时间推荐、加入计划（§5.8.1），后续可谈数据合作 |
+| [FduNav-Desktop](https://github.com/CPJiNan/FduNav-Desktop)（AGPL-3.0） | Electron 桌面端 | 约 40 个学校和院系官网的通知聚合与 AI 摘要；课表、考试、日历与提醒；eLearning 待办；校园卡、图书馆；带工具调用的聊天（写入需审批，有执行轨迹） | 和本产品最接近。它是「查询型」：用户打开应用去看、去问；本产品是「主动型」：主动引擎决定什么值得打扰、何时打扰，并有邮件分拣、目标闭环和长期记忆。11/7 起本产品也接入了官网通知、真实课表、考试、校园卡和图书馆（§5.8.2、§5.8.3），参考了它公开的接口地址，代码独立实现（它的协议是 AGPL，本产品不使用其代码） |
 | [Fudan_iCourse_Subscriber](https://github.com/LeafCreeper/Fudan_iCourse_Subscriber)（约 195 star） | GitHub Actions 定时任务 | iCourse 回放语音转写 + PPT OCR + AI 摘要，发送到邮箱 | 证明回放摘要需求很强；可参考其 WebVPN 接入和本地 ASR 方案 |
 | [fudan-elearning-reminder](https://github.com/michaellu2007/fudan-elearning-reminder) | 本地 Python 脚本 | eLearning 作业未提交提醒 | 证明 DDL 提醒需求；**提供了关键实测经验：Canvas Token 约 1 小时失效，需要用 UIS 会话** |
 | [fudan-elearning-dashboard](https://github.com/btr2309887446-code/fudan-elearning-dashboard) | Electron / iOS / Flutter | eLearning 课程、作业、成绩看板，可选 AI 摘要 | 同样采用桌面端 + UIS 直连 + 自带模型的路线，验证了技术可行性 |
 | [fudan-courseflow](https://github.com/kniphofia1/fudan-courseflow) | Docker | eLearning 课件下载 + iCourse 本地转写与摘要 | 证明本地 ASR（SenseVoice）在普通 CPU 上可行 |
 | DanXi（旦夕） | 手机 App | 课表、校园卡、树洞等校园工具 | 工具型应用，没有智能体能力 |
 
+| [thu-cli](https://github.com/bill810975/thu-cli)（清华，source-available，含 BSL 1.1 派生代码） | Rust 命令行 + Codex skill | 清华 Info / 网络学堂的课程、作业、课表、一卡通、图书馆、邮箱等；体育场馆预约、报销草稿与提交（写操作需 `--confirm`）；保存凭据自动续期 | 本身没有智能体，是给 Codex 等编程智能体用的工具层，相当于本产品的 MCP 层。证明「校园服务做成智能体工具」有需求；它保存密码换自动续期，本产品不保存密码，取舍不同 |
+| 复旦社区 MCP 服务：[danta-mcp](https://github.com/likangxian1007/danta-mcp)（GPL-3.0）、[FudanMailBox_MCP](https://github.com/BuddyKang/FudanMailBox_MCP)（MIT）、[fudan-library-mcp](https://github.com/LvDAO/fudan-library-mcp)（MIT）、[ehall](https://github.com/H4S2O8/ehall)（未声明协议） | 独立 MCP 服务（多为 Python） | 树洞与旦克课程评价检索；学生邮箱收发信；图书馆文献检索与全文索引；一卡通、宿舍电量、体育场馆预约 | 都是单点工具，需要用户自己配置到 Claude / Codex 等客户端，多数要求把学号密码写进环境变量。本产品可以作为它们的「宿主」：后续支持在设置里接入外部 MCP 服务（§7.5） |
+| [fdudash](https://github.com/FDU-Utils/fdudash)（GPL-3.0） | 本地 Node 服务 + 网页 / Tauri | 复旦仪表盘：待办、课表、eLearning、考试、空教室、天气 | 查询型仪表盘，没有智能体 |
 | Muse / Dots 等通用 AI 伴侣 | App | 记忆、主动对话、陪伴 | 体验是我们的参照；但它们接触不到复旦的平台和数据 |
 | [dsh-superagent](https://github.com/deepseek-ai/dsh-superagent-prototype)（DeepSeek 开源，研究原型，MIT） | 基于 DeepSeek Harness 的插件 | 面向 GitHub / 飞书的主动型编程智能体：监听事件、评估是否接活、在独立会话中执行、回到原对话交付 | 借鉴其「最少注意力」理念和领域模型，作为我们智能体运行架构的参考（§7.8） |
 
@@ -602,6 +606,67 @@
 - 转写和笔记只存在本地，只供个人复习。
 - **11/5 晚决定是否保留**：如果 UIS 接入和主流程还没稳定，就放到决赛版本。
 
+### 5.8.1 校园活动（公众号、订阅源）· 11/7 新增
+
+校园里讲座、宣讲会、比赛、演出的信息分散在几百个公众号和院系网站里，这是复旦同学最典型的「信息差」。旦旦把这些活动接进来，按用户的兴趣、目标和空闲时间推荐。
+
+- **导入文章**：用户把公众号文章或学校网页链接发到对话里（或在「设置 → 通知与活动」粘贴），旦旦读出活动名称、时间、地点、校区、主办方、报名方式。一篇推送里有多场活动时逐场提取；活动回顾、新闻报道不算活动。
+- **订阅源跟踪**：在「设置 → 通知与活动」添加 RSS / Atom 地址，每 30 分钟检查一次新文章。公众号可以由用户自己用 WeWe RSS 等工具转成 RSS。
+- **主动推荐**：新活动进入主动引擎（§5.7），和长期目标、兴趣相关的放进「动态 → 活动与机会」，写明推荐理由；无关的只记录，用户问「最近有什么讲座」时再查。已经开始的活动不推荐。
+- **加入计划**：动态卡片上点「加入计划」，或在对话里说「帮我记上」，活动会成为「目标 → 校园活动」里的一条任务。点「不感兴趣」后不再推荐这场活动。
+- **对话工具**：`import_article`、`list_activities`、`add_activity_to_plan`（fudaner-local）。
+- **合规边界**：应用只读取公开网页和用户提供的 RSS，不登录微信、不调用微信的私有接口。批量跟踪公众号的工具由用户自行选择，账号风险由用户自己判断，文档中写明。和「旦旦活动簿」等已有的聚合小程序后续可以谈数据合作。
+- 文章内容是公开信息，提取任务优先用云端模型；没有模型时用规则识别「时间：」「地点：」等常见写法（只认一场活动）。
+
+### 5.8.2 学校和院系官网通知 · 11/7 新增
+
+- 内置约 40 个学校部门和院系官网的「通知公告」栏目（教务处、研究生院、国际交流处、相辉学堂、各院系）。**设置交给对话**：默认按画像和记忆自动关注（教务处、本人院系、研究生加研究生院、兴趣里提到交换加国际合作与交流处等），记住新兴趣后自动调整；用户在对话里说「也关注经院」「别推保卫处」，助理用 `follow_notice_sources` 修改，说院系年级时用 `update_profile` 记下；首次使用后助理主动介绍一次并给出一点就能加的建议。设置页仍可手动勾选，也可以恢复自动选择。
+- 每 2 小时读一次列表页，新通知读详情（正文、PDF 附件、跳转的公众号文章）。不为每个网站单独写规则：通用解析「一行一个链接 + 一个日期」的条目，网站改版也不容易失效。第一次同步只为最近 3 天的通知生成事件。
+- 研判：和目标相关的建议整理（工单），和兴趣相关的放进「动态 → 学校通知」，本人院系和学校部门涉及选课、考试、报名、截止、奖学金、交换的放进动态，其余只记录、可搜索。讲座、宣讲会类通知直接整理成活动（§5.8.1）。
+- 对话工具：`search_notices`、`get_notice`（分段读正文）。
+- 部分网站只允许校园网访问，读不到时在设置页标出来源和原因（「校外请先连学校 VPN」），不算同步失败。
+
+### 5.8.3 真实课表、考试安排、校园卡与图书馆 · 11/7 新增
+
+- **课表**：登录复旦账号后从教务系统导入（本科读教务系统「我的课表」，研究生读研究生选课系统），每天自动更新。课表带教学周（单双周、前八周），「今天」和空闲时段按当周实际上的课计算，节假日没有课。eLearning 上有同名课程时写到那门课上。
+- **考试安排**：从教务系统「考试安排」导入，成为「考试」事项，写入课程考核（学期节奏感知）。考前 7 天建议排复习计划（工单），考前一天提醒时间和考场；「今天」栏显示 14 天内的考试。
+- **校园卡**：复用登录状态读取余额，每天查一次，低于 30 元提醒充值；对话里可问余额。
+- **图书馆**：图书馆公开接口的各馆在馆人数和还能进入的人数、开放时间；对话里问「哪个馆人少」。
+- 对话工具：`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`。
+- 全部只读，不改动选课、不提交任何表单。学校接口地址和返回格式参考了同学开源的 FduNav-Desktop（AGPL-3.0），代码为本项目独立实现。
+
+### 5.8.4 定时提醒与定时任务 · 11/7 新增
+
+- 用户在对话里说「每天 22:00 提醒我背单词」「每周一 8 点帮我汇总通知和 DDL」，助理用 `create_reminder` 创建；也可在「设置 → 助理 → 定时提醒」手动添加、暂停、删除（`list_reminders`、`cancel_reminder`）。
+- 两种：**提醒**（到点弹系统通知 + 对话消息）；**定时任务**（到点由助理按用户写好的要求自动完成，结果作为主动消息发到对话里，不伪造用户消息；没接模型时退回成提醒）。
+- 重复规则：一次、每天、工作日、每周几。用户自己设的，到点必达：不占注意力预算、不受静默时段限制；「暂停提醒 1 小时」期间顺延；电脑睡眠错过超过 12 小时的跳过、只排下一次。
+- 和 `schedule_followup`（助理根据用户的计划主动约的一次跟进）互补。
+
+### 5.8.5 树洞与旦克、图书馆文献检索、宿舍电量（内置）· 11/7 新增
+
+- **树洞与旦克**：搜索树洞帖子和回复、读楼层、看最新帖子；搜旦克课程、读课程评价（各老师、学期的评分和文字评价）。
+  - 网络：先试直连（校园网内）；连不上时走 WebVPN，地址按 WebVPN 公开的 AES-CFB 规则改写，WebVPN 登录复用复旦统一身份认证会话（做法参考 DanXi，代码独立实现）。
+  - 账号：用户在设置里用树洞账号登录一次，换成令牌后用系统钥匙串加密保存；不保存树洞密码；令牌过期自动刷新，刷新失败提示重新登录。
+  - 只读：不发帖、不回复、不点赞。引用树洞内容时说明来源和洞号，不当作事实。
+- **图书馆文献检索**：复旦图书馆资源发现系统的匿名接口（访客令牌 + 检索），返回题录、摘要、DOI 和图书馆详情页；请求间隔 1 秒。接口用法参考 fudan-library-mcp（MIT），用 TypeScript 重写。
+- **宿舍电量**：zlapp 电量接口，复用统一身份认证会话；每天查一次，低于 10 度提醒。
+- 对话工具：`search_treehole`、`read_treehole`、`latest_treehole`、`search_course_reviews`、`get_course_reviews`、`search_literature`、`get_literature`、`get_dorm_electricity`。
+- 原先作为外部 MCP 预设的图书馆文献检索和旦挞已移除（内置后用户不需要安装 Python、uv 或克隆代码）；外部预设只保留 ehall 的体育场馆空闲。
+
+### 5.8.6 课件下载 · 11/7 新增
+
+- 用户说「帮我下载数据结构第 5 讲的课件」，助理用 `list_files` 找到文件、`download_file` 下载。读「文件」栏目；老师隐藏了「文件」栏目时，从「单元」里找文件条目。
+- 保存到系统「下载/Fudaner/课程名」，同名文件不覆盖；PDF、Word、PPT（.pptx，按页提取文字和备注）、文本自动导入资源库（课件类，关联课程），之后可以读内容、总结、出题。回复带「在文件夹中显示」按钮（只允许打开 Fudaner 下载的文件）。
+- 只读取 eLearning；单个文件最大 200 MB，超过 30 MB 只下载不导入资源库。
+
+### 5.8.7 动态策展 · 11/7 新增
+
+- 白天（8:00–22:30）每 4 小时，按模型对用户的了解（画像、记忆、课程、最近问过的事）整理一批动态，不弹通知、不占注意力预算；动态页可以随时「整理一下动态」。
+- **校园**：从最近 5 天的官网通知和 14 天内的讲座、活动里，让模型挑出和用户相关的（最多 4 条），写一句摘要和推荐理由；已经出现过的不重复。
+- **联网资讯**：模型根据用户情况生成 2–3 个检索词（不含姓名学号），用必应网页搜索（最近一周）找结果，过滤掉不提检索词的结果，再让模型挑最多 3 条可靠、较新的资讯，卡片带「打开原文」。只把检索词发给搜索引擎；动态页可以关掉「联网找资讯」。
+- 学校通知和活动是公开信息：没有本地模型时，研判也交给云端模型（邮件等隐私内容仍只用本地模型或按规则）。
+- 「不感兴趣」的反馈会记成记忆，下次整理时避开。
+
 ### 5.9 随叫随到 · P1
 
 - 全局快捷键（如 `Alt + Space`）唤出一个小对话框，随时问一句；需要展开时跳转到主对话。
@@ -810,7 +875,24 @@ interface FudanAuth {
 | `fudan-courses` | `list_courses()`、`get_course(code)`：返回该课程在各平台的数据汇总（作业、公告、相关邮件、回放） | P0 |
 | `fudaner-local` | **记忆**：`remember(content, type)`、`recall(query)`、`forget(id)`、`get_profile()`<br>**目标**：`list_goals(level?)`、`create_goal(title, level, due?)`、`add_task(goal_id, title, due?)`、`update_progress(id, status)`、`list_deadlines(range)`、`schedule_followup(topic, at, ref?)`<br>**动态**：`push_feed_card(type, title, body, reason, refs, actions)`<br>**资源库**：`save_resource(title, content, course?)`、`search_resources(query, course?)`、`read_resource(id, range?)`<br>**搜索**：`search_all(query, types?)` | P0 |
 | `fudan-icourse` | `list_replays(course?)`、`search_transcript(query, course?)`、`get_replay_summary(id)` | P1 |
-| `fudan-jwfw`（教务） | `get_timetable()`、`get_exams()` | P2 |
+| `fudan-jwfw`（教务） | `get_timetable()`、`get_exams()` | P2（11/7 已实现，工具暂在 fudaner-local） |
+
+**现状（11/7）：**
+
+| MCP 服务 | 已实现的工具 | 数据从哪来 | 说明 |
+|---|---|---|---|
+| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`（可带 `refresh` 先实时同步）、`get_assignment`、`list_announcements`、`list_files`、`download_file`（课件下载到本机「下载/Fudaner/课程名」并导入资源库） | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
+| `fudan-mail`（独立包） | `search_mail`、`get_mail`、`list_action_required` | 本地库（IMAP 同步） | 只读，不发信 |
+| `fudan-courses`（独立包） | `list_courses`、`get_course` | 本地库 | 跨平台课程总表 |
+| `fudaner-local` | 记忆、目标、动态、资源库、搜索，以及 11/7 新增的校园工具：`search_notices`、`get_notice`、`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`、`import_article`、`list_activities`、`add_activity_to_plan` | 本地库；图书馆、校园卡实时查询 | 校园工具先放在这里，决赛前拆成独立包 |
+| `fudan-icourse` | — | — | 未实现 |
+
+- 课表、考试、校园卡的客户端已经写好（`src/main/sources/`），但工具还在 `fudaner-local` 里；决赛前拆成 `mcp-fudan-jwfw`（课表、考试）、`mcp-fudan-notices`（官网通知）、`mcp-fudan-campus`（校园卡、图书馆）三个独立包。
+- 所有服务目前都只能在应用内运行（InMemoryTransport），还没有 stdio 入口，不能直接配到 Claude / Codex 里用。
+- **外部 MCP 服务（11/7 已实现）**：「设置 → 扩展服务」可以接入社区做好的复旦 MCP 服务，以子进程（stdio）运行，旦旦直接调用。预设 ehall 的体育场馆空闲，也可以添加自定义服务。图书馆文献检索、树洞与旦克、宿舍电量已改为内置（§5.8.5）。
+  - 账号由各服务自己保存（它们的配置脚本、.env、系统钥匙串），Fudaner 不读取、不保存；
+  - 只开放查询类工具：预设按工具名白名单（ehall 的预约、取消，旦挞会写本机文件的报告工具都不开放），自定义服务默认只开放标了只读的工具；没开放的工具模型看不到也调不到；
+  - 子进程环境不带应用的 API Key 等变量；工具结果当作外部数据；后台工单执行器不接入外部服务。
 
 **每个连接器分两层：**
 
@@ -1084,6 +1166,7 @@ flowchart LR
 | 冒用学校名义 | 不使用复旦校徽和官方视觉，界面标注「学生自制，非官方产品」 |
 | 参考开源项目 | 不复制代码，只参考公开的接入思路，并在说明书中注明来源 |
 | 接入不稳定 | 每个数据源可以单独关闭；同步失败时在设置页显示状态，不影响其他功能 |
+| 公众号文章抓取 | 只读取公开文章页和用户自己添加的 RSS，不登录微信、不调用私有接口、不批量爬取；每个订阅源每次最多读 10 篇新文章；遇到微信验证页面直接停止并提示用户 |
 
 ---
 

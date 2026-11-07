@@ -44,6 +44,17 @@ export function emitClockTriggers(repo: Repo, now: Date, opts: { morningAt?: str
     });
   }
 
+  // 考试：考前 7 天提醒排复习计划，考前一天提醒时间和考场
+  for (const exam of repo.listItems({ kind: 'exam', dueAfter: now.toISOString(), dueBefore: new Date(now.getTime() + 7 * 24 * H).toISOString(), limit: 50 })) {
+    const left = Date.parse(exam.dueAt!) - now.getTime();
+    const stage = left <= 30 * H ? '1d' : '7d';
+    const [timeText, location] = exam.body.split('\n');
+    repo.addTrigger({
+      source: 'clock', kind: 'exam_soon', sourceRef: `${exam.id}:${stage}`, threadKey: `exam:${exam.id}`,
+      payload: { itemId: exam.id, title: exam.title, course: exam.title.replace(/ 考试$/, ''), startsAt: exam.dueAt, timeText, location, stage, daysLeft: Math.max(1, Math.round(left / (24 * H))) },
+    });
+  }
+
   for (const f of repo.dueFollowups(now.toISOString())) {
     repo.addTrigger({ source: 'clock', kind: 'followup_due', sourceRef: f.id, threadKey: f.itemId ? `item:${f.itemId}` : `followup:${f.id}`, payload: { followupId: f.id, topic: f.topic, itemId: f.itemId } });
     repo.setFollowupStatus(f.id, 'done');

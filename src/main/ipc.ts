@@ -1,16 +1,20 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ipcMain, type BrowserWindow } from 'electron';
 import type { FudanerApi } from '../shared/ipc';
-import type { ChatMessage, PlatformState } from '../shared/types';
+import type { ChatMessage, ExternalMcpConfig, PlatformState, ReminderRepeat } from '../shared/types';
 import type { AppContext } from './app-context';
 import type { AuthManager } from './auth/auth-manager';
 import type { DemoElearningClient, DemoMailClient } from './demo/demo';
 import { demoLateMail, seedDemoProfile } from './demo/demo';
+import { NOTICE_SOURCES } from './notices/sources';
+import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
+import { nextOccurrence, validateRepeat } from './engine/reminders';
+import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
 import { OpenAiCompatClient } from './ai/llm';
-import { resolveChatReference } from './chat/references';
+import { resolveChatReference, safeExternalUrl } from './chat/references';
 
 /**
  * 把 FudanerApi（src/shared/ipc.ts）逐个映射到主进程实现。
@@ -18,6 +22,9 @@ import { resolveChatReference } from './chat/references';
  */
 export function registerIpc(ctx: AppContext, opts: {
   auth: AuthManager; window: () => BrowserWindow | null;
+  treehole?: { login(email: string, password: string): Promise<void>; logout(): void; loggedIn(): boolean };
+  downloadsDir?: () => string;
+  revealFile?: (path: string) => void;
   demo: { elearning: DemoElearningClient; mail: DemoMailClient };
   secrets: { setMailPassword(p: string): void; hasMailPassword(): boolean };
   restartScheduler(): void;
@@ -76,6 +83,16 @@ export function registerIpc(ctx: AppContext, opts: {
         return;
       }
       if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
+      // 打开下载的课件所在文件夹：只允许应用自己的下载文件夹
+      if (action === 'reveal_file' && typeof data?.path === 'string') {
+        if (!opts.revealFile || !opts.downloadsDir) throw new Error('当前环境不能打开文件夹。');
+        const { resolve, sep } = await import('node:path');
+        const root = resolve(opts.downloadsDir(), 'Fudaner') + sep;
+        const target = resolve(data.path);
+        if (!target.startsWith(root)) throw new Error('只能打开 Fudaner 下载的文件。');
+        opts.revealFile(target);
+        return;
+      }
       if (action === 'say' && typeof data?.text === 'string') {
         await ctx.agent.handleUserMessage(data.text);
         markUsed();
@@ -103,19 +120,44 @@ export function registerIpc(ctx: AppContext, opts: {
     return target && target.status !== 'dismissed' && !cards.some((card) => card.id === target.id) ? [...cards, target] : cards;
   });
   handle<[string, string?], void>('feed.dismiss', async (id, reason) => {
+    const card = repo.getFeedCard(id);
     repo.setFeedStatus(id, 'dismissed', reason);
+    // 不感兴趣的活动以后不再推荐，也不再出现在活动列表里（重复导入同一篇文章也不会）
+    for (const ref of card?.refs ?? []) {
+      if (ref.type === 'item' && repo.getItem(ref.id)?.kind === 'activity') repo.markItemDone(ref.id, true);
+    }
     if (reason) repo.addMemory({ type: 'interest', content: `不关心：${reason}`, source: 'feedback' });
+  });
+  // 现在整理一次动态（校园 + 联网资讯）
+  handle<[], unknown>('feed.refresh', async () => {
+    const r = await ctx.curator.run(new Date(), { force: true });
+    opts.onChanged?.('feed');
+    return r;
   });
   handle<[string, string], void>('feed.act', async (id, action) => {
     const card = repo.getFeedCard(id);
     if (!card || card.status === 'dismissed') throw new Error('这条动态已不存在或已忽略。');
     const a = card.actions.find((x) => x.action === action);
+    // 资讯卡片：打开原文（只允许 http / https 链接）
+    if (action === 'open_url' && typeof a?.payload?.url === 'string') {
+      const url = safeExternalUrl(a.payload.url);
+      if (!url || !opts.openExternal) throw new Error('这个链接打不开。');
+      await opts.openExternal(url);
+      return;
+    }
     if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
       decideTicket(a.payload.ticketId, true, id);
     }
     // 在本地标记邮件已处理 / 作业已完成（不改邮箱和 eLearning）
     if (action === 'mark_done' && typeof a?.payload?.itemId === 'string') {
       if (!repo.markItemDone(a.payload.itemId, true)) throw new Error('对应的邮件或作业已不存在。');
+      repo.setFeedStatus(id, 'accepted');
+      opts.onChanged?.('feed');
+      opts.onChanged?.('goals');
+    }
+    // 把活动加入「校园活动」目标
+    if (action === 'add_to_plan' && typeof a?.payload?.itemId === 'string') {
+      if (!repo.addActivityToPlan(a.payload.itemId)) throw new Error('这场活动已不存在。');
       repo.setFeedStatus(id, 'accepted');
       opts.onChanged?.('feed');
       opts.onChanged?.('goals');
@@ -168,12 +210,16 @@ export function registerIpc(ctx: AppContext, opts: {
   });
   handle<[Record<string, unknown>], void>('settings.set', async (patch) => {
     const cur = repo.getSettings();
+    // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
+    delete patch.externalMcp;
+    const finishingOnboarding = patch.onboardingCompleted === true && !cur.onboardingCompleted;
     for (const k of ['cloud', 'local'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
     }
     repo.setSettings(patch);
     opts.restartScheduler();
+    if (finishingOnboarding) setTimeout(() => ctx.introduceNoticeSources(), 1500);
   });
   handle<[string], void>('settings.setMailPassword', async (p) => opts.secrets.setMailPassword(p));
   handle<['cloud' | 'local'], { ok: boolean; message: string }>('settings.testModel', async (which) => {
@@ -187,20 +233,99 @@ export function registerIpc(ctx: AppContext, opts: {
     }
   });
 
-  handle('platforms.status', async (): Promise<PlatformState[]> => {
-    const s = repo.getSettings();
-    if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' }));
-    return [
-      { platform: 'elearning', status: await opts.auth.status('elearning') },
-      { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
-      { platform: 'mail', status: s.mail?.user && opts.secrets.hasMailPassword() ? 'ok' : 'not_configured' },
-    ];
+  handle('platforms.status', async (): Promise<PlatformState[]> => ctx.platformStatus(true));
+  // 登录成功后马上在后台同步一次（作业、课表、考试、校园卡……），不用再手动点「立即同步」
+  handle('platforms.login', async () => {
+    await opts.auth.requestLogin();
+    void ctx.syncAll(new Date(), { force: true })
+      .then(() => ctx.engine.tick())
+      .then(() => { opts.onChanged?.('feed'); opts.onChanged?.('goals'); })
+      .catch((e) => console.error('[sync after login]', e));
   });
-  handle('platforms.login', async () => opts.auth.requestLogin());
   handle('platforms.syncNow', async () => {
-    const result = await ctx.syncAll();
+    const result = await ctx.syncAll(new Date(), { force: true });
     await ctx.engine.tick();
     if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
+  });
+
+  // 课表、考试、校园卡、图书馆：错误改写成以「请」开头的说明，渲染进程原样显示
+  const campusCall = <T>(run: () => Promise<T>) => run().catch((e: Error) => {
+    if (e.name === 'NeedLoginError') throw new Error('请先在上方重新登录复旦账号（登录已过期或还没登录）。');
+    throw new Error(e.message.startsWith('请') ? e.message : `请稍后重试：${e.message}`);
+  });
+  handle<[], unknown>('campus.status', async () => ({
+    timetable: repo.getKv('timetable_meta', null), exams: repo.getKv('exam_meta', null), problems: repo.getKv('campus_problems', {}),
+  }));
+  handle<[], unknown>('campus.importTimetable', () => campusCall(async () => { const r = await ctx.importTimetable(); opts.onChanged?.('goals'); return r; }));
+  handle<[], unknown>('campus.importExams', () => campusCall(async () => { const r = await ctx.importExams(); await ctx.engine.tick(); opts.onChanged?.('feed'); return r; }));
+  handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
+  handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
+  handle<[], unknown>('campus.electricity', () => campusCall(() => ctx.electricity()));
+  // 树洞账号：密码只用来换令牌，不保存
+  handle<[], unknown>('treehole.status', async () => ({ loggedIn: repo.getSettings().demoMode || !!opts.treehole?.loggedIn(), demo: repo.getSettings().demoMode }));
+  handle<[string, string], void>('treehole.login', (email, password) => campusCall(async () => {
+    if (!opts.treehole) throw new Error('请稍后重试：当前环境不能访问树洞。');
+    if (!email?.trim() || !password) throw new Error('请填写树洞账号（邮箱）和密码。');
+    await opts.treehole.login(email.trim(), password);
+  }));
+  handle<[], void>('treehole.logout', async () => opts.treehole?.logout());
+
+  // 定时提醒 / 定时任务
+  handle<[], unknown>('reminders.list', async () => repo.listReminders());
+  handle<[{ title: string; kind: string; prompt?: string; repeat: ReminderRepeat }], unknown>('reminders.add', async (r) => {
+    const title = typeof r?.title === 'string' ? r.title.trim().slice(0, 60) : '';
+    const kind = r?.kind === 'task' ? 'task' : 'remind';
+    const problem = !title ? '请填写标题。' : validateRepeat(r.repeat);
+    if (problem) throw new Error(problem.startsWith('请') ? problem : `请检查时间：${problem}`);
+    const next = nextOccurrence(r.repeat, new Date());
+    if (!next) throw new Error('请选择一个将来的时间。');
+    return repo.addReminder({ title, kind, prompt: typeof r.prompt === 'string' ? r.prompt.slice(0, 1000) : undefined, repeat: r.repeat, createdBy: 'manual', nextAt: next.toISOString() });
+  });
+  handle<[string, boolean], void>('reminders.setEnabled', async (id, enabled) => {
+    const r = repo.getReminder(id);
+    if (!r) throw new Error('这个提醒已不存在。');
+    repo.setReminderEnabled(id, enabled, nextOccurrence(r.repeat, new Date())?.toISOString());
+  });
+  handle<[string], void>('reminders.remove', async (id) => repo.removeReminder(id));
+
+  // 外部 MCP 服务
+  handle<[], unknown>('external.presets', async () => EXTERNAL_PRESETS.map(({ preset, name, summary, repo, license, setup, needsDir, dirHint }) => ({ preset, name, summary, repo, license, setup, needsDir, dirHint })));
+  handle<[], unknown>('external.status', async () => ctx.externalStatus());
+  handle<[ExternalMcpConfig[]], unknown>('external.save', async (configs) => {
+    const clean = sanitizeExternal(configs);
+    repo.setSettings({ externalMcp: clean });
+    return ctx.reloadExternal();
+  });
+
+  handle<[], unknown>('notices.sources', async () => {
+    const state = noticeFollowState(repo);
+    const errors = repo.getKv<string[]>('notice_errors', []);
+    return NOTICE_SOURCES.map((s) => {
+      const f = state.following.find((x) => x.id === s.id);
+      return { ...s, enabled: !!f, why: f?.why, auto: state.mode === 'auto', error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) };
+    });
+  });
+  handle<[string?], unknown>('notices.list', async (query) => repo.listNotices({ query, limit: 50 }));
+
+  handle<[number?], unknown>('activities.list', async (days) => {
+    const now = Date.now();
+    return repo.listActivities({ from: new Date(now - 2 * 3_600_000).toISOString(), to: new Date(now + (days ?? 14) * 86_400_000).toISOString(), limit: 100 });
+  });
+  handle<[string], unknown>('activities.import', async (url) => {
+    try {
+      const r = await ctx.importArticle(url);
+      opts.onChanged?.('feed');
+      return { title: r.article.title, activities: r.activities, past: r.past };
+    } catch (e) {
+      // 去掉技术细节，留下给用户看的原因（都以「请」开头，渲染进程会原样显示）
+      throw new Error(`请检查链接：${(e as Error).message}`);
+    }
+  });
+  handle<[], unknown>('activities.syncFeeds', async () => {
+    const r = await ctx.syncAll(new Date(), { force: true });
+    await ctx.engine.tick();
+    opts.onChanged?.('feed');
+    return r.activities ?? { entries: 0, activities: 0, errors: r.errors.filter((e) => e.startsWith('活动订阅')) };
   });
 
   handle<[number?], unknown>('decisions', async (limit) => {
@@ -252,3 +377,4 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
 }
+

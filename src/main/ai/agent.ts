@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { CardRef, ChatMessage, ChatRun, ToolCallView } from '../../shared/types';
+import type { CardRef, ChatMessage, ChatRun, PlatformState, ToolCallView } from '../../shared/types';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
 import { fmt } from '../engine/engine';
 import type { McpHub } from '../mcp/hub';
 import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
-import { parseJsonLoose } from './llm';
+import { describeModelError, parseJsonLoose } from './llm';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
@@ -14,6 +14,7 @@ import { createToolPolicy } from './tool-policy';
 import { memoryWriteProblem } from './memory-policy';
 import { queryArguments, queryRange, queryResultContext, shanghaiTime } from './query-context';
 import { goalReceipt, needsGoalReceipt, focusGoalOperation, goalOperationPrompt, goalOperationTool, goalToolContext, createGoalTurn } from './goal-receipt';
+import { changeNoticeFollows } from '../notices/sync';
 
 const MAX_STEPS = 8;
 
@@ -126,6 +127,7 @@ export async function runAgentLoop(opts: {
       opts.onTool?.(view);
       opts.signal?.throwIfAborted();
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, (opts.toolContext?.(res.text) ?? res.text).slice(0, 12000)) });
+      shrinkOldToolResults(messages);
     }
     if (repeatedRead && !executed) {
       // 已有相同查询结果却继续请求时，只给一次不带工具的收尾机会。
@@ -185,6 +187,51 @@ function readItemCards(repo: Repo, result: Awaited<ReturnType<McpHub['call']>>):
 /**
  * 主对话智能体（PRD §5.1）。作为 MCP 客户端调用各平台工具。
  */
+/** eLearning 没登录、对话又在说登录或同步时，在回复下面放一个「登录复旦账号」按钮 */
+export function loginActions(platforms: PlatformState[], dialog: string): { label: string; action: string }[] {
+  const elearning = platforms.find((s) => s.platform === 'elearning');
+  if (elearning?.status !== 'need_login') return [];
+  return /登录|登陆|授权|认证|同步|elearning|连不上|没连上/i.test(dialog) ? [{ label: '登录复旦账号', action: 'login' }] : [];
+}
+
+/**
+ * 一轮里调用了很多工具时，总长度会超过模型能读的上限：只保留最近几个工具结果的全文，
+ * 更早的结果截短（模型已经读过并据此行动了）。
+ */
+const TOOL_BUDGET = 60_000;
+export function shrinkOldToolResults(messages: LlmMessage[]): void {
+  const tools = messages.filter((m) => m.role === 'tool');
+  let total = tools.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  for (const m of tools.slice(0, -3)) {
+    if (total <= TOOL_BUDGET) break;
+    const len = m.content?.length ?? 0;
+    if (len > 1500) {
+      m.content = `${m.content!.slice(0, 1200)}\n…（较早的工具结果已截短）`;
+      total -= len - m.content.length;
+    }
+  }
+}
+
+/**
+ * 发给模型的对话历史：跳过空消息和失败提示，每条截短，总长度有上限（越新的越优先）。
+ * 历史里一条很长的回复不会让之后的每次请求都超长。
+ */
+export function historyForModel(history: { role: string; content: string }[], opts: { perMessage?: number; total?: number; maxMessages?: number } = {}): { role: 'user' | 'assistant'; content: string }[] {
+  const per = opts.perMessage ?? 2000;
+  let budget = opts.total ?? 16_000;
+  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+  for (const m of [...history].reverse().slice(0, opts.maxMessages ?? 20)) {
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    const text = m.content.replace(/\n*> (回复未完成|已停止生成)[^\n]*$/, '').trim();
+    if (!text) continue;
+    const clipped = text.length > per ? `${text.slice(0, per)}…（较长，已截短）` : text;
+    if (clipped.length > budget) break;
+    budget -= clipped.length;
+    out.unshift({ role: m.role, content: clipped });
+  }
+  return out;
+}
+
 export class ChatAgent {
   private readonly summarizer: ConversationSummarizer;
   private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
@@ -196,6 +243,7 @@ export class ChatAgent {
     private readonly router: ModelRouter,
     private readonly hub: McpHub,
     private readonly channels: Channels,
+    private readonly platformStatus: () => Promise<PlatformState[]> = async () => [],
   ) { this.summarizer = new ConversationSummarizer(repo, router); }
 
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
@@ -213,8 +261,26 @@ export class ChatAgent {
       this.channels.messagePosted(reply);
       if (llm) void this.extractMemories(userMsg);
       return reply;
-    } catch {
-      const note = run.controller.signal.aborted ? '已停止生成。' : '回复未完成：连接中断或模型未能正常返回，请检查网络和模型配置后重试。';
+    } catch (error) {
+      // 超出上下文长度：只带最近几条消息自动重试一次
+      if (!run.controller.signal.aborted && describeModelError(error).contextTooLong && !this.shortHistory) {
+        console.warn('[Fudaner 对话] 超出上下文长度，缩短历史后重试');
+        this.shortHistory = true;
+        try {
+          const llm = this.router.for('chat');
+          if (llm && !run.view.content) {
+            const reply = await this.withModel(llm, text, refs);
+            this.channels.messagePosted(reply);
+            return reply;
+          }
+        } catch (retryError) {
+          error = retryError;
+        } finally {
+          this.shortHistory = false;
+        }
+      }
+      if (!run.controller.signal.aborted) console.error('[Fudaner 对话] 模型调用失败：', error);
+      const note = run.controller.signal.aborted ? '已停止生成。' : `回复未完成：${describeModelError(error).text}。`;
       const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
       const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
       this.channels.messagePosted(msg);
@@ -226,7 +292,47 @@ export class ChatAgent {
     }
   }
 
-  private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
+  /** 这次回复里下载了课件：放「在文件夹中显示」按钮 */
+  private downloadActions(since: string): { label: string; action: string; payload: { path: string } }[] {
+    const recent = this.repo.getKv<{ path: string; at: string }[]>('recent_downloads', []).filter((d) => d.at >= since);
+    if (!recent.length) return [];
+    return [{ label: recent.length > 1 ? `在文件夹中显示（${recent.length} 个文件）` : '在文件夹中显示', action: 'reveal_file', payload: { path: recent[0].path } }];
+  }
+
+  /** 超长重试时只带最近几条历史 */
+  private shortHistory = false;
+
+  /** 正在生成回复 */
+  busy(): boolean { return this.active !== null; }
+
+  /**
+   * 定时任务：到点后让助理按用户事先写好的要求做一件事，结果作为主动消息发到对话里。
+   * 不在对话里伪造一条用户消息；失败时也留下一条说明。
+   */
+  async runScheduled(title: string, prompt: string): Promise<ChatMessage> {
+    if (this.active) throw new Error('上一条回复还在生成。');
+    const llm = this.router.for('chat');
+    if (!llm) throw new Error('还没有接上大模型。');
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>() };
+    this.active = run;
+    try {
+      this.channels.thinking(true);
+      this.publish();
+      const text = `【定时任务「${title}」】这是我事先设定的任务，现在到时间了。请直接完成并把结果告诉我，不要反问；需要的数据先用工具查。\n任务：${prompt}`;
+      const reply = await this.withModel(llm, text, [], { title });
+      this.channels.messagePosted(reply);
+      return reply;
+    } catch {
+      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `⏰ ${title}\n\n这次定时任务没有完成（网络或模型没有正常返回），稍后可以直接让我再做一次。`, proactive: true });
+      this.channels.messagePosted(msg);
+      return msg;
+    } finally {
+      this.active = null;
+      this.channels.thinking(false);
+    }
+  }
+
+  private async withModel(llm: LlmClient, text: string, refs: CardRef[], scheduled?: { title: string }): Promise<ChatMessage> {
     const receiptMode = needsGoalReceipt(llm.label, text);
     const focusedGoal = focusGoalOperation(llm.label, text, refs.length > 0);
     const goalTurn = receiptMode ? createGoalTurn(this.repo, text, focusedGoal) : undefined;
@@ -234,12 +340,13 @@ export class ChatAgent {
     const today = buildToday(this.repo);
     const nowIso = new Date().toISOString();
     const policy = createToolPolicy(this.repo, llm);
+    const platforms = await this.platformStatus().catch(() => []);
     const readOnlyRequest = llm.label.startsWith('local:') && lookupOnly(text) && typeof this.hub.isReadOnly === 'function';
     const scheduleLookup = readOnlyRequest && /ddl|截止|作业|课程|课表|几点|什么课/i.test(text)
       && !/邮件|邮箱|资源|资料|目标|记忆|公告|学分|教师|老师|助教|考试范围|课程详情|规划|计划|帮我安排|请安排/u.test(text);
     const scheduleTools = new Set(['fudaner_local__get_today', 'fudaner_local__list_deadlines']);
     const range = scheduleLookup ? queryRange(text, nowIso) : undefined;
-    const system = focusedGoal ? goalOperationPrompt(nowIso) : [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso }), this.summarizer.context(),
+    const system = focusedGoal ? goalOperationPrompt(nowIso) : [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso, platforms }), this.summarizer.context(),
       readOnlyRequest ? '本轮用户只要求查询，工具仅可读取。先调用相关查询工具；查今天的课程时间与近期DDL可一次调用 get_today。结果足够后立即回答原问题，不创建目标或任务，不写记忆。' : '',
       scheduleLookup ? '日期展示使用工具返回的 dueAtShanghai（上海本地时间），不要再使用原始 dueAt 的UTC小时。课程 state=已结束 必须写出“已结束”。' : '',
       range ? `本轮明确的查询范围：${shanghaiTime(range.from)} 至 ${shanghaiTime(range.to)}（上海时间；校历周日起算）。list_deadlines 的起止时间由程序按此范围校正。` : '',
@@ -249,7 +356,8 @@ export class ChatAgent {
     const history = standaloneQuery || focusedGoal ? [] : this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
-      ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
+      ...historyForModel(scheduled ? history : history.slice(0, -1), { maxMessages: this.shortHistory ? 6 : 20, total: this.shortHistory ? 6000 : 16_000 }),
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
@@ -291,7 +399,11 @@ export class ChatAgent {
     });
     const content = receiptMode ? goalReceipt(this.repo, result.cards, text, result.finishReason === 'answer') : result.content || '模型没有返回正文，请重试。';
     if (receiptMode) { run.view.content = content; run.view.version++; this.publish(); }
-    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content, toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
+    return this.repo.addMessage({
+      id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
+      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()],
+      actions: [...loginActions(platforms, `${text}\n${content}`), ...this.downloadActions(run.view.startedAt)],
+    });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */
@@ -357,6 +469,22 @@ export class ChatAgent {
         role: 'assistant', content: mails.length ? `有 ${mails.length} 封邮件等你回复：\n${mails.map((m) => `· ${m.sender?.replace(/<.*>/, '')}：${m.title}`).join('\n')}` : '目前没有需要回复的邮件。',
         cards: mails.map((m) => ({ type: 'item', id: m.id, title: m.title, subtitle: m.sender })),
         toolCalls: [{ server: 'fudan-mail', name: 'list_action_required', args: {}, ok: true }],
+      });
+    }
+    // 没接模型时也能用一句话关注官网通知（例如点了「也关注国际合作与交流处」）
+    const follow = text.match(/^(?:也|帮我)?关注(?:一下)?(.+?)(?:的通知)?[。！!]?$/);
+    if (follow) {
+      const r = changeNoticeFollows(this.repo, [follow[1].replace(/（.*?）|\(.*?\)/g, '').trim()]);
+      return this.repo.addMessage({
+        role: 'assistant',
+        content: r.added.length ? `好，已关注${r.added.join('、')}的通知。现在关注：${r.following.join('、')}。` : r.unknown.length ? `没找到「${r.unknown[0]}」，可以到「设置 → 通知与活动」看看可选的来源。` : `已经在关注了。现在关注：${r.following.join('、')}。`,
+      });
+    }
+    if (/登录|登陆|授权|认证/.test(text)) {
+      return this.repo.addMessage({
+        role: 'assistant',
+        content: '登录复旦账号：点下面的「登录复旦账号」（或到「设置 → 复旦账号」），会弹出学校官方的统一身份认证页面。在那个窗口里自己输入学号和密码，页面要求时用企业微信扫码或确认。登录成功后窗口会自动关闭，再点「立即同步」。密码只在学校的页面里输入，应用不保存。',
+        actions: [{ label: '登录复旦账号', action: 'login' }],
       });
     }
     return this.repo.addMessage({ role: 'assistant', content: '我还没有接上大模型，现在只能回答「这周有什么 DDL」「有哪些邮件要回」这类问题。去「设置 → 模型」填一下 API Key，我就能陪你聊任何事了。' });

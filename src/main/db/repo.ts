@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type {
   Assessment, CardRef, ChatMessage, Course, Decision, EvalRecord, FeedCard, Followup, GateResult, Goal, Item,
   Memory, Profile, QuickAction, Resource, SearchHit, SemesterPhase, Settings, Task, Ticket, ToolCallView,
-  Trigger, VerifyCondition,
+  Reminder, Trigger, VerifyCondition,
 } from '../../shared/types';
 import { Db, fromJson, newId, nowIso, toJson } from './db';
 
@@ -91,9 +91,10 @@ export class Repo {
     if (!prev) {
       const id = newId();
       this.db.run(
-        `INSERT INTO items (id, source, kind, source_id, title, body, url, published_at, due_at, course_id, done, sender)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (id, source, kind, source_id, title, body, url, published_at, due_at, course_id, done, sender, raw)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, i.source, i.kind, i.sourceId, i.title, i.body, i.url, i.publishedAt, i.dueAt, i.courseId, i.done ? 1 : 0, i.sender,
+        i.activity ? JSON.stringify({ activity: i.activity }) : i.notice ? JSON.stringify({ notice: i.notice }) : null,
       );
       this.indexForSearch('item', id, i.title, i.body);
       return { item: this.getItem(id)!, created: true, changedFields: [] };
@@ -102,9 +103,10 @@ export class Repo {
     if ((prev.due_at ?? undefined) !== i.dueAt) changed.push('dueAt');
     if (!!prev.done !== i.done) changed.push('done');
     if (prev.title !== i.title) changed.push('title');
+    if (i.activity && fromJson<{ activity?: { startsAt?: string } }>(prev.raw, {}).activity?.startsAt !== i.activity.startsAt) changed.push('startsAt');
     this.db.run(
-      'UPDATE items SET title=?, body=?, url=?, due_at=?, course_id=?, done=? WHERE id=?',
-      i.title, i.body, i.url, i.dueAt, i.courseId, i.done ? 1 : 0, prev.id,
+      'UPDATE items SET title=?, body=?, url=?, due_at=?, course_id=?, done=?, raw=COALESCE(?, raw) WHERE id=?',
+      i.title, i.body, i.url, i.dueAt, i.courseId, i.done ? 1 : 0, i.activity ? JSON.stringify({ activity: i.activity }) : null, prev.id,
     );
     return { item: this.getItem(prev.id)!, created: false, changedFields: changed };
   }
@@ -157,6 +159,45 @@ export class Repo {
     const sql = `SELECT * FROM items ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY COALESCE(due_at, published_at) ${filter.dueBefore || filter.dueAfter ? 'ASC' : 'DESC'} LIMIT ?`;
     return this.db.all<Row>(sql, ...params, filter.limit ?? 100).map(mapItem);
+  }
+
+  /**
+   * 校园活动，按开始时间排序。from / to 按开始时间筛选（没有开始时间的活动按发布时间算）；
+   * query 匹配标题、正文、地点、主办方。
+   */
+  listActivities(filter: { from?: string; to?: string; query?: string; campus?: string; category?: string; limit?: number } = {}): Item[] {
+    const at = (i: Item) => i.activity?.startsAt ?? i.publishedAt;
+    const q = filter.query?.trim().toLowerCase();
+    return this.db.all<Row>("SELECT * FROM items WHERE kind = 'activity' AND done = 0 ORDER BY published_at DESC LIMIT 1000").map(mapItem)
+      .filter((i) => (!filter.from || at(i) >= filter.from) && (!filter.to || at(i) <= filter.to))
+      .filter((i) => !filter.campus || i.activity?.campus === filter.campus)
+      .filter((i) => !filter.category || i.activity?.category === filter.category)
+      .filter((i) => !q || [i.title, i.body, i.activity?.location, i.activity?.organizer, i.activity?.speaker, i.activity?.summary, i.activity?.sourceName]
+        .some((s) => s?.toLowerCase().includes(q)))
+      .sort((a, b) => at(a).localeCompare(at(b)))
+      .slice(0, filter.limit ?? 50);
+  }
+
+  /** 学校和院系官网通知，按发布时间倒序 */
+  listNotices(filter: { query?: string; since?: string; source?: string; limit?: number } = {}): Item[] {
+    const q = filter.query?.trim().toLowerCase();
+    const words = q ? q.split(/\s+/).filter(Boolean) : [];
+    return this.db.all<Row>("SELECT * FROM items WHERE kind = 'notice' AND (? IS NULL OR published_at >= ?) ORDER BY published_at DESC LIMIT 2000", filter.since ?? null, filter.since ?? null).map(mapItem)
+      .filter((i) => !filter.source || i.notice?.source === filter.source || i.notice?.sourceName === filter.source)
+      .filter((i) => words.every((w) => `${i.title} ${i.notice?.sourceName ?? ''} ${i.body}`.toLowerCase().includes(w)))
+      .slice(0, filter.limit ?? 30);
+  }
+
+  /** 把活动加入计划：放进「校园活动」目标，任务时间为活动开始时间 */
+  addActivityToPlan(itemId: string): Task | undefined {
+    const item = this.getItem(itemId);
+    if (!item || item.kind !== 'activity') return undefined;
+    const existing = this.taskForItem(itemId);
+    if (existing) return existing;
+    let goal = this.listGoals().find((g) => g.title === '校园活动' && g.status === 'active' && g.createdBy === 'system');
+    if (!goal) goal = this.addGoal({ level: 'long_term', title: '校园活动', description: '想参加的讲座、宣讲会和活动', createdBy: 'system' });
+    const where = [item.activity?.timeText, item.activity?.location].filter(Boolean).join(' · ');
+    return this.upsertTaskForItem({ goalId: goal.id, itemId, title: `参加：${item.title}${where ? `（${where}）` : ''}`, dueAt: item.activity?.startsAt, done: false });
   }
 
   addLink(fromItemId: string, toItemId: string, reason: string, confidence: number): void {
@@ -531,6 +572,36 @@ export class Repo {
     this.db.run('UPDATE followups SET status=? WHERE id=?', status, id);
   }
 
+  // ---------------- 定时提醒 / 定时任务 ----------------
+  addReminder(r: Omit<Reminder, 'id' | 'createdAt' | 'nextAt' | 'lastRunAt' | 'enabled'> & { nextAt?: string }): Reminder {
+    const id = newId();
+    const createdAt = nowIso();
+    this.db.run('INSERT INTO reminders (id, title, kind, prompt, repeat, next_at, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
+      id, r.title, r.kind, r.prompt, toJson(r.repeat), r.nextAt, r.createdBy, createdAt);
+    return this.getReminder(id)!;
+  }
+  getReminder(id: string): Reminder | undefined {
+    const row = this.db.get<Row>('SELECT * FROM reminders WHERE id = ?', id);
+    return row ? mapReminder(row) : undefined;
+  }
+  listReminders(): Reminder[] {
+    return this.db.all<Row>('SELECT * FROM reminders ORDER BY enabled DESC, COALESCE(next_at, created_at)').map(mapReminder);
+  }
+  /** 到点的提醒（启用、且下次时间已到） */
+  dueReminders(now: string): Reminder[] {
+    return this.db.all<Row>('SELECT * FROM reminders WHERE enabled = 1 AND next_at IS NOT NULL AND next_at <= ? ORDER BY next_at', now).map(mapReminder);
+  }
+  /** 记录一次触发（或跳过），写入下一次时间；没有下一次时自动停用 */
+  advanceReminder(id: string, nextAt: string | undefined, ranAt?: string): void {
+    this.db.run('UPDATE reminders SET next_at = ?, enabled = CASE WHEN ? IS NULL THEN 0 ELSE enabled END, last_run_at = COALESCE(?, last_run_at) WHERE id = ?', nextAt ?? null, nextAt ?? null, ranAt ?? null, id);
+  }
+  setReminderEnabled(id: string, enabled: boolean, nextAt?: string): void {
+    this.db.run('UPDATE reminders SET enabled = ?, next_at = ? WHERE id = ?', enabled ? 1 : 0, enabled ? nextAt ?? null : null, id);
+  }
+  removeReminder(id: string): void {
+    this.db.run('DELETE FROM reminders WHERE id = ?', id);
+  }
+
   // ---------------- feed ----------------
   addFeedCard(c: Omit<FeedCard, 'id' | 'createdAt' | 'status'> & { dedupeKey?: string }): FeedCard | undefined {
     if (c.dedupeKey && this.db.get<Row>('SELECT id FROM feed_cards WHERE dedupe_key = ?', c.dedupeKey)) return undefined;
@@ -709,7 +780,7 @@ export class Repo {
    * 这样清除后的下一次同步按「首次同步」处理，不会把整个学期的历史当成新事件。
    */
   wipe(): void {
-    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups',
+    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups', 'reminders',
       'feed_cards', 'resources', 'resource_chunks', 'triggers', 'evals', 'digest_queue', 'tickets', 'ticket_reports', 'attention_budget', 'search_index'];
     this.db.tx(() => {
       tables.forEach((t) => this.db.run(`DELETE FROM ${t}`));
@@ -733,6 +804,14 @@ function mapItem(r: Row): Item {
     id: r.id, source: r.source, kind: r.kind, sourceId: r.source_id, title: r.title, body: r.body, url: opt(r.url),
     publishedAt: r.published_at, dueAt: opt(r.due_at), courseId: opt(r.course_id), done: !!r.done, sender: opt(r.sender),
     aiCategory: opt(r.ai_category), aiSummary: opt(r.ai_summary), aiAction: opt(r.ai_action), aiModelUsed: opt(r.ai_model_used),
+    ...(r.kind === 'activity' ? { activity: fromJson<{ activity?: Item['activity'] }>(r.raw, {}).activity ?? {} } : {}),
+    ...(r.kind === 'notice' && r.raw ? { notice: fromJson<{ notice?: Item['notice'] }>(r.raw, {}).notice } : {}),
+  };
+}
+function mapReminder(r: Row): Reminder {
+  return {
+    id: r.id, title: r.title, kind: r.kind, prompt: opt(r.prompt), repeat: fromJson(r.repeat, { type: 'daily', time: '09:00' }),
+    nextAt: opt(r.next_at), enabled: !!r.enabled, lastRunAt: opt(r.last_run_at), createdBy: r.created_by, createdAt: r.created_at,
   };
 }
 function mapMessage(r: Row): ChatMessage {

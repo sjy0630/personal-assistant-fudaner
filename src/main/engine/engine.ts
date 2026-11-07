@@ -108,7 +108,10 @@ export class ProactiveEngine {
     // 2. 研判（本地模型；没有模型时用规则）
     const memories = this.repo.listMemories(['goal', 'interest', 'preference', 'schedule']);
     const { assessment, model } = await assess(passed, {
-      llm: this.router.for('assess'), memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
+      // 研判优先用本地模型；只有本地模型时才能看邮件等隐私内容。学校通知和活动是公开信息，
+      // 没有本地模型时也可以交给云端模型判断（否则只能按关键词规则，动态会很少）
+      llm: this.router.for('assess') ?? (passed.every((t) => PUBLIC_KINDS.includes(t.kind)) ? this.router.for('activity_extract') : null),
+      memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
     });
 
     // 3. 决定：注意力预算 + 静默时段 + 观察模式
@@ -207,7 +210,11 @@ export class ProactiveEngine {
 
   private addCard(batch: Trigger[], a: Assessment, refs: CardRef[]): void {
     const t = batch[0];
-    const type = t.kind === 'announcement_new' ? 'announcement'
+    const type = t.kind === 'activity_new' ? 'opportunity'
+      : t.kind === 'notice_new' ? 'campus_notice'
+      : t.kind === 'exam_soon' ? 'assignment'
+      : t.kind === 'card_low' || t.kind === 'power_low' ? 'insight'
+      : t.kind === 'announcement_new' ? 'announcement'
       : t.kind === 'mail_new' ? (t.payload.category === 'course' ? 'course_mail' : t.payload.category === 'notice' ? 'opportunity' : 'mail_action')
       : t.kind.startsWith('assignment') || t.kind.startsWith('deadline') ? 'assignment' : 'insight';
     const done = t.kind === 'assignment_new' ? '已加入课程目标' : t.payload.linkedTitle ? `已关联到作业「${t.payload.linkedTitle}」` : undefined;
@@ -218,7 +225,7 @@ export class ProactiveEngine {
       t.kind === 'assignment_new' || t.kind.startsWith('deadline_'));
     const markAction = markable
       ? [{ label: t.kind === 'mail_new' ? '标记已处理' : '标记完成', action: 'mark_done', payload: { itemId } }]
-      : [];
+      : t.kind === 'activity_new' && itemId ? [{ label: '加入计划', action: 'add_to_plan', payload: { itemId } }] : [];
     this.repo.addFeedCard({
       type, title: String(t.payload.title ?? t.payload.subject ?? describeTrigger(t)), body: a.messageDraft, reason: a.reason, done, refs,
       actions: [{ label: '引用到对话', action: 'quote' }, ...markAction, { label: '不感兴趣', action: 'dismiss' }],
@@ -306,8 +313,11 @@ export class ProactiveEngine {
   }
 }
 
+/** 内容是公开信息的事件（学校官网通知、校园活动） */
+const PUBLIC_KINDS: Trigger['kind'][] = ['notice_new', 'activity_new'];
+
 /** 来自校内平台的事件来源 */
-const PLATFORM_SOURCES: Trigger['source'][] = ['elearning', 'mail', 'icourse'];
+const PLATFORM_SOURCES: Trigger['source'][] = ['elearning', 'mail', 'icourse', 'notice'];
 /** 建议工单的价值达到这个值时，除了动态卡片，还会在对话里直接问 */
 const HIGH_VALUE_SUGGESTION = 0.8;
 
@@ -319,6 +329,11 @@ export function describeTrigger(t: Trigger): string {
     case 'assignment_changed': return `[作业变更] ${p.course}：${p.title}，新截止 ${p.dueText}`;
     case 'assignment_submitted': return `[已提交] ${p.title}`;
     case 'announcement_new': return `[公告] ${p.course}：${p.title}`;
+    case 'exam_soon': return `[考试] ${p.course}，${p.timeText ?? ''}，考场 ${p.location ?? '未知'}，还有 ${p.daysLeft} 天`;
+    case 'card_low': return `[校园卡] 余额 ¥${p.balance}`;
+    case 'power_low': return `[宿舍电量] ${p.room} 剩 ${p.remaining} 度`;
+    case 'notice_new': return `[学校通知/${p.sourceName}] ${p.title}${p.own ? '（本人院系）' : ''}${p.excerpt ? `\n正文开头：${p.excerpt}` : ''}`;
+    case 'activity_new': return `[校园活动/${p.category ?? '其他'}] ${p.title}；时间 ${p.timeText ?? '未写明'}；地点 ${p.location ?? '未写明'}${p.campus ? `（${p.campus}）` : ''}；主办 ${p.organizer ?? '未写明'}。${p.summary ?? ''}${p.excerpt ? `\n原文开头：${p.excerpt}` : ''}`;
     default: return `[${t.kind}] ${p.title ?? p.topic ?? ''}`;
   }
 }
@@ -329,7 +344,8 @@ function refsOf(batch: Trigger[], repo: Repo): CardRef[] {
     const id = t.payload.itemId as string | undefined;
     if (id) {
       const it = repo.getItem(id);
-      if (it && !refs.some((r) => r.id === id)) refs.push({ type: 'item', id, title: it.title, subtitle: it.dueAt ? `截止 ${fmt(it.dueAt)}` : it.sender });
+      const activityLine = it?.activity ? [it.activity.startsAt ? fmt(it.activity.startsAt) : it.activity.timeText, it.activity.location].filter(Boolean).join(' · ') : '';
+      if (it && !refs.some((r) => r.id === id)) refs.push({ type: 'item', id, title: it.title, subtitle: activityLine || (it.dueAt ? `截止 ${fmt(it.dueAt)}` : it.sender) });
     }
     const linked = t.payload.linkedItemId as string | undefined;
     if (linked && !refs.some((r) => r.id === linked)) {

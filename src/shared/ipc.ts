@@ -1,4 +1,5 @@
 import type {
+  Item, ExternalMcpConfig, ExternalMcpStatus, Reminder, ReminderRepeat,
   ChatMessage, CardRef, EvalRecord, FeedCard, Goal, Memory, PlatformState, Profile, Resource,
   SearchHit, Settings, Task, Ticket, TodayOverview, ToolCallView,
 } from './types';
@@ -25,6 +26,8 @@ export interface FudanerApi {
     list(filter?: { type?: string; includeId?: string }): Promise<FeedCard[]>;
     dismiss(id: string, reason?: string): Promise<void>;
     act(id: string, action: string): Promise<void>;
+    /** 现在整理一次动态 */
+    refresh(): Promise<{ campus: number; news: number; skipped?: string }>;
   };
   goals: {
     list(): Promise<{ goals: Goal[]; tasks: Task[] }>;
@@ -55,6 +58,45 @@ export interface FudanerApi {
     status(): Promise<PlatformState[]>;
     login(): Promise<void>;
     syncNow(): Promise<void>;
+  };
+  activities: {
+    /** 接下来 days 天的活动（默认 14 天） */
+    list(days?: number): Promise<Item[]>;
+    /** 导入一篇文章链接里的活动 */
+    import(url: string): Promise<{ title: string; activities: Item[]; past: number }>;
+    /** 立即读取所有订阅源 */
+    syncFeeds(): Promise<{ entries: number; activities: number; errors: string[] }>;
+  };
+  campus: {
+    status(): Promise<{ timetable: { semester?: string; courses: number; updatedAt: string } | null; exams: { exams: number; updatedAt: string } | null; problems: Record<string, string> }>;
+    importTimetable(): Promise<{ semester?: string; courses: number }>;
+    importExams(): Promise<{ exams: number; added: number }>;
+    library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
+    cardBalance(): Promise<{ balance: number; at: string }>;
+    electricity(): Promise<{ room: string; remainingKwh: number; usedKwh?: number; updatedAt?: string; at: string }>;
+  };
+  treehole: {
+    status(): Promise<{ loggedIn: boolean; demo: boolean }>;
+    login(email: string, password: string): Promise<void>;
+    logout(): Promise<void>;
+  };
+  external: {
+    /** 预设服务的说明（名称、能做什么、准备步骤、仓库、协议） */
+    presets(): Promise<{ preset: string; name: string; summary: string; repo: string; license: string; setup: string[]; needsDir: boolean; dirHint?: string }[]>;
+    status(): Promise<ExternalMcpStatus[]>;
+    /** 保存配置并重新连接，返回连接结果 */
+    save(configs: ExternalMcpConfig[]): Promise<ExternalMcpStatus[]>;
+  };
+  reminders: {
+    list(): Promise<Reminder[]>;
+    add(r: { title: string; kind: Reminder['kind']; prompt?: string; repeat: ReminderRepeat }): Promise<Reminder>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+    remove(id: string): Promise<void>;
+  };
+  notices: {
+    /** 全部可选来源，以及是否已关注、上次读取的问题 */
+    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; why?: string; auto: boolean; error?: string }[]>;
+    list(query?: string): Promise<Item[]>;
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;
   tickets(): Promise<Ticket[]>;

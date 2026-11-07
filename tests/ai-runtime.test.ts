@@ -265,6 +265,31 @@ describe('T6 后台工单完成条件', () => {
     expect(state.result?.resultResourceId).toBeUndefined();
   });
 
+  it('查到资料却没保存就结束时，提示一次保存，保存后工单完成', async () => {
+    let nudged = false;
+    const state = await execute([
+      () => calls(['fudan_mail__search_mail', { query: '交换' }]),
+      () => answer('我已经整理好了。'),
+      (messages) => {
+        nudged = messages.some((m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('你还没有调用 save_resource'));
+        return calls(['fudaner_local__save_resource', { title: '交换材料清单', content: '# 交换材料清单\n- 成绩单（待核实）' }]);
+      },
+      () => answer('已保存。'),
+    ]);
+    expect(nudged).toBe(true);
+    expect(state.result?.status).toBe('done');
+  });
+
+  it('提示保存后仍不保存，工单如实失败', async () => {
+    const state = await execute([
+      () => calls(['fudan_mail__search_mail', { query: '交换' }]),
+      () => answer('我已经整理好了。'),
+      () => answer('整理完了。'),
+    ]);
+    expect(state.result?.status).toBe('failed');
+    expect(state.posted[0].content).toContain('尚未成功保存成果');
+  });
+
   it('步数将尽时提示立即保存，模型据此保存后工单完成', async () => {
     let noticeSeen = false;
     const state = await execute([

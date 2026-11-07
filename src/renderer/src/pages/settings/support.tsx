@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './Settings.module.css';
 import { settingsErrorMessage } from '../settings-state';
 
@@ -59,16 +59,12 @@ export function useTask(onBusy: PanelProps['onBusy']) {
       setBusy('');
     }
   };
-  return {
-    busy,
-    notice,
-    error,
-    run,
-    clear: () => {
-      setNotice('');
-      setError('');
-    },
-  };
+  // 保持同一个函数，提示的自动消失计时不会因为重新渲染被重置
+  const clear = useCallback(() => {
+    setNotice('');
+    setError('');
+  }, []);
+  return { busy, notice, error, run, clear };
 }
 
 export function Feedback({
@@ -80,6 +76,12 @@ export function Feedback({
   error: string;
   clear?: () => void;
 }) {
+  // 提示几秒后自动消失：成功 4 秒，失败 10 秒；也可以手动关闭
+  useEffect(() => {
+    if (!clear || (!notice && !error)) return;
+    const timer = setTimeout(clear, error ? 10_000 : 4_000);
+    return () => clearTimeout(timer);
+  }, [notice, error, clear]);
   if (!notice && !error) return null;
   return (
     <div className={styles.feedback}>

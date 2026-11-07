@@ -42,3 +42,12 @@ $env:EVAL_API_KEY = (Get-Content ..\.secrets\deepseek.key.txt -Raw).Trim()
 $env:EVAL_CLOUD_DEMO = '1'; $env:EVAL_BASE_URL = 'https://api.deepseek.com'; $env:EVAL_MODEL = 'deepseek-chat'
 npx vitest run --config tests/eval/vitest.config.ts tests/eval/cloud-demo.eval.ts
 ```
+
+## 5. 合并最新 main（#17–#21）后复测（2026-11-07 晚）
+
+- 冲突：`agent.ts`（5 处）、`prompts.ts`、`hub.ts`，两边功能全部保留（定时任务、长对话压缩、课件下载、平台状态 + 查询保护、目标兜底、回执、工单步数）；外部 MCP 工具同样按 `readOnlyHint` 标记只读。
+- 新增兜底：工单查到资料但没调用 save_resource 就结束时，再提示一次保存（合并后回放中实际出现过一次）。
+- 单元测试 552 通过；2 项失败为 `tests/external-mcp.test.ts` 中按 macOS 路径和报错文案编写的用例，**原版 main 在 Windows 上同样失败**，与合并无关。
+- DeepSeek 演示回放：合并后 **7/9**，原版 main **3/9**。评测检查同步更新：“4 点提醒”接受 main 新增的 `create_reminder`；镜头 4、6 只看本镜头新出现的消息（此前检查过宽，漏判了下述问题）。
+
+**待 L 处理：注意力预算被演示数据提前耗尽。** main 新增的校园活动、考试、宿舍电量、校园卡、官网通知等演示事件，在「重置演示」后的第一次引擎运行中就把当日预算花到 15/15，导致镜头 4（助教补充邮件）和镜头 6（交作业闭环确认，PRD 规定不能砍）被降级为早安消息，对话里不出现。原版 main 同样复现。`cloud-demo-results.json` 的 `budgetLog` 列出了每笔预算消耗。可选修复（`engine/budget.ts`，归 L）：闭环确认和涉及未交作业的课程邮件不占预算；只进动态的卡片不扣对话预算；或演示模式提高预算 / 减少重置时一次性产生的事件。
