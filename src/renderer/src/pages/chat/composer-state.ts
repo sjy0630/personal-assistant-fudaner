@@ -1,4 +1,5 @@
 import type { CardRef } from '../../../../shared/types';
+import { supportedAttachment, MAX_ATTACHMENT_BYTES, ATTACHMENT_FORMATS_LABEL } from '../../../../shared/attachment-formats';
 
 export interface ChatDraft { text: string; refs: CardRef[] }
 export interface UploadJob { id: string; name: string; status: 'uploading' | 'failed'; error?: string }
@@ -9,8 +10,7 @@ interface WorkspaceSnapshot { draft: ChatDraft; uploads: UploadJob[]; blocked: b
 
 const DRAFT_KEY = 'fudaner.chat-draft.v1';
 const REF_TYPES = new Set<CardRef['type']>(['item', 'goal', 'task', 'resource', 'feed', 'ticket']);
-const SUPPORTED_FILE = /\.(pdf|docx|md|markdown|txt|csv|json)$/i;
-const FORMAT_ERROR = '暂不支持这种文件格式。支持 PDF、DOCX、Markdown、TXT、CSV 和 JSON，请移除后选择支持的文件。';
+const FORMAT_ERROR = `暂不支持这种文件格式。支持${ATTACHMENT_FORMATS_LABEL}，请移除后重新选择。`;
 const IMPORT_ERROR = '文件导入失败，请重试；也可以移除后继续发送。';
 const PATH_ERROR = '无法读取这个文件，请重新选择本机文件，或移除后继续。';
 const emptyDraft = (): ChatDraft => ({ text: '', refs: [] });
@@ -50,6 +50,7 @@ export function createChatWorkspace<TFile extends FileMetadata>(dependencies: {
   storage?: DraftStorage;
   pathForFile(file: TFile): string;
   upload(path: string): Promise<CardRef>;
+  uploadFromMemory?(file: TFile, active: () => boolean): Promise<CardRef>;
 }) {
   let snapshot: WorkspaceSnapshot = { draft: readDraft(dependencies.storage), uploads: [], blocked: false, focusVersion: 0, resetVersion: 0 };
   const listeners = new Set<() => void>();
@@ -74,13 +75,14 @@ export function createChatWorkspace<TFile extends FileMetadata>(dependencies: {
     const stored = files.get(id);
     if (!stored) return;
     const { file } = stored;
-    if (!SUPPORTED_FILE.test(file.name)) { markFailed(id, FORMAT_ERROR); return; }
+    if (!supportedAttachment(file.name)) { markFailed(id, FORMAT_ERROR); return; }
+    if (file.size > MAX_ATTACHMENT_BYTES) { markFailed(id, '单个附件最大支持 25 MB，请缩小文件后重试。'); return; }
     let path: string;
     try {
       path = dependencies.pathForFile(file);
-      if (!path.trim()) { markFailed(id, PATH_ERROR); return; }
+      if (!path.trim() && !dependencies.uploadFromMemory) { markFailed(id, PATH_ERROR); return; }
     } catch { markFailed(id, PATH_ERROR); return; }
-    const key = JSON.stringify([path, file.size, file.lastModified]);
+    const key = JSON.stringify([path || file.name, file.size, file.lastModified]);
     const alreadyAttached = imported.get(key);
     if (alreadyAttached && snapshot.draft.refs.some((ref) => ref.type === alreadyAttached.type && ref.id === alreadyAttached.id)) {
       files.delete(id);
@@ -98,7 +100,7 @@ export function createChatWorkspace<TFile extends FileMetadata>(dependencies: {
     inFlight.set(key, id);
     updateUploads(snapshot.uploads.map((job) => job.id === id ? { id, name: file.name, status: 'uploading' } : job));
     try {
-      const ref = await dependencies.upload(path);
+      const ref = path.trim() ? await dependencies.upload(path) : await dependencies.uploadFromMemory!(file, () => files.get(id) === stored);
       if (files.has(id)) {
         imported.set(key, ref);
         addRef(ref);

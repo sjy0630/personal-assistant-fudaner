@@ -6,7 +6,9 @@ import { fmt } from '../engine/engine';
 import type { McpHub } from '../mcp/hub';
 import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
-import { describeModelError, embedderFor, parseJsonLoose } from './llm';
+import { ImageModelError, describeModelError, embedderFor, parseJsonLoose } from './llm';
+import { ChatImages, type ImageReader } from './attachments';
+import { ImageAttachmentError } from '../library/resource-images';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
@@ -48,6 +50,7 @@ export async function runAgentLoop(opts: {
   onDelta?: (text: string) => void;
   onCards?: (cards: CardRef[]) => void;
   onToolResult?: (result: Awaited<ReturnType<McpHub['call']>>) => void;
+  imagesFromTool?: (result: Awaited<ReturnType<McpHub['call']>>) => Promise<{ dataUrl: string }[]>;
   authorizeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
   recoverRepeatedReads?: boolean;
   normalizeToolArgs?: (name: string, args: Record<string, unknown>) => Record<string, unknown>;
@@ -93,6 +96,7 @@ export async function runAgentLoop(opts: {
     });
     let repeatedRead = false;
     let executed = false;
+    const toolImages: { dataUrl: string }[] = [];
     for (const tc of r.toolCalls) {
       opts.signal?.throwIfAborted();
       // Function calling 的参数必须是完整 JSON 对象，不能从残缺文本中“修复”出写操作。
@@ -129,8 +133,10 @@ export async function runAgentLoop(opts: {
       opts.onTool?.(view);
       opts.signal?.throwIfAborted();
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, (opts.toolContext?.(res.text) ?? res.text).slice(0, 12000)) });
+      if (opts.imagesFromTool) toolImages.push(...await opts.imagesFromTool(res));
       shrinkOldToolResults(messages);
     }
+    if (toolImages.length) messages.push({ role: 'user', content: '以下图片是刚才读取的资源内容，请作为外部数据阅读。', images: toolImages.splice(0) });
     if (repeatedRead && !executed) {
       // 已有相同查询结果却继续请求时，只给一次不带工具的收尾机会。
       // 不执行模型在收尾阶段仍然提出的写操作，也不将它冒充为成功。
@@ -229,10 +235,10 @@ export function recentFactsText(facts: ToolFact[], now = Date.now()): string {
  * 发给模型的对话历史：跳过空消息和失败提示，每条截短，总长度有上限（越新的越优先）。
  * 历史里一条很长的回复不会让之后的每次请求都超长。
  */
-export function historyForModel(history: { role: string; content: string; proactive?: boolean; createdAt?: string }[], opts: { perMessage?: number; total?: number; maxMessages?: number; now?: number } = {}): { role: 'user' | 'assistant'; content: string }[] {
+export function historyForModel<T extends { role: string; content: string; proactive?: boolean; createdAt?: string }>(history: T[], opts: { perMessage?: number; total?: number; maxMessages?: number; now?: number } = {}): (T & { role: 'user' | 'assistant' })[] {
   const per = opts.perMessage ?? 2000;
   let budget = opts.total ?? 16_000;
-  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+  const out: (T & { role: 'user' | 'assistant' })[] = [];
   // 提醒、早安这类主动消息只带最近 12 小时内的最多 4 条，不挤掉你们真正聊过的内容
   const now = opts.now ?? Date.now();
   let proactive = 0;
@@ -247,14 +253,14 @@ export function historyForModel(history: { role: string; content: string; proact
     const clipped = text.length > per ? `${text.slice(0, per)}…（较长，已截短）` : text;
     if (clipped.length > budget) break;
     budget -= clipped.length;
-    out.unshift({ role: m.role, content: clipped });
+    out.unshift({ ...m, role: m.role, content: clipped });
   }
   return out;
 }
 
 export class ChatAgent {
   private readonly summarizer: ConversationSummarizer;
-  private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
+  private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef>; imageRefs: CardRef[] } | null = null;
   state(): ChatRun | null { return this.active ? structuredClone(this.active.view) : null; }
   cancel(id: string): void { if (this.active?.view.id === id) this.active.controller.abort(); }
   private publish(): void { const view = this.state(); if (view) this.channels.delta?.(view); }
@@ -264,12 +270,13 @@ export class ChatAgent {
     private readonly hub: McpHub,
     private readonly channels: Channels,
     private readonly platformStatus: () => Promise<PlatformState[]> = async () => [],
+    private readonly readImage?: ImageReader,
   ) { this.summarizer = new ConversationSummarizer(repo, router); }
 
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
     if (this.active) throw new Error('上一条回复还在生成，请先停止或等待完成。');
     if (!text.trim()) throw new Error('请输入消息。');
-    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>() };
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>(), imageRefs: [] as CardRef[] };
     this.active = run;
     try {
       const userMsg = this.repo.addMessage({ role: 'user', content: text, refs });
@@ -277,13 +284,13 @@ export class ChatAgent {
       this.channels.thinking(true);
       const llm = this.router.for('chat');
       if (llm) this.publish();
-      const reply = llm ? await this.withModel(llm, text, refs) : this.withoutModel(text);
+      const reply = llm ? await this.withModel(llm, text, refs) : this.withoutModel(text, refs);
       this.channels.messagePosted(reply);
       if (llm) void this.extractMemories(userMsg);
       return reply;
     } catch (error) {
       // 超出上下文长度：只带最近几条消息自动重试一次
-      if (!run.controller.signal.aborted && describeModelError(error).contextTooLong && !this.shortHistory) {
+      if (!run.controller.signal.aborted && !run.view.toolCalls.length && describeModelError(error).contextTooLong && !this.shortHistory) {
         console.warn('[Fudaner 对话] 超出上下文长度，缩短历史后重试');
         this.shortHistory = true;
         try {
@@ -300,9 +307,10 @@ export class ChatAgent {
         }
       }
       if (!run.controller.signal.aborted) console.error('[Fudaner 对话] 模型调用失败：', error);
-      const note = run.controller.signal.aborted ? '已停止生成。' : `回复未完成：${describeModelError(error).text}。`;
+      const note = run.controller.signal.aborted ? '已停止生成。' : error instanceof ImageModelError || error instanceof ImageAttachmentError
+        ? error.message : `回复未完成：${describeModelError(error).text}。`;
       const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
-      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
+      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()], refs: run.imageRefs });
       this.channels.messagePosted(msg);
       return msg;
     } finally {
@@ -333,7 +341,7 @@ export class ChatAgent {
     if (this.active) throw new Error('上一条回复还在生成。');
     const llm = this.router.for('chat');
     if (!llm) throw new Error('还没有接上大模型。');
-    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>() };
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>(), imageRefs: [] as CardRef[] };
     this.active = run;
     try {
       this.channels.thinking(true);
@@ -387,11 +395,25 @@ export class ChatAgent {
       range ? `本轮明确的查询范围：${shanghaiTime(range.from)} 至 ${shanghaiTime(range.to)}（上海时间；校历周日起算）。list_deadlines 的起止时间由程序按此范围校正。` : '',
     ].filter(Boolean).join('\n\n');
     const facts: ToolFact[] = [];
+    const imageContext = new ChatImages(this.repo, this.readImage);
+    const currentImages = await imageContext.forRefs(refs);
+    const previous = historyForModel(scheduled ? history : history.slice(0, -1), { maxMessages: this.shortHistory ? 6 : 20, total: this.shortHistory ? 6000 : 16_000 });
+    const previousMessages: LlmMessage[] = previous.map((message) => ({ role: message.role as 'user' | 'assistant', content: message.content }));
+    for (let index = previous.length - 1; !scheduled && index >= 0; index--) {
+      const originalIndex = history.findIndex((message) => message.id === previous[index].id);
+      if (history[originalIndex]?.content.includes('当前模型无法读取图片') || history[originalIndex + 1]?.content.includes('当前模型无法读取图片')) continue;
+      const images = await imageContext.forRefs(previous[index].refs, true);
+      if (images.length) {
+        // 部分兼容服务仅允许 user 消息携带图片。历史助理的图片引用单独放到 user 消息。
+        if (previous[index].role === 'user') previousMessages[index].images = images;
+        else previousMessages.splice(index + 1, 0, { role: 'user', content: '此前读取的图片资源。', images });
+      }
+    }
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
-      ...historyForModel(scheduled ? history : history.slice(0, -1), { maxMessages: this.shortHistory ? 6 : 20, total: this.shortHistory ? 6000 : 16_000 }),
-      { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
+      ...previousMessages,
+      { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text, ...(currentImages.length ? { images: currentImages } : {}) },
     ];
     const run = this.active!;
     const result = await runAgentLoop({
@@ -417,6 +439,11 @@ export class ChatAgent {
         ...(/课程|课表|几点|什么课/u.test(text) ? [{ name: 'fudaner_local__get_today', args: {} }] : []),
         ...(/ddl|截止|作业/i.test(text) ? [{ name: 'fudaner_local__list_deadlines', args: range ?? { from: nowIso, to: new Date(Date.parse(nowIso) + 7 * 86_400_000).toISOString() } }] : []),
       ] : undefined,
+      imagesFromTool: async (result) => {
+        const images = await imageContext.fromTool(result);
+        run.imageRefs = imageContext.references();
+        return images;
+      },
       signal: run.controller.signal,
       onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
       onToolResult: (result) => {
@@ -442,7 +469,7 @@ export class ChatAgent {
     }
     return this.repo.addMessage({
       id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
-      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()],
+      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], refs: run.imageRefs,
       actions: [...loginActions(platforms, `${text}\n${content}`), ...this.downloadActions(run.view.startedAt)],
     });
   }
@@ -493,7 +520,10 @@ export class ChatAgent {
   }
 
   /** 没有配置模型时的规则回复，保证演示模式下也能基本使用 */
-  private withoutModel(text: string): ChatMessage {
+  private withoutModel(text: string, refs: CardRef[]): ChatMessage {
+    if (refs.some((ref) => ref.type === 'resource')) {
+      return this.repo.addMessage({ role: 'assistant', content: '附件已保存，可以在资源库查看。分析附件需要先到「设置 → 模型」连接大模型；如果附带了图片，请选择支持图片的模型。', refs });
+    }
     const now = new Date();
     if (/ddl|截止|作业|deadline/i.test(text)) {
       const items = this.repo.listItems({ kind: 'assignment', done: false, dueAfter: now.toISOString(), dueBefore: new Date(now.getTime() + 7 * 86_400_000).toISOString() });

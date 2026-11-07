@@ -5,6 +5,7 @@ import type { Embedder } from './memory-recall';
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
+  images?: { dataUrl: string }[];
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
 }
@@ -30,6 +31,10 @@ export interface LlmClient {
   chat(messages: LlmMessage[], opts?: LlmOptions): Promise<LlmResult>;
 }
 
+export class ImageModelError extends Error {
+  constructor() { super('当前模型无法读取图片。请到「设置 → 模型」选择支持图片的模型后重试。'); }
+}
+
 /** OpenAI 兼容协议客户端：云端（DeepSeek、通义、Kimi…）和本地（Ollama 等）共用。 */
 export class OpenAiCompatClient implements LlmClient {
   private readonly client: OpenAI;
@@ -41,10 +46,27 @@ export class OpenAiCompatClient implements LlmClient {
   }
 
   async chat(messages: LlmMessage[], opts: LlmOptions = {}): Promise<LlmResult> {
+    try { return await this.complete(messages, opts); }
+    catch (error) {
+      if (messages.some((message) => message.images?.length) && error instanceof OpenAI.APIError &&
+        [400, 415, 422].includes(error.status ?? 0) && /image|vision|multimodal|图像|图片/i.test(error.message)) {
+        throw new ImageModelError();
+      }
+      throw error;
+    }
+  }
+
+  private async complete(messages: LlmMessage[], opts: LlmOptions): Promise<LlmResult> {
     const params = {
       model: this.cfg.model,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      messages: messages as any,
+      messages: messages.map(({ images, ...message }) => images?.length ? {
+        ...message,
+        content: [
+          { type: 'text', text: message.content ?? '' },
+          ...images.map((image) => ({ type: 'image_url', image_url: { url: image.dataUrl } })),
+        ],
+      } : message) as any,
       tools: opts.tools?.length ? opts.tools : undefined,
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens,

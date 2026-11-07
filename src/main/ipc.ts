@@ -11,7 +11,7 @@ import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
 import { nextOccurrence, validateRepeat } from './engine/reminders';
 import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
-import { parseFile } from './library/parse';
+import { parseFile, parseImageBytes, type ParsedFile } from './library/parse';
 import { buildToday } from './today';
 import { isLocalUrl, OpenAiCompatClient, OpenAiEmbedder } from './ai/llm';
 import { resolveChatReference, safeExternalUrl } from './chat/references';
@@ -36,8 +36,12 @@ export function registerIpc(ctx: AppContext, opts: {
 }): void {
   const { repo } = ctx;
   let pendingUploads = 0;
+  let clearingData = false;
   const handle = <T extends unknown[], R>(ch: string, fn: (...a: T) => R | Promise<R>) =>
-    ipcMain.handle(ch, (_e, ...args) => fn(...(args as T)));
+    ipcMain.handle(ch, (_e, ...args) => {
+      if (clearingData) throw new Error('正在清除本地内容，请稍候再试。');
+      return fn(...(args as T));
+    });
 
   type Api = FudanerApi;
   handle<Parameters<Api['chat']['page']>, ReturnType<Api['chat']['page']>>('chat.page', async (beforeId, limit) => repo.messagePage(beforeId, limit));
@@ -171,16 +175,26 @@ export function registerIpc(ctx: AppContext, opts: {
 
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
-  handle<[string], void>('library.remove', (id) => repo.removeResource(id));
-  handle<[string], unknown>('library.upload', async (path) => {
+  handle<Parameters<Api['library']['image']>, ReturnType<Api['library']['image']>>('library.image', (id) => ctx.images.read(id));
+  handle<[string], void>('library.remove', async (id) => {
+    await ctx.images?.removeFile(repo.getResourceFilePath(id));
+    repo.removeResource(id);
+    opts.onChanged?.('library');
+  });
+  const importResource = async (read: () => Promise<ParsedFile>, path?: string) => {
     pendingUploads++;
     try {
-      const f = await parseFile(path);
-      const resource = repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path });
+      const f = await read();
+      const saved = f.image ? await ctx.images.save(f.image) : path;
+      let resource;
+      try { resource = repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path: saved }); }
+      catch (error) { if (f.image) await ctx.images.removeFile(saved); throw error; }
       opts.onChanged?.('library');
       return resource;
     } finally { pendingUploads--; }
-  });
+  };
+  handle<[string], unknown>('library.upload', (path) => importResource(() => parseFile(path), path));
+  handle<Parameters<Api['library']['uploadImage']>, ReturnType<Api['library']['uploadImage']>>('library.uploadImage', (name, bytes) => importResource(() => parseImageBytes(name, bytes)));
 
   handle<[string], unknown>('search', async (q) => repo.search(q));
   handle<Parameters<Api['searchDetail']>, string | null>('search.detail', (type, id) => {
@@ -371,12 +385,16 @@ export function registerIpc(ctx: AppContext, opts: {
     if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
     await ctx.executor.runNext();
   });
-  const wipe = () => {
+  const wipe = async () => {
     if (ctx.agent.state() || pendingUploads || activeActions.size) throw new Error('请等当前回复或文件导入结束后再清除数据。');
-    repo.wipe();
-    opts.onChatCleared?.();
+    clearingData = true;
+    try {
+      await ctx.images?.clear();
+      repo.wipe();
+      opts.onChatCleared?.();
+    } finally { clearingData = false; }
   };
-  handle('dev.wipe', async () => { wipe(); });
+  handle('dev.wipe', wipe);
   handle('dev.demoSubmitNext', async () => {
     const next = repo.listItems({ kind: 'assignment', done: false, dueAfter: new Date().toISOString(), limit: 1, dueBefore: new Date(Date.now() + 30 * 86_400_000).toISOString() })[0];
     if (next) opts.demo.elearning.submit(next.sourceId);
@@ -385,7 +403,7 @@ export function registerIpc(ctx: AppContext, opts: {
   });
   // 一键重置演示：清空数据 → 重新写入演示画像 → 首次同步 → 运行一次引擎 → 刷新界面（录视频前用）
   handle('dev.resetDemo', async () => {
-    wipe();
+    await wipe();
     opts.demo.elearning.reset();
     opts.demo.mail.reset();
     repo.setSettings({ demoMode: true });
