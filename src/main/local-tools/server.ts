@@ -6,6 +6,8 @@ import { buildToday } from '../today';
 import type { Item } from '../../shared/types';
 import type { ImportResult } from '../activities/sync';
 import { noticeView } from '../notices/sync';
+import { describeRepeat, nextOccurrence, validateRepeat } from '../engine/reminders';
+import type { ReminderRepeat } from '../../shared/types';
 
 /** 活动给模型看的样子：时间换成上海时间的说法，去掉正文 */
 function activityView(i: Item) {
@@ -159,6 +161,47 @@ export function createLocalServer(
   }
 
   if (chatOnly) {
+    // ---------- 定时提醒 / 定时任务 ----------
+    server.registerTool('create_reminder', {
+      description: '创建定时提醒或定时任务。用户说「每天 22:00 提醒我背单词」「明早 8 点叫我交表」「每周一早上帮我汇总上周的通知和本周 DDL」时使用。'
+        + 'kind=remind：到点弹通知提醒一句；kind=task：到点由你自动完成 prompt 里的事并把结果发到对话里。'
+        + '一次性用 repeat=once 和 at（带时区的 ISO 时间）；重复的用 daily / weekdays（周一到周五）/ weekly（配 weekdays 数组，1=周一…7=周日）和 time（HH:MM）。创建后把时间复述给用户。',
+      inputSchema: {
+        title: z.string().min(1).max(60).describe('简短标题，如「背单词」「周一汇总」'),
+        kind: z.enum(['remind', 'task']),
+        prompt: z.string().max(1000).optional().describe('remind：到点要说的话；task：到时要做的事，写清楚，如「汇总上周新的学校通知、本周 DDL 和考试，给出本周安排建议」'),
+        repeat: z.enum(['once', 'daily', 'weekdays', 'weekly']),
+        at: z.string().optional().describe('repeat=once 时必填：带时区的 ISO 时间，如 2026-11-08T08:00:00+08:00'),
+        time: z.string().optional().describe('重复提醒的时间 HH:MM（上海时间）'),
+        weekdays: z.array(z.number().int().min(1).max(7)).optional().describe('repeat=weekly 时：星期几，1=周一…7=周日'),
+      },
+    }, async (a) => {
+      const repeat: ReminderRepeat = a.repeat === 'once' ? { type: 'once', at: a.at ?? '' }
+        : a.repeat === 'daily' ? { type: 'daily', time: a.time ?? '' }
+        : { type: 'weekly', time: a.time ?? '', weekdays: a.repeat === 'weekdays' ? [1, 2, 3, 4, 5] : a.weekdays ?? [] };
+      const problem = validateRepeat(repeat);
+      if (problem) throw new Error(problem);
+      const next = nextOccurrence(repeat, new Date());
+      if (!next) throw new Error('这个时间已经过去了，请换一个将来的时间。');
+      const r = repo.addReminder({ title: a.title, kind: a.kind, prompt: a.prompt, repeat, createdBy: 'chat', nextAt: next.toISOString() });
+      channels.changed('goals');
+      return json({ ok: true, id: r.id, title: r.title, kind: r.kind, schedule: describeRepeat(repeat), next_at: r.nextAt, note: '可以在「设置 → 助理 → 定时提醒」里查看、暂停或删除' });
+    });
+
+    server.registerTool('list_reminders', {
+      description: '列出用户设置的定时提醒和定时任务', inputSchema: {}, annotations: ro,
+    }, async () => json(repo.listReminders().map((r) => ({ id: r.id, title: r.title, kind: r.kind, prompt: r.prompt, schedule: describeRepeat(r.repeat), enabled: r.enabled, next_at: r.nextAt }))));
+
+    server.registerTool('cancel_reminder', {
+      description: '删除一个定时提醒或定时任务。先用 list_reminders 找到真实 id',
+      inputSchema: { id: z.string() },
+    }, async ({ id }) => {
+      const r = repo.getReminder(id);
+      if (!r) throw new Error('id 对应的提醒不存在。请先用 list_reminders 查到真实 id。');
+      repo.removeReminder(id);
+      return json({ ok: true, removed: r.title });
+    });
+
     server.registerTool('start_background_task', {
       description: '把一件需要较长时间的整理工作交给后台执行（如整理申请材料清单、做复习提纲），完成后成果会放进资源库并通知用户。用户明确提出请求时使用。',
       inputSchema: { title: z.string(), request: z.string().describe('要做什么，写清楚') },

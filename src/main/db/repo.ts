@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type {
   Assessment, CardRef, ChatMessage, Course, Decision, EvalRecord, FeedCard, Followup, GateResult, Goal, Item,
   Memory, Profile, QuickAction, Resource, SearchHit, SemesterPhase, Settings, Task, Ticket, ToolCallView,
-  Trigger, VerifyCondition,
+  Reminder, Trigger, VerifyCondition,
 } from '../../shared/types';
 import { Db, fromJson, newId, nowIso, toJson } from './db';
 
@@ -571,6 +571,36 @@ export class Repo {
     this.db.run('UPDATE followups SET status=? WHERE id=?', status, id);
   }
 
+  // ---------------- 定时提醒 / 定时任务 ----------------
+  addReminder(r: Omit<Reminder, 'id' | 'createdAt' | 'nextAt' | 'lastRunAt' | 'enabled'> & { nextAt?: string }): Reminder {
+    const id = newId();
+    const createdAt = nowIso();
+    this.db.run('INSERT INTO reminders (id, title, kind, prompt, repeat, next_at, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
+      id, r.title, r.kind, r.prompt, toJson(r.repeat), r.nextAt, r.createdBy, createdAt);
+    return this.getReminder(id)!;
+  }
+  getReminder(id: string): Reminder | undefined {
+    const row = this.db.get<Row>('SELECT * FROM reminders WHERE id = ?', id);
+    return row ? mapReminder(row) : undefined;
+  }
+  listReminders(): Reminder[] {
+    return this.db.all<Row>('SELECT * FROM reminders ORDER BY enabled DESC, COALESCE(next_at, created_at)').map(mapReminder);
+  }
+  /** 到点的提醒（启用、且下次时间已到） */
+  dueReminders(now: string): Reminder[] {
+    return this.db.all<Row>('SELECT * FROM reminders WHERE enabled = 1 AND next_at IS NOT NULL AND next_at <= ? ORDER BY next_at', now).map(mapReminder);
+  }
+  /** 记录一次触发（或跳过），写入下一次时间；没有下一次时自动停用 */
+  advanceReminder(id: string, nextAt: string | undefined, ranAt?: string): void {
+    this.db.run('UPDATE reminders SET next_at = ?, enabled = CASE WHEN ? IS NULL THEN 0 ELSE enabled END, last_run_at = COALESCE(?, last_run_at) WHERE id = ?', nextAt ?? null, nextAt ?? null, ranAt ?? null, id);
+  }
+  setReminderEnabled(id: string, enabled: boolean, nextAt?: string): void {
+    this.db.run('UPDATE reminders SET enabled = ?, next_at = ? WHERE id = ?', enabled ? 1 : 0, enabled ? nextAt ?? null : null, id);
+  }
+  removeReminder(id: string): void {
+    this.db.run('DELETE FROM reminders WHERE id = ?', id);
+  }
+
   // ---------------- feed ----------------
   addFeedCard(c: Omit<FeedCard, 'id' | 'createdAt' | 'status'> & { dedupeKey?: string }): FeedCard | undefined {
     if (c.dedupeKey && this.db.get<Row>('SELECT id FROM feed_cards WHERE dedupe_key = ?', c.dedupeKey)) return undefined;
@@ -746,7 +776,7 @@ export class Repo {
    * 这样清除后的下一次同步按「首次同步」处理，不会把整个学期的历史当成新事件。
    */
   wipe(): void {
-    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups',
+    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups', 'reminders',
       'feed_cards', 'resources', 'resource_chunks', 'triggers', 'evals', 'digest_queue', 'tickets', 'ticket_reports', 'attention_budget', 'search_index'];
     this.db.tx(() => {
       tables.forEach((t) => this.db.run(`DELETE FROM ${t}`));
@@ -772,6 +802,12 @@ function mapItem(r: Row): Item {
     aiCategory: opt(r.ai_category), aiSummary: opt(r.ai_summary), aiAction: opt(r.ai_action), aiModelUsed: opt(r.ai_model_used),
     ...(r.kind === 'activity' ? { activity: fromJson<{ activity?: Item['activity'] }>(r.raw, {}).activity ?? {} } : {}),
     ...(r.kind === 'notice' && r.raw ? { notice: fromJson<{ notice?: Item['notice'] }>(r.raw, {}).notice } : {}),
+  };
+}
+function mapReminder(r: Row): Reminder {
+  return {
+    id: r.id, title: r.title, kind: r.kind, prompt: opt(r.prompt), repeat: fromJson(r.repeat, { type: 'daily', time: '09:00' }),
+    nextAt: opt(r.next_at), enabled: !!r.enabled, lastRunAt: opt(r.last_run_at), createdBy: r.created_by, createdAt: r.created_at,
   };
 }
 function mapMessage(r: Row): ChatMessage {

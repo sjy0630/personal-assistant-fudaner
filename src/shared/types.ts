@@ -297,6 +297,26 @@ export interface Ticket {
 
 export type SemesterPhase = 'regular' | 'course_selection' | 'midterm' | 'pre_exam' | 'exam' | 'holiday';
 
+/** 定时提醒（到点提醒一句）或定时任务（到点让助理按 prompt 做一件事，结果发到对话里） */
+export type ReminderRepeat =
+  | { type: 'once'; at: string }
+  | { type: 'daily'; time: string }
+  | { type: 'weekly'; time: string; weekdays: number[] };
+export interface Reminder {
+  id: string;
+  title: string;
+  kind: 'remind' | 'task';
+  /** 提醒：提醒的话（可省略，用标题）；任务：到时要助理做的事 */
+  prompt?: string;
+  repeat: ReminderRepeat;
+  /** 下一次触发时间；一次性的触发后为空 */
+  nextAt?: string;
+  enabled: boolean;
+  lastRunAt?: string;
+  createdBy: 'chat' | 'manual';
+  createdAt: string;
+}
+
 export interface Followup {
   id: string;
   topic: string;

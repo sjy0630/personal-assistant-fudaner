@@ -167,7 +167,37 @@ export class ChatAgent {
     }
   }
 
-  private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
+  /** 正在生成回复 */
+  busy(): boolean { return this.active !== null; }
+
+  /**
+   * 定时任务：到点后让助理按用户事先写好的要求做一件事，结果作为主动消息发到对话里。
+   * 不在对话里伪造一条用户消息；失败时也留下一条说明。
+   */
+  async runScheduled(title: string, prompt: string): Promise<ChatMessage> {
+    if (this.active) throw new Error('上一条回复还在生成。');
+    const llm = this.router.for('chat');
+    if (!llm) throw new Error('还没有接上大模型。');
+    const run = { view: { id: randomUUID(), content: '', toolCalls: [] as ToolCallView[], startedAt: new Date().toISOString(), version: 0 }, controller: new AbortController(), cards: [] as CardRef[], itemCards: new Map<string, CardRef>() };
+    this.active = run;
+    try {
+      this.channels.thinking(true);
+      this.publish();
+      const text = `【定时任务「${title}」】这是我事先设定的任务，现在到时间了。请直接完成并把结果告诉我，不要反问；需要的数据先用工具查。\n任务：${prompt}`;
+      const reply = await this.withModel(llm, text, [], { title });
+      this.channels.messagePosted(reply);
+      return reply;
+    } catch {
+      const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `⏰ ${title}\n\n这次定时任务没有完成（网络或模型没有正常返回），稍后可以直接让我再做一次。`, proactive: true });
+      this.channels.messagePosted(msg);
+      return msg;
+    } finally {
+      this.active = null;
+      this.channels.thinking(false);
+    }
+  }
+
+  private async withModel(llm: LlmClient, text: string, refs: CardRef[], scheduled?: { title: string }): Promise<ChatMessage> {
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
     const policy = createToolPolicy(this.repo, llm);
@@ -176,7 +206,8 @@ export class ChatAgent {
     const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
-      ...history.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
+      ...(scheduled ? history : history.slice(0, -1)).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
@@ -196,7 +227,10 @@ export class ChatAgent {
       },
     });
     const content = result.content || '模型没有返回正文，请重试。';
-    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content, toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], actions: loginActions(platforms, `${text}\n${content}`) });
+    return this.repo.addMessage({
+      id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
+      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], actions: loginActions(platforms, `${text}\n${content}`),
+    });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */

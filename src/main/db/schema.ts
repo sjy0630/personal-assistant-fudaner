@@ -53,6 +53,12 @@ CREATE TABLE IF NOT EXISTS followups (
   status TEXT NOT NULL DEFAULT 'pending', verify TEXT, created_from_msg_id TEXT
 );
 
+-- 定时提醒 / 定时任务（用户设定，到点必达，不占注意力预算）
+CREATE TABLE IF NOT EXISTS reminders (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL, prompt TEXT, repeat TEXT NOT NULL,
+  next_at TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_run_at TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feed_cards (
   id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, reason TEXT NOT NULL,
   done TEXT, refs TEXT NOT NULL DEFAULT '[]', actions TEXT NOT NULL DEFAULT '[]', score REAL NOT NULL DEFAULT 0,

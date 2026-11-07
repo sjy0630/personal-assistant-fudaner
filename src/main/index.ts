@@ -164,6 +164,8 @@ app.whenReady().then(async () => {
     clearInterval(engineTimer);
     engineTimer = setInterval(async () => {
       if (Date.now() < paused) return;
+      // 定时提醒 / 定时任务（用户自己设的，暂停提醒期间顺延）
+      await ctx.runReminders().catch((e) => console.error('[reminders]', e));
       await ctx.engine.tick().catch((e) => console.error('[engine]', e));
       await ctx.executor.runNext().catch((e) => console.error('[executor]', e));
     }, 10_000);

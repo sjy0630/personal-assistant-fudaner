@@ -11,6 +11,7 @@ import { applyDemoCourseExtras } from './demo/demo';
 import type { Channels } from './engine/channels';
 import type { ExternalMcpStatus, PlatformState } from '../shared/types';
 import { childEnv, externalServerName, launchOf, toolAllowed } from './mcp/external';
+import { isStale, nextOccurrence } from './engine/reminders';
 import { ProactiveEngine } from './engine/engine';
 import { TicketExecutor } from './engine/executor';
 import { createLocalServer } from './local-tools/server';
@@ -145,6 +146,46 @@ export class AppContext {
 
   externalStatus(): ExternalMcpStatus[] {
     return [...this.external.values()];
+  }
+
+  private remindersRunning = false;
+
+  /**
+   * 到点的定时提醒和定时任务。由主进程每 10 秒调用一次。
+   * - 用户自己设的，到点必达：不占注意力预算、不受静默时段限制；
+   * - 电脑关机或睡眠错过超过 12 小时的跳过，只排下一次；
+   * - 定时任务需要模型；对话正在生成时等下一轮再执行。
+   */
+  async runReminders(now = new Date()): Promise<number> {
+    if (this.remindersRunning) return 0;
+    this.remindersRunning = true;
+    let ran = 0;
+    try {
+      const name = this.repo.getProfile().assistantName;
+      for (const r of this.repo.dueReminders(now.toISOString())) {
+        const next = nextOccurrence(r.repeat, now)?.toISOString();
+        if (isStale(r, now)) { this.repo.advanceReminder(r.id, next); continue; }
+        const useModel = r.kind === 'task' && !!this.router.for('chat');
+        if (useModel && this.agent.busy()) continue;
+        const late = r.nextAt && now.getTime() - Date.parse(r.nextAt) > 10 * 60_000 ? `（原定 ${new Date(r.nextAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}，电脑刚恢复）` : '';
+        this.repo.advanceReminder(r.id, next, now.toISOString());
+        ran++;
+        if (useModel) {
+          const msg = await this.agent.runScheduled(r.title, r.prompt || r.title);
+          this.deps.channels.notify(name, `${r.title}：${msg.content.replace(/^⏰[^\n]*\n+/, '').slice(0, 80)}`, msg.id);
+        } else {
+          const text = r.kind === 'task'
+            ? `⏰ 到时间了：${r.title}${late}。还没有接上大模型，没法自动去做，记得自己处理一下。`
+            : `⏰ ${r.prompt || r.title}${late}`;
+          const msg = this.repo.addMessage({ role: 'assistant', content: text, proactive: true, trigger: `reminder:${r.id}` });
+          this.deps.channels.messagePosted(msg);
+          this.deps.channels.notify(name, text.replace(/^⏰ /, ''), msg.id);
+        }
+      }
+    } finally {
+      this.remindersRunning = false;
+    }
+    return ran;
   }
 
   /** 读取网页：演示模式下只读虚构文章 */
