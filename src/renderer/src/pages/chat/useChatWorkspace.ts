@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { api } from '../../api';
 import { createChatWorkspace } from './composer-state';
+import { uploadClipboardImage } from './clipboard-image';
 
 /** Mount once in App so changing pages cannot discard pending attachment imports. */
 export function useChatWorkspace() {
@@ -13,6 +14,10 @@ export function useChatWorkspace() {
       upload: async (path) => {
         const resource = await api.library.upload(path);
         return { type: 'resource', id: resource.id, title: resource.title, subtitle: '刚上传' };
+      },
+      uploadFromMemory: async (file, active) => {
+        const resource = await uploadClipboardImage(file, active, api.library.uploadImage);
+        return { type: 'resource', id: resource.id, title: resource.title, subtitle: '刚粘贴' };
       },
     });
   });

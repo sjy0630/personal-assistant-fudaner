@@ -5,6 +5,7 @@ import type {
   Reminder, Trigger, VerifyCondition,
 } from '../../shared/types';
 import { Db, fromJson, newId, nowIso, toJson } from './db';
+import { grams, lexicalScore } from '../ai/memory-recall';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -14,6 +15,28 @@ export interface ConversationSummary {
   untilCreatedAt: string;
   summary: string;
 }
+/** 早先对话的一段：聊了什么、结论是什么 */
+export interface Episode { id: string; title: string; content: string; startedAt: string; endedAt: string }
+export interface EpisodeDraft { title: string; content: string; date?: string }
+
+/** 两条记忆是不是在说同一件事：一条包含另一条，或两字片段高度重合 */
+export function nearDuplicate(a: string, b: string): boolean {
+  const x = a.replace(/\s+/g, '');
+  const y = b.replace(/\s+/g, '');
+  if (x.length >= 4 && y.length >= 4 && (x.includes(y) || y.includes(x))) return true;
+  const ga = grams(a);
+  const gb = grams(b);
+  if (ga.size < 3 || gb.size < 3) return false;
+  let both = 0;
+  for (const g of ga) if (gb.has(g)) both++;
+  return both / Math.min(ga.size, gb.size) >= 0.85 && both / Math.max(ga.size, gb.size) >= 0.7;
+}
+
+/** 置顶、类型（目标/偏好/固定安排）和最近更新的权重 */
+export function memoryBoost(m: Memory, weekAgo = Date.now() - 7 * 86_400_000): number {
+  return (m.pinned ? 4 : 0) + (['goal', 'preference', 'schedule'].includes(m.type) ? 1 : 0) + (Date.parse(m.updatedAt) > weekAgo ? 0.5 : 0);
+}
+
 export interface ConversationSummaryBatch {
   epoch: string;
   previous: ConversationSummary | undefined;
@@ -376,7 +399,7 @@ export class Repo {
     return row ? { untilMsgId: row.until_msg_id, untilCreatedAt: row.created_at, summary: row.summary } : undefined;
   }
   addSummary(untilMsgId: string, summary: string): void {
-    const content = Array.from(summary.trim()).slice(0, 300).join('');
+    const content = Array.from(summary.trim()).slice(0, 1000).join('');
     if (!content || !this.getMessage(untilMsgId)) throw new Error('摘要内容或覆盖消息无效。');
     this.db.run('INSERT INTO conversation_summaries (id,until_msg_id,summary) VALUES (?,?,?)', newId(), untilMsgId, content);
   }
@@ -393,7 +416,7 @@ export class Repo {
     return { epoch, previous, messages: rows.map(mapMessage), fingerprint: this.summaryFingerprint(rows) };
   }
   /** 仅在清空代次、原摘要和待覆盖消息均未变化时原子保存，防止重复或过期摘要覆盖。 */
-  commitSummary(batch: ConversationSummaryBatch, summary: string): boolean {
+  commitSummary(batch: ConversationSummaryBatch, summary: string, episodes: EpisodeDraft[] = []): boolean {
     return this.db.tx(() => {
       if (this.getKv<string | undefined>(SUMMARY_EPOCH_KEY, undefined) !== batch.epoch ||
         toJson(this.latestSummary()) !== toJson(batch.previous)) return false;
@@ -404,8 +427,62 @@ export class Repo {
         (boundary.created_at === cutoff.created_at && boundary.rowid >= cutoff.rowid)) return false;
       if (this.summaryFingerprint(this.summaryRows(batch.previous, boundary, true)) !== batch.fingerprint) return false;
       this.addSummary(until!.id, summary);
+      const first = batch.messages[0];
+      for (const e of episodes.slice(0, 6)) {
+        const title = Array.from(e.title.trim()).slice(0, 30).join('');
+        const content = Array.from(e.content.trim()).slice(0, 400).join('');
+        if (!title || !content) continue;
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(e.date ?? '') ? `${e.date}T12:00:00.000Z` : undefined;
+        this.db.run('INSERT INTO episodes (id,until_msg_id,started_at,ended_at,title,content,created_at) VALUES (?,?,?,?,?,?,?)',
+          newId(), until!.id, day ?? first.createdAt, day ?? until!.createdAt, title, content, nowIso());
+      }
       return true;
     });
+  }
+
+  // ---------------- 早先对话：分段记录与原文检索 ----------------
+  listEpisodes(limit = 400): Episode[] {
+    return this.db.all<Row>('SELECT * FROM episodes ORDER BY ended_at DESC, rowid DESC LIMIT ?', limit).map((r) => ({
+      id: r.id, title: r.title, content: r.content, startedAt: r.started_at, endedAt: r.ended_at,
+    }));
+  }
+  /**
+   * 在较早的对话原文里找和这句话相关的消息（不含最近 skipRecent 条，那些本来就在上下文里）。
+   * 中文按两字片段、英文按单词，加上同义说法；只看最近 3000 条，每条取前 600 字打分。
+   */
+  searchOldMessages(query: string, opts: { skipRecent?: number; limit?: number; minScore?: number } = {}): { message: ChatMessage; score: number }[] {
+    const rows = this.db.all<Row>(`SELECT * FROM chat_messages WHERE role IN ('user','assistant')
+      ORDER BY created_at DESC, rowid DESC LIMIT 3000 OFFSET ?`, opts.skipRecent ?? 20);
+    const minScore = opts.minScore ?? 2;
+    return rows.map(mapMessage)
+      .filter((m) => m.content.trim() && !m.content.startsWith('📌 已记住') && !/^这次回复没有完成|回复未完成/.test(m.content))
+      .map((message) => ({ message, score: lexicalScore(query, message.content.slice(0, 600)) }))
+      .filter((x) => x.score >= minScore)
+      .sort((a, b) => b.score - a.score || b.message.createdAt.localeCompare(a.message.createdAt))
+      .slice(0, opts.limit ?? 8);
+  }
+  /** 某条消息前后的几条对话，用来看完整的来龙去脉 */
+  conversationAround(id: string, before = 3, after = 4): ChatMessage[] {
+    const at = this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages WHERE id=?', id);
+    if (!at) return [];
+    const earlier = this.db.all<Row>(`SELECT * FROM chat_messages WHERE role IN ('user','assistant') AND (created_at < ? OR (created_at = ? AND rowid < ?))
+      ORDER BY created_at DESC, rowid DESC LIMIT ?`, at.created_at, at.created_at, at.rowid, before).reverse();
+    const later = this.db.all<Row>(`SELECT * FROM chat_messages WHERE role IN ('user','assistant') AND (created_at > ? OR (created_at = ? AND rowid >= ?))
+      ORDER BY created_at ASC, rowid ASC LIMIT ?`, at.created_at, at.created_at, at.rowid, after + 1);
+    return [...earlier, ...later].map(mapMessage);
+  }
+
+  // ---------------- 向量缓存（语义检索，可选） ----------------
+  getVectors(kind: string, model: string): Map<string, { hash: string; vector: number[] }> {
+    const out = new Map<string, { hash: string; vector: number[] }>();
+    for (const r of this.db.all<Row>('SELECT id,hash,vector FROM embeddings WHERE kind=? AND model=?', kind, model)) {
+      try { out.set(r.id, { hash: r.hash, vector: JSON.parse(r.vector) as number[] }); } catch { /* 坏数据跳过，下次重算 */ }
+    }
+    return out;
+  }
+  setVector(kind: string, id: string, model: string, hash: string, vector: number[]): void {
+    this.db.run('INSERT INTO embeddings (kind,id,model,hash,vector) VALUES (?,?,?,?,?) ON CONFLICT(kind,id,model) DO UPDATE SET hash=excluded.hash, vector=excluded.vector',
+      kind, id, model, hash, JSON.stringify(vector.map((x) => Math.round(x * 1e5) / 1e5)));
   }
   private summaryRows(previous: ConversationSummary | undefined, boundary: { created_at: string; rowid: number }, inclusive: boolean): Row[] {
     const cursor = previous && this.db.get<{ created_at: string; rowid: number }>('SELECT created_at,rowid FROM chat_messages WHERE id=?', previous.untilMsgId);
@@ -421,20 +498,39 @@ export class Repo {
   }
 
   // ---------------- memories ----------------
+  /**
+   * 记一条长期记忆。
+   * - 完全相同的不重复记；
+   * - 同类型、几乎一样的（一条包含另一条，或两字片段高度重合）当成同一件事的新说法，用新内容覆盖旧的；
+   *   （「周二有社团」和「周三有社团」不会被合并。改了主意这类更新由记忆提取用 update 处理。）
+   * - 临时状态（status）没给有效期时默认 30 天后失效。
+   */
   addMemory(m: { type: Memory['type']; content: string; source: Memory['source']; sourceMsgId?: string; expiresAt?: string }): Memory {
-    const dup = this.db.get<Row>('SELECT * FROM memories WHERE content = ?', m.content);
+    const content = m.content.trim();
+    const dup = this.db.get<Row>('SELECT * FROM memories WHERE content = ?', content);
     if (dup) return mapMemory(dup);
-    const id = newId();
     const now = nowIso();
+    const expiresAt = m.expiresAt ?? (m.type === 'status' ? new Date(Date.now() + 30 * 86_400_000).toISOString() : undefined);
+    const similar = this.listMemories([m.type]).find((x) => nearDuplicate(x.content, content));
+    if (similar) {
+      this.db.run('UPDATE memories SET content=?, source=?, source_msg_id=?, expires_at=?, updated_at=? WHERE id=?',
+        content, m.source, m.sourceMsgId ?? null, expiresAt ?? null, now, similar.id);
+      this.removeFromSearch('memory', similar.id);
+      this.indexForSearch('memory', similar.id, content, content);
+      return mapMemory(this.db.get<Row>('SELECT * FROM memories WHERE id = ?', similar.id)!);
+    }
+    const id = newId();
     this.db.run(
       'INSERT INTO memories (id, type, content, source, source_msg_id, pinned, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)',
-      id, m.type, m.content, m.source, m.sourceMsgId, m.expiresAt, now, now,
+      id, m.type, content, m.source, m.sourceMsgId, expiresAt, now, now,
     );
-    this.indexForSearch('memory', id, m.content, m.content);
+    this.indexForSearch('memory', id, content, content);
     return mapMemory(this.db.get<Row>('SELECT * FROM memories WHERE id = ?', id)!);
   }
   updateMemory(id: string, content: string): void {
     this.db.run('UPDATE memories SET content=?, updated_at=? WHERE id=?', content, nowIso(), id);
+    this.removeFromSearch('memory', id);
+    this.indexForSearch('memory', id, content, content);
   }
   removeMemory(id: string): void {
     this.db.run('DELETE FROM memories WHERE id=?', id);
@@ -445,14 +541,17 @@ export class Repo {
     const rows = this.db.all<Row>('SELECT * FROM memories WHERE expires_at IS NULL OR expires_at > ? ORDER BY pinned DESC, updated_at DESC', now);
     return rows.map(mapMemory).filter((m) => !types || types.includes(m.type));
   }
-  /** 初赛：关键词 + 类型匹配；P1 换成向量检索 */
-  recallMemories(query: string, limit = 10): Memory[] {
+  /**
+   * 挑出和这句话相关的记忆。
+   * - 记忆不多（≤30 条）时全部带上：几百字，比漏掉要紧的事划算；
+   * - 多了才按相关度挑：中文按两字片段、英文按单词算重合，再加上置顶、类型（目标/偏好/固定安排）和最近更新的权重。
+   *   （原来按空格切词，中文整句当一个词，几乎匹配不上。）
+   */
+  recallMemories(query: string, limit = 15): Memory[] {
     const all = this.listMemories();
-    const words = query.split(/[\s，。,.!?？！]+/).filter((w) => w.length >= 2);
-    const scored = all.map((m) => ({
-      m,
-      s: (m.pinned ? 2 : 0) + (m.type === 'schedule' || m.type === 'preference' ? 1 : 0) + words.filter((w) => m.content.includes(w)).length * 3,
-    }));
+    if (all.length <= 30) return all;
+    const week = Date.now() - 7 * 86_400_000;
+    const scored = all.map((m) => ({ m, s: memoryBoost(m, week) + lexicalScore(query, m.content) * 2 }));
     return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.m);
   }
 
@@ -629,13 +728,15 @@ export class Repo {
 
   // ---------------- resources ----------------
   addResource(r: { title: string; kind: Resource['kind']; courseId?: string; mime: string; text: string; path?: string }): Resource {
-    const id = newId();
-    this.db.run('INSERT INTO resources (id, title, kind, course_id, mime, path, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      id, r.title, r.kind, r.courseId, r.mime, r.path, r.text, nowIso());
-    const chunks = chunkText(r.text);
-    chunks.forEach((t, i) => this.db.run('INSERT INTO resource_chunks (id, resource_id, seq, text) VALUES (?, ?, ?, ?)', newId(), id, i, t));
-    this.indexForSearch('resource', id, r.title, r.text.slice(0, 20000));
-    return this.getResource(id)!;
+    return this.db.tx(() => {
+      const id = newId();
+      this.db.run('INSERT INTO resources (id, title, kind, course_id, mime, path, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        id, r.title, r.kind, r.courseId, r.mime, r.path, r.text, nowIso());
+      const chunks = chunkText(r.text);
+      chunks.forEach((t, i) => this.db.run('INSERT INTO resource_chunks (id, resource_id, seq, text) VALUES (?, ?, ?, ?)', newId(), id, i, t));
+      this.indexForSearch('resource', id, r.title, r.text.slice(0, 20000));
+      return this.getResource(id)!;
+    });
   }
   getResource(id: string): Resource | undefined {
     const r = this.db.get<Row>('SELECT * FROM resources WHERE id = ?', id);
@@ -650,6 +751,9 @@ export class Repo {
   }
   listResources(courseId?: string): Resource[] {
     return this.db.all<Row>(`SELECT * FROM resources ${courseId ? 'WHERE course_id = ?' : ''} ORDER BY created_at DESC`, ...(courseId ? [courseId] : [])).map(mapResource);
+  }
+  getResourceFilePath(id: string): string | undefined {
+    return this.db.get<{ path: string | null }>('SELECT path FROM resources WHERE id=?', id)?.path ?? undefined;
   }
 
   // ---------------- search ----------------
@@ -780,7 +884,7 @@ export class Repo {
    * 这样清除后的下一次同步按「首次同步」处理，不会把整个学期的历史当成新事件。
    */
   wipe(): void {
-    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'memories', 'goals', 'tasks', 'followups', 'reminders',
+    const tables = ['courses', 'items', 'links', 'chat_messages', 'conversation_summaries', 'episodes', 'embeddings', 'memories', 'goals', 'tasks', 'followups', 'reminders',
       'feed_cards', 'resources', 'resource_chunks', 'triggers', 'evals', 'digest_queue', 'tickets', 'ticket_reports', 'attention_budget', 'search_index'];
     this.db.tx(() => {
       tables.forEach((t) => this.db.run(`DELETE FROM ${t}`));

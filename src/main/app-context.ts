@@ -2,6 +2,8 @@ import { createCoursesServer } from '@fudaner/mcp-fudan-courses';
 import { createElearningServer, type ElearningClient } from '@fudaner/mcp-fudan-elearning';
 import { createMailServer, type MailClient } from '@fudaner/mcp-fudan-mail';
 import { Db } from './db/db';
+import { dirname, join } from 'node:path';
+import { ResourceImages } from './library/resource-images';
 import { Repo } from './db/repo';
 import { ModelRouter } from './ai/llm';
 import { ChatAgent } from './ai/agent';
@@ -33,7 +35,7 @@ import { demoSearch } from './demo/demo-campus';
 import { readElectricity, type DormElectricity } from './sources/dorm';
 import { readGpaRank, readGrades, type GpaRank, type GradeReport } from './sources/grades';
 import { demoGrades, demoProgram, demoSelected } from './demo/demo-campus';
-import { readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
+import { profileFactsFromText, readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
 import { readStudentId } from './sources/grades';
 
 /**
@@ -67,6 +69,7 @@ export interface AppDeps {
 
 export class AppContext {
   readonly repo: Repo;
+  readonly images: ResourceImages;
   readonly router: ModelRouter;
   readonly hub = new McpHub();
   readonly executorHub = new McpHub();
@@ -82,10 +85,11 @@ export class AppContext {
 
   constructor(private readonly deps: AppDeps) {
     this.repo = new Repo(new Db(deps.dbPath));
+    this.images = new ResourceImages(this.repo, join(dirname(deps.dbPath), 'attachment-images'));
     this.repo.setCalendar(buildCalendar());
     this.router = new ModelRouter(() => this.repo.getSettings());
     this.engine = new ProactiveEngine(this.repo, this.router, deps.channels);
-    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false));
+    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false), (id) => this.images.read(id));
     this.executor = new TicketExecutor(this.repo, this.router, this.executorHub, deps.channels);
     this.curator = new FeedCurator({
       repo: this.repo, router: this.router, channels: deps.channels,
@@ -99,6 +103,7 @@ export class AppContext {
     const elearningData = {
       listCourses: async () => repo.listCourses().map((c) => ({ code: c.code, name: c.name, teachers: c.teachers })),
       listAssignments: async (f: { courseCode?: string; dueBefore?: string; status?: string }) => {
+        await this.freshElearning();
         const course = f.courseCode ? repo.findCourse(f.courseCode) : undefined;
         return repo.listItems({ kind: 'assignment', courseId: course?.id, dueBefore: f.dueBefore, done: f.status === 'pending' ? false : f.status === 'submitted' ? true : undefined })
           .map((i) => ({ id: i.id, title: i.title, course: i.courseId ? repo.getCourse(i.courseId)?.name : undefined, dueAt: i.dueAt, submitted: i.done, url: i.url }));
@@ -108,6 +113,7 @@ export class AppContext {
         return i ? { ...i, related: repo.linksOf(id).map((l) => ({ title: l.item.title, reason: l.reason })) } : null;
       },
       listAnnouncements: async (f: { courseCode?: string; since?: string }) => {
+        await this.freshElearning();
         const course = f.courseCode ? repo.findCourse(f.courseCode) : undefined;
         return repo.listItems({ kind: 'announcement', courseId: course?.id, since: f.since }).map((i) => ({ id: i.id, title: i.title, at: i.publishedAt, body: i.body.slice(0, 500) }));
       },
@@ -116,14 +122,14 @@ export class AppContext {
       downloadFile: (fileId: string, opts: { courseCode?: string; addToLibrary: boolean }) => this.downloadCourseFile(fileId, opts),
     };
     const mailData = {
-      search: async (f: { query?: string; since?: string; category?: string; limit?: number }) =>
+      search: async (f: { query?: string; since?: string; category?: string; limit?: number }) => (await this.freshMail(),
         repo.listItems({ kind: 'email', query: f.query, since: f.since, category: f.category, limit: f.limit ?? 20 })
-          .map((i) => ({ id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, category: i.aiCategory, summary: i.aiSummary, action: i.aiAction })),
+          .map((i) => ({ id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, category: i.aiCategory, summary: i.aiSummary, action: i.aiAction }))),
       get: async (id: string) => {
         const i = repo.getItem(id);
         return i && i.kind === 'email' ? { id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, body: i.body.slice(0, 4000), summary: i.aiSummary } : null;
       },
-      listActionRequired: async () => repo.listItems({ kind: 'email', done: false, limit: 50 })
+      listActionRequired: async () => (await this.freshMail(), repo.listItems({ kind: 'email', done: false, limit: 50 }))
         .filter((i) => i.aiCategory === 'reply' || i.aiCategory === 'action')
         .map((i) => ({ id: i.id, from: i.sender, subject: i.title, summary: i.aiSummary, action: i.aiAction })),
     };
@@ -248,6 +254,84 @@ export class AppContext {
     this.deps.channels.messagePosted(msg);
   }
 
+  // ---------------- 实时：邮件推送、按需刷新 ----------------
+  private mailSyncing: Promise<unknown> | null = null;
+  private elearningSyncing: Promise<unknown> | null = null;
+  private stopMailWatch?: () => Promise<void>;
+  private mailWatchState: 'off' | 'watching' | 'reconnecting' = 'off';
+  private mailDebounce?: ReturnType<typeof setTimeout>;
+
+  /** 只同步邮箱（几秒），然后马上研判：需要回复的邮件会主动提醒 */
+  async syncMailNow(now = new Date()): Promise<void> {
+    if (this.mailSyncing) { await this.mailSyncing; return; }
+    const mail = this.deps.mail();
+    if (!mail) return;
+    this.mailSyncing = (async () => {
+      try {
+        await syncMail(mail, this.repo, this.router, now);
+        await this.engine.tick();
+        this.deps.channels.changed('feed');
+      } catch (e) {
+        console.warn('[Fudaner 邮箱] 同步失败：', (e as Error).message);
+      }
+    })().finally(() => { this.mailSyncing = null; });
+    await this.mailSyncing;
+  }
+
+  /** 只同步 eLearning */
+  async syncElearningNow(now = new Date()): Promise<void> {
+    if (this.elearningSyncing) { await this.elearningSyncing; return; }
+    const el = this.deps.elearning();
+    if (!el) return;
+    this.elearningSyncing = syncElearning(el, this.repo, now).then(() => this.engine.tick()).catch((e) => console.warn('[Fudaner eLearning] 同步失败：', (e as Error).message))
+      .finally(() => { this.elearningSyncing = null; });
+    await this.elearningSyncing;
+  }
+
+  /** 查邮件前：超过 2 分钟没同步就先同步（最多等 20 秒，超时用已有数据） */
+  private async freshMail(): Promise<void> {
+    if (this.repo.getSettings().demoMode) return; // 演示数据不会变
+    const last = this.repo.getKv<string | null>('mail_last_sync', null);
+    if (last && Date.now() - Date.parse(last) < 2 * 60_000) return;
+    await Promise.race([this.syncMailNow(), new Promise((r) => setTimeout(r, 20_000))]);
+  }
+
+  /** 查作业、公告前：超过 10 分钟没同步就先同步（最多等 25 秒） */
+  private async freshElearning(): Promise<void> {
+    if (this.repo.getSettings().demoMode) return;
+    const last = this.repo.getKv<string | null>('elearning_last_sync', null);
+    if (last && Date.now() - Date.parse(last) < 10 * 60_000) return;
+    await Promise.race([this.syncElearningNow(), new Promise((r) => setTimeout(r, 25_000))]);
+  }
+
+  /**
+   * 开始盯着收件箱：新邮件到达时服务器会马上通知，等 8 秒（同一批邮件合并）后同步并研判。
+   * 邮箱设置变化时重新开始。演示模式不需要。
+   */
+  async restartWatchers(): Promise<void> {
+    await this.stopMailWatch?.().catch(() => undefined);
+    this.stopMailWatch = undefined;
+    this.mailWatchState = 'off';
+    if (this.repo.getSettings().demoMode) return;
+    const mail = this.deps.mail();
+    if (!mail?.watch) return;
+    this.stopMailWatch = mail.watch(() => {
+      clearTimeout(this.mailDebounce);
+      this.mailDebounce = setTimeout(() => void this.syncMailNow(), 8000);
+    }, (state) => { this.mailWatchState = state === 'stopped' ? 'off' : state; });
+  }
+
+  /** 推送连不上时的兜底：每 3 分钟查一次邮箱。由主进程每 10 秒调用 */
+  async pollRealtime(now = new Date()): Promise<void> {
+    if (this.mailWatchState === 'watching' || this.repo.getSettings().demoMode || !this.deps.mail()) return;
+    const last = this.repo.getKv<string | null>('mail_last_sync', null);
+    if (!last || now.getTime() - Date.parse(last) >= 3 * 60_000) await this.syncMailNow(now);
+  }
+
+  realtimeStatus(): { mail: 'off' | 'watching' | 'reconnecting' } {
+    return { mail: this.mailWatchState };
+  }
+
   /** 读取网页：演示模式下只读虚构文章 */
   private fetchText(): FetchText | undefined {
     return this.repo.getSettings().demoMode ? demoFetchText : this.deps.fetchText;
@@ -347,7 +431,7 @@ export class AppContext {
     if (opts.addToLibrary) {
       const { parseFile, PARSEABLE } = await import('./library/parse');
       if (!PARSEABLE.includes(ext.toLowerCase())) note = `已下载；${ext || '这种'}文件不能导入资源库，只能在电脑上打开。`;
-      else if (file.data.byteLength > 30 * 1024 * 1024) note = '已下载；文件超过 30 MB，没有导入资源库。';
+      else if (file.data.byteLength > 25 * 1024 * 1024) note = '已下载；文件超过 25 MB，没有导入资源库。';
       else {
         try {
           const parsed = await parseFile(target);
@@ -425,6 +509,31 @@ export class AppContext {
     if (degree === '硕士' || degree === '博士') throw new Error('研究生的培养方案和选课在研究生系统里，暂时还读不到。');
   }
 
+  /**
+   * 用教务系统里的权威信息补全「关于我」：空着的补上，和教务系统不一致的以教务系统为准，
+   * 改了什么在对话里说一声（只说一次）。年级写成「2025级」。
+   */
+  learnProfile(facts: { department?: string; major?: string; grade?: string; degree?: '本科' | '硕士' | '博士' }): void {
+    const profile = this.repo.getProfile();
+    const same = (a?: string, b?: string) => !!a && !!b && (a.includes(b) || b.includes(a));
+    const patch: Partial<typeof profile> = {};
+    const changes: string[] = [];
+    const take = (key: 'school' | 'major' | 'grade', value: string | undefined, label: string) => {
+      const v = value?.trim();
+      if (!v || same(profile[key], v)) return;
+      patch[key] = v;
+      changes.push(`${label}：${v}`);
+    };
+    take('school', facts.department, '院系');
+    take('major', facts.major, '专业');
+    take('grade', facts.grade ? (/级$/.test(facts.grade) ? facts.grade : `${facts.grade}级`) : undefined, '年级');
+    if (facts.degree && !profile.degree) { patch.degree = facts.degree; changes.push(`学历：${facts.degree}`); }
+    if (!changes.length) return;
+    this.repo.setProfile(patch);
+    const msg = this.repo.addMessage({ role: 'assistant', content: `我从教务系统看到了你的基本信息，已经更新到「关于我」：${changes.join('；')}。不对的话告诉我，或者到「设置 → 关于我」修改。`, proactive: true, trigger: 'profile-learned' });
+    this.deps.channels.messagePosted(msg);
+  }
+
   /** 培养方案完成情况（缓存 1 小时）。属于学业记录，按敏感内容处理 */
   async programCompletion(opts: { force?: boolean } = {}): Promise<ProgramCompletion> {
     if (this.repo.getSettings().demoMode) return demoProgram();
@@ -433,6 +542,7 @@ export class AppContext {
     this.undergradOnly();
     const r = await readProgramCompletion(this.reader(), await this.studentId());
     this.repo.setKv('program_completion', r);
+    this.learnProfile({ ...profileFactsFromText(r.text), degree: '本科' });
     return r;
   }
 
@@ -453,6 +563,7 @@ export class AppContext {
     const number = this.repo.getProfile().studentNumber ?? (mailUser && /^\d{8,12}$/.test(mailUser) ? mailUser : undefined);
     const rank = await readGpaRank(this.reader(), studentId, number);
     if (!rank) return { total: 0, note: '教务系统没有提供绩点排名（可能还没开放）。' };
+    if (rank.ranking !== undefined) this.learnProfile({ department: rank.department, major: rank.major, grade: rank.grade, degree: '本科' });
     if (rank.ranking === undefined) return { ...rank, note: number ? '排名列表里没有找到你的学号。' : '告诉我你的学号，我才能在排名里找到你（学号只存在本机）。' };
     return rank;
   }
@@ -577,6 +688,8 @@ export class AppContext {
 
   async close(): Promise<void> {
     this.externalVersion++;
+    clearTimeout(this.mailDebounce);
+    await this.stopMailWatch?.().catch(() => undefined);
     await this.hub.close();
     await this.executorHub.close();
     this.repo.db.close();

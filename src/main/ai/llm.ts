@@ -1,9 +1,11 @@
 import OpenAI from 'openai';
 import type { ModelConfig, Settings } from '../../shared/types';
+import type { Embedder } from './memory-recall';
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
+  images?: { dataUrl: string }[];
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
 }
@@ -29,6 +31,10 @@ export interface LlmClient {
   chat(messages: LlmMessage[], opts?: LlmOptions): Promise<LlmResult>;
 }
 
+export class ImageModelError extends Error {
+  constructor() { super('当前模型无法读取图片。请到「设置 → 模型」选择支持图片的模型后重试。'); }
+}
+
 /** OpenAI 兼容协议客户端：云端（DeepSeek、通义、Kimi…）和本地（Ollama 等）共用。 */
 export class OpenAiCompatClient implements LlmClient {
   private readonly client: OpenAI;
@@ -40,10 +46,27 @@ export class OpenAiCompatClient implements LlmClient {
   }
 
   async chat(messages: LlmMessage[], opts: LlmOptions = {}): Promise<LlmResult> {
+    try { return await this.complete(messages, opts); }
+    catch (error) {
+      if (messages.some((message) => message.images?.length) && error instanceof OpenAI.APIError &&
+        [400, 415, 422].includes(error.status ?? 0) && /image|vision|multimodal|图像|图片/i.test(error.message)) {
+        throw new ImageModelError();
+      }
+      throw error;
+    }
+  }
+
+  private async complete(messages: LlmMessage[], opts: LlmOptions): Promise<LlmResult> {
     const params = {
       model: this.cfg.model,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      messages: messages as any,
+      messages: messages.map(({ images, ...message }) => images?.length ? {
+        ...message,
+        content: [
+          { type: 'text', text: message.content ?? '' },
+          ...images.map((image) => ({ type: 'image_url', image_url: { url: image.dataUrl } })),
+        ],
+      } : message) as any,
       tools: opts.tools?.length ? opts.tools : undefined,
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens,
@@ -149,6 +172,41 @@ export class ModelRouter {
   hasAny(): boolean {
     return !!(this.client('local') || this.client('cloud'));
   }
+}
+
+/** 地址是不是本机（本机的向量服务收到记忆内容不出电脑） */
+export function isLocalUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  } catch { return false; }
+}
+
+/** OpenAI 兼容的向量接口 */
+export class OpenAiEmbedder implements Embedder {
+  private readonly client: OpenAI;
+  readonly model: string;
+  constructor(cfg: ModelConfig) {
+    this.client = new OpenAI({ baseURL: cfg.baseURL, apiKey: cfg.apiKey || 'none', timeout: 20_000, maxRetries: 1 });
+    this.model = cfg.model;
+  }
+  async embed(texts: string[]): Promise<number[][]> {
+    const r = await this.client.embeddings.create({ model: this.model, input: texts.map((t) => t.slice(0, 2000)) });
+    return [...r.data].sort((a, b) => a.index - b.index).map((d) => d.embedding as number[]);
+  }
+}
+
+const embedders = new Map<string, Embedder>();
+/**
+ * 用户配置的向量模型。记忆和对话属于隐私内容：只有向量服务在本机，或用户允许把隐私任务交给云端时才用。
+ */
+export function embedderFor(settings: Settings): Embedder | null {
+  const cfg = settings.embedding;
+  if (!cfg?.baseURL || !cfg.model) return null;
+  if (!isLocalUrl(cfg.baseURL) && !settings.allowSensitiveToCloud) return null;
+  const key = `${cfg.baseURL}|${cfg.model}|${cfg.apiKey}`;
+  if (!embedders.has(key)) embedders.set(key, new OpenAiEmbedder(cfg));
+  return embedders.get(key)!;
 }
 
 /** 宽松地从模型输出里解析 JSON（容忍 ```json 包裹和前后多余文字） */

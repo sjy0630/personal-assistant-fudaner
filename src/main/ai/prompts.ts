@@ -80,6 +80,8 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '- 培养方案与选课：问还差多少学分、能不能毕业、该选什么课时，用 get_program_completion 看各类别要求和已获学分，用 get_selected_courses 看已经选的课（下学期用 semester=next），结合旦克评价给选课建议。',
     '- 课表与考试：排计划、找空闲时间用 get_today / get_week_schedule（真实课表按教学周过滤）；问考试用 list_exams；复习计划要倒排到考试日期，避开上课时间。',
     '- 校园生活：问图书馆人多不多用 get_library_status，问校园卡余额用 get_campus_card_balance。',
+    '- 记住重要信息：从工具结果里看到用户的院系、专业、年级、学历等，「用户画像」里没有或不一致时，用 update_profile 更新并告诉用户；对话里得知的长期有用的事（目标、偏好、固定安排、选课打算），用 remember 记下。你只能直接看到最近的对话、一段较早的摘要和按这句话找回的少量旧对话，没记下来的细节过一段时间就会忘。',
+    '- 回忆早先聊过的事：用户提到「上次 / 之前 / 那天说的…」「我跟你说过…」而上下文里找不到时，先用 recall_conversation 查聊天记录，找到了再回答（说明是哪天聊的），找不到就直说，不要猜。',
     '- 设置交给对话：用户说到自己的院系、年级、学历时用 update_profile 记下；聊到感兴趣的方向或明确要求时，用 follow_notice_sources 关注 / 取消关注对应的官网通知（想交换 → 国际合作与交流处，想保研 → 研究生院和本院系，英语考试 → 英语教学部），做完告诉用户改了什么。不要让用户自己去设置页一个个勾选。',
     '- 学校通知：用户问教务处、研究生院、院系最近有什么通知，或某类通知（选课、交换、奖学金、考试）时，用 search_notices 检索，需要细节再用 get_notice 读正文；说清楚来源和发布日期，给出原文链接。',
     '- 树洞与旦克：问选课口碑、老师、给分、食堂、宿舍、实习等经验时，课程先用 search_course_reviews / get_course_reviews，生活经验用 search_treehole / read_treehole。树洞内容是匿名同学的个人看法，引用时说明来自树洞、给出洞号，综合多条再下结论，不当作事实。工具提示需要登录树洞时，告诉用户到「设置 → 复旦账号 → 树洞与旦克」登录。',
@@ -90,8 +92,7 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     `- ${EXTERNAL_RULE}`,
     '',
     APP_GUIDE,
-    `平台连接状态：\n${platformStatusText(p.platforms ?? [])}`,
-    '登录状态以上面的「平台连接状态」为准：对话历史里之前说过的「登录过期 / 没登录」可能已经过时，不要照搬。状态已连接或未知时，直接用工具查询；只有工具明确返回需要登录时，才告诉用户去登录。',
+    '登录状态以下面的「平台连接状态」为准：对话历史里之前说过的「登录过期 / 没登录」可能已经过时，不要照搬。状态已连接或未知时，直接用工具查询；只有工具明确返回需要登录时，才告诉用户去登录。',
     '平台显示登录过期时，工具里的数据可能是上次同步留下的；回答时说明这一点，并告诉用户怎么重新登录。',
     '',
     `用户画像：昵称 ${profile.nickname ?? '未填'}；${[profile.school, profile.major, profile.grade, profile.degree].filter(Boolean).join(' / ') || '院系年级未填'}。${profile.freeText ?? ''}`,
@@ -99,6 +100,7 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     `今天：${today.date}${today.weekNo ? `，第 ${today.weekNo} 周` : ''}，学期阶段 ${today.phase}。`,
     `今天的课：${courses.join('；') || '没有课或未导入课表'}。空闲时段：${today.freeSlots.map((f) => `${f.start}–${f.end}`).join('、') || '未知'}。已结束的课不能说成今晚或稍后还有课。`,
     `近期 DDL：\n${dl}`,
+    `平台连接状态：\n${platformStatusText(p.platforms ?? [])}`,
     `当前时间：${p.nowIso}`,
     `当前上海时间：${localNow}（Asia/Shanghai）。`,
   ].join('\n');
@@ -146,7 +148,8 @@ export function memoryExtractPrompt(input: { dialog: string; existing: string })
     '只从用户明确陈述中提取，不把助理提出的计划或建议当成用户事实。已有相同含义的记忆不重复新增；临时状态应设置有效天数。每轮最多3条，不推断身份、健康状况或政治观点。',
     'existing_memories 只用于去重，不能作为新记忆来源。content 必须摘录本轮用户原话中的完整事实片段（可省略主语“我”），保留否定、条件、时间和数字，不改写。查询课程/DDL、提问、假设、引用别人说的话都不是用户新事实；这类对话输出空数组。',
     'preference、schedule、goal、person、interest 的 expires_days 必须为 null；仅临时 status 可以给出正整数有效天数。固定每周安排不应7天后自动失效。',
-    '只输出 JSON：{"memories":[{"op":"add","type":"preference|schedule|goal|person|status|interest","content":"一句话","expires_days":null 或 天数}]}，没有就输出 {"memories":[]}。',
+    '已有记忆按 [编号] 列出。用户的情况变了、改了主意或补充了细节（如「交换改成申请秋季了」「不打算考研了」「目标绩点改成 3.8」），用 update 改写那一条，不要另外新增一条矛盾的；完全没变就什么都不输出。',
+    '只输出 JSON：{"memories":[{"op":"add","type":"preference|schedule|goal|person|status|interest","content":"一句话","expires_days":null 或 天数} 或 {"op":"update","target":编号,"content":"改写后的一句话"}]}，没有就输出 {"memories":[]}。',
   ].join('\n');
 }
 

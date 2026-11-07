@@ -9,6 +9,8 @@ files:
   - package.json
 asarUnpack:
   - resources/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
 win:
   target: nsis
   icon: resources/icon.png

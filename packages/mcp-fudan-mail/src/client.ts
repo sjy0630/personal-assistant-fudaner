@@ -16,6 +16,11 @@ export interface MailMessage {
 export interface MailClient {
   fetchSince(since: Date, limit?: number): Promise<MailMessage[]>;
   ping(): Promise<boolean>;
+  /**
+   * 盯着收件箱：有新邮件时回调（IMAP IDLE，服务器主动通知）。返回停止函数。
+   * onState 报告连接状态，断开后会自动重连。
+   */
+  watch?(onNew: () => void, onState?: (state: 'watching' | 'reconnecting' | 'stopped', error?: string) => void): () => Promise<void>;
 }
 
 export interface ImapConfig {
@@ -44,6 +49,60 @@ export class ImapMailClient implements MailClient {
       greetingTimeout: 20_000,
       socketTimeout: 60_000,
     });
+  }
+
+  /**
+   * 保持一个只读连接打开收件箱并进入 IDLE：新邮件到达时服务器会马上通知（exists 事件）。
+   * 断线后指数退避重连（5 秒起，最长 5 分钟）。不标记已读，不改动任何邮件。
+   */
+  watch(onNew: () => void, onState?: (state: 'watching' | 'reconnecting' | 'stopped', error?: string) => void): () => Promise<void> {
+    let stopped = false;
+    let client: ImapFlow | undefined;
+    let delay = 5_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reconnect = (error?: string) => {
+      if (stopped || timer) return;
+      onState?.('reconnecting', error);
+      timer = setTimeout(() => { timer = undefined; void run(); }, delay);
+      delay = Math.min(delay * 2, 5 * 60_000);
+    };
+    const run = async () => {
+      if (stopped) return;
+      client = new ImapFlow({
+        host: this.config.host, port: this.config.port, secure: true,
+        auth: { user: this.config.user, pass: this.config.password }, logger: false,
+        connectionTimeout: 20_000, greetingTimeout: 20_000,
+        // IDLE 连接会长时间没有数据：每 4 分钟重新发一次 IDLE，保持连接
+        socketTimeout: 10 * 60_000, maxIdleTime: 4 * 60_000,
+      });
+      const c = client;
+      let count = -1;
+      c.on('exists', (data: { count: number; prevCount: number }) => {
+        if (data.count > (count >= 0 ? count : data.prevCount)) onNew();
+        count = data.count;
+      });
+      c.on('close', () => reconnect());
+      c.on('error', () => { /* 交给 close 处理重连 */ });
+      try {
+        await c.connect();
+        const box = await c.mailboxOpen('INBOX', { readOnly: true });
+        count = box.exists;
+        delay = 5_000;
+        onState?.('watching');
+        // 连接期间补一次：断线时可能错过了新邮件
+        onNew();
+      } catch (e) {
+        await c.logout().catch(() => c.close());
+        reconnect((e as Error).message);
+      }
+    };
+    void run();
+    return async () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      onState?.('stopped');
+      await client?.logout().catch(() => client?.close());
+    };
   }
 
   async ping(): Promise<boolean> {

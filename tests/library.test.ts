@@ -19,7 +19,7 @@ describe('资源库文件解析', () => {
   });
 
   it('不支持的类型给出清楚的提示', async () => {
-    await expect(parseFile('resources/icon.png')).rejects.toThrow('暂不支持的文件类型');
+    await expect(parseFile('tests/fixtures/fake-mcp-server.mjs')).rejects.toThrow('暂不支持的文件类型');
   });
 });
 

@@ -1,13 +1,44 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { createRequire } from 'node:module';
 import { pdfPageToMarkdown, pdfLayout, wordToMarkdown, type PdfTextItem, type PdfOperators, type WordNode } from './structure';
+import { IMAGE_EXTENSIONS, SPREADSHEET_EXTENSIONS, PRESENTATION_EXTENSIONS, MAX_ATTACHMENT_BYTES, supportedAttachment, ATTACHMENT_FORMATS_LABEL } from '../../shared/attachment-formats';
+import { normalizeImage } from './images';
+import { parseSpreadsheet } from './spreadsheet';
+import { parsePresentation } from './presentation';
+
+export interface ParsedFile {
+  title: string;
+  mime: string;
+  text: string;
+  image?: Awaited<ReturnType<typeof normalizeImage>>;
+}
+
+export async function parseImageBytes(name: string, bytes: Uint8Array): Promise<ParsedFile> {
+  const ext = extname(name).toLowerCase();
+  if (!IMAGE_EXTENSIONS.some((value) => value === ext)) throw new Error('粘贴附件仅支持图片，请用文件按钮导入文档。');
+  if (!(bytes instanceof Uint8Array) || !bytes.byteLength) throw new Error('图片内容为空，请重新粘贴。');
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) throw new Error('单张图片最大支持 25 MB，请缩小图片后重试。');
+  const title = basename(name, ext);
+  const image = await normalizeImage(Buffer.from(bytes), ext);
+  const text = `# ${title}\n\n图片 · ${image.width} × ${image.height} 像素${image.note ? `\n\n${image.note}` : ''}\n\n引用这张图片到对话后，可用支持图片的模型阅读。`;
+  return { title, mime: image.mime, text, image };
+}
 
 /** 资源库文件解析（PRD §5.4）：PDF、Word、Markdown、纯文本 → 文本 */
-export async function parseFile(path: string): Promise<{ title: string; mime: string; text: string }> {
+export async function parseFile(path: string): Promise<ParsedFile> {
   const ext = extname(path).toLowerCase();
   const title = basename(path, ext);
+  if (!supportedAttachment(path)) throw new Error(`暂不支持的文件类型：${ext}（支持${ATTACHMENT_FORMATS_LABEL}）`);
+  const info = await stat(path);
+  if (!info.isFile() || !info.size) throw new Error('文件为空或无法读取，请重新选择。');
+  if (info.size > MAX_ATTACHMENT_BYTES) throw new Error('单个附件最大支持 25 MB，请缩小文件后重试。');
   const buf = await readFile(path);
+  if (IMAGE_EXTENSIONS.some((value) => value === ext)) {
+    return parseImageBytes(path, buf);
+  }
+  if (SPREADSHEET_EXTENSIONS.some((value) => value === ext)) return { title, ...parseSpreadsheet(buf, ext) };
+  if (PRESENTATION_EXTENSIONS.some((value) => value === ext)) return { title, ...await parsePresentation(buf, ext) };
   if (ext === '.pdf') {
     // 直接引用 lib 文件，避免 pdf-parse 入口在打包后读取测试文件的问题
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -40,9 +71,6 @@ export async function parseFile(path: string): Promise<{ title: string; mime: st
     });
     return { title, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', text };
   }
-  if (ext === '.pptx') {
-    return { title, mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', text: await pptxToMarkdown(buf) };
-  }
   if (['.md', '.markdown', '.txt', '.csv', '.json'].includes(ext)) {
     return { title, mime: ext === '.md' || ext === '.markdown' ? 'text/markdown' : 'text/plain', text: buf.toString('utf8') };
   }
@@ -50,7 +78,7 @@ export async function parseFile(path: string): Promise<{ title: string; mime: st
 }
 
 /** 能导入资源库的文件类型 */
-export const PARSEABLE = ['.pdf', '.docx', '.pptx', '.md', '.markdown', '.txt', '.csv', '.json'];
+export const PARSEABLE = ['.pdf', '.docx', ...SPREADSHEET_EXTENSIONS, ...PRESENTATION_EXTENSIONS, '.md', '.markdown', '.txt', '.csv', '.json'];
 
 /**
  * PPT（.pptx）→ 按页的 Markdown：每页的文字（按段落）和备注。

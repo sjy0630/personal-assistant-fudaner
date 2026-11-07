@@ -36,7 +36,9 @@ export interface FudanerApi {
   library: {
     list(courseId?: string): Promise<Resource[]>;
     get(id: string): Promise<Resource | null>;
+    image(id: string): Promise<import('./types').ResourceImage | null>;
     upload(filePath: string): Promise<Resource>;
+    uploadImage(name: string, bytes: Uint8Array): Promise<Resource>;
     remove(id: string): Promise<void>;
   };
   search(query: string): Promise<SearchHit[]>;
@@ -53,6 +55,7 @@ export interface FudanerApi {
     set(s: Partial<Settings>): Promise<void>;
     setMailPassword(password: string): Promise<void>;
     testModel(which: 'cloud' | 'local'): Promise<{ ok: boolean; message: string }>;
+    testEmbedding(): Promise<{ ok: boolean; message: string }>;
   };
   platforms: {
     status(): Promise<PlatformState[]>;

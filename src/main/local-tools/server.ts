@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
 import { buildToday } from '../today';
+import { lexicalScore } from '../ai/memory-recall';
 import type { Item } from '../../shared/types';
 import type { ImportResult } from '../activities/sync';
 import type { LiteratureQuery, LiteratureRecord } from '../sources/library-search';
@@ -67,6 +68,24 @@ export function createLocalServer(
     description: '按话题检索关于用户的长期记忆（偏好、固定安排、目标、人物、近况、兴趣）',
     inputSchema: { query: z.string() }, annotations: ro,
   }, async ({ query }) => json(repo.recallMemories(query)));
+
+  server.registerTool('recall_conversation', {
+    description: '在和用户更早的聊天记录里找回聊过的事（最近的对话和摘要里没有时用）。用户说「上次 / 之前 / 那天聊的…」「我跟你说过…」时先查这个。返回按话题整理的早先对话分段和相关的原话（带日期和 message_id）；要看某条前后的完整对话，传 message_id。',
+    inputSchema: {
+      query: z.string().optional().describe('要找的事，如「交换申请」「数据结构期中」'),
+      message_id: z.string().optional().describe('看这条消息前后的对话'),
+    },
+    annotations: ro,
+  }, async ({ query, message_id }) => {
+    const brief = (m: { id: string; role: string; content: string; createdAt: string }, n: number) => ({ message_id: m.id, role: m.role === 'user' ? '用户' : '助理', at: m.createdAt, content: m.content.slice(0, n) });
+    if (message_id) return json({ around: repo.conversationAround(message_id).map((m) => brief(m, 1200)) });
+    const q = (query ?? '').trim();
+    if (!q) return json({ error: '请给出要找的事（query）或 message_id' });
+    const episodes = repo.listEpisodes().map((e) => ({ e, s: lexicalScore(q, `${e.title}：${e.content}`) })).filter((x) => x.s >= 1)
+      .sort((a, b) => b.s - a.s).slice(0, 5).map(({ e }) => ({ title: e.title, from: e.startedAt, to: e.endedAt, content: e.content }));
+    const messages = repo.searchOldMessages(q, { skipRecent: 0, limit: 8, minScore: 1.5 }).map(({ message }) => brief(message, 400));
+    return json({ episodes, messages, note: episodes.length || messages.length ? undefined : '早先的聊天记录里没有找到相关内容。' });
+  });
 
   server.registerTool('get_profile', { description: '读取用户画像', inputSchema: {}, annotations: ro }, async () => json(repo.getProfile()));
 

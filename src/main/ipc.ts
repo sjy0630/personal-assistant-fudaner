@@ -11,9 +11,9 @@ import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
 import { nextOccurrence, validateRepeat } from './engine/reminders';
 import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
-import { parseFile } from './library/parse';
+import { parseFile, parseImageBytes, type ParsedFile } from './library/parse';
 import { buildToday } from './today';
-import { OpenAiCompatClient } from './ai/llm';
+import { isLocalUrl, OpenAiCompatClient, OpenAiEmbedder } from './ai/llm';
 import { resolveChatReference, safeExternalUrl } from './chat/references';
 
 /**
@@ -36,8 +36,12 @@ export function registerIpc(ctx: AppContext, opts: {
 }): void {
   const { repo } = ctx;
   let pendingUploads = 0;
+  let clearingData = false;
   const handle = <T extends unknown[], R>(ch: string, fn: (...a: T) => R | Promise<R>) =>
-    ipcMain.handle(ch, (_e, ...args) => fn(...(args as T)));
+    ipcMain.handle(ch, (_e, ...args) => {
+      if (clearingData) throw new Error('正在清除本地内容，请稍候再试。');
+      return fn(...(args as T));
+    });
 
   type Api = FudanerApi;
   handle<Parameters<Api['chat']['page']>, ReturnType<Api['chat']['page']>>('chat.page', async (beforeId, limit) => repo.messagePage(beforeId, limit));
@@ -101,6 +105,8 @@ export function registerIpc(ctx: AppContext, opts: {
           if (action === 'forget_memory' && typeof data?.id === 'string') {
             const memory = repo.listMemories().find((entry) => entry.id === data.id);
             if (memory?.source === 'chat') repo.removeMemory(data.id);
+          } else if (action === 'restore_memory' && typeof data?.id === 'string' && typeof data?.content === 'string') {
+            if (repo.listMemories().some((entry) => entry.id === data.id)) repo.updateMemory(data.id, data.content.slice(0, 300));
           } else throw new Error('此快捷操作暂不可用。');
           markUsed();
         });
@@ -169,16 +175,26 @@ export function registerIpc(ctx: AppContext, opts: {
 
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
-  handle<[string], void>('library.remove', (id) => repo.removeResource(id));
-  handle<[string], unknown>('library.upload', async (path) => {
+  handle<Parameters<Api['library']['image']>, ReturnType<Api['library']['image']>>('library.image', (id) => ctx.images.read(id));
+  handle<[string], void>('library.remove', async (id) => {
+    await ctx.images?.removeFile(repo.getResourceFilePath(id));
+    repo.removeResource(id);
+    opts.onChanged?.('library');
+  });
+  const importResource = async (read: () => Promise<ParsedFile>, path?: string) => {
     pendingUploads++;
     try {
-      const f = await parseFile(path);
-      const resource = repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path });
+      const f = await read();
+      const saved = f.image ? await ctx.images.save(f.image) : path;
+      let resource;
+      try { resource = repo.addResource({ title: f.title, kind: 'upload', mime: f.mime, text: f.text, path: saved }); }
+      catch (error) { if (f.image) await ctx.images.removeFile(saved); throw error; }
       opts.onChanged?.('library');
       return resource;
     } finally { pendingUploads--; }
-  });
+  };
+  handle<[string], unknown>('library.upload', (path) => importResource(() => parseFile(path), path));
+  handle<Parameters<Api['library']['uploadImage']>, ReturnType<Api['library']['uploadImage']>>('library.uploadImage', (name, bytes) => importResource(() => parseImageBytes(name, bytes)));
 
   handle<[string], unknown>('search', async (q) => repo.search(q));
   handle<Parameters<Api['searchDetail']>, string | null>('search.detail', (type, id) => {
@@ -206,14 +222,14 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('settings.get', async () => {
     const s = repo.getSettings();
     const mask = (m?: { apiKey: string }) => (m ? { ...m, apiKey: m.apiKey ? '••••••' + m.apiKey.slice(-4) : '' } : m);
-    return { ...s, cloud: mask(s.cloud), local: mask(s.local) };
+    return { ...s, cloud: mask(s.cloud), local: mask(s.local), embedding: mask(s.embedding) };
   });
   handle<[Record<string, unknown>], void>('settings.set', async (patch) => {
     const cur = repo.getSettings();
     // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
     delete patch.externalMcp;
     const finishingOnboarding = patch.onboardingCompleted === true && !cur.onboardingCompleted;
-    for (const k of ['cloud', 'local'] as const) {
+    for (const k of ['cloud', 'local', 'embedding'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
     }
@@ -221,13 +237,27 @@ export function registerIpc(ctx: AppContext, opts: {
     opts.restartScheduler();
     if (finishingOnboarding) setTimeout(() => ctx.introduceNoticeSources(), 1500);
   });
-  handle<[string], void>('settings.setMailPassword', async (p) => opts.secrets.setMailPassword(p));
+  handle<[string], void>('settings.setMailPassword', async (p) => { opts.secrets.setMailPassword(p); void ctx.restartWatchers().catch(() => undefined); });
   handle<['cloud' | 'local'], { ok: boolean; message: string }>('settings.testModel', async (which) => {
     const cfg = repo.getSettings()[which];
     if (!cfg) return { ok: false, message: '还没有配置' };
     try {
       const r = await new OpenAiCompatClient(cfg, which).chat([{ role: 'user', content: '只回复两个字：你好' }], { maxTokens: 10 });
       return { ok: true, message: `连通，模型回复：${r.content.trim().slice(0, 20)}` };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  });
+
+  // 向量模型：试着算一条向量；地址不在本机且没允许隐私任务用云端时，不会被使用，这里直接说明
+  handle<[], { ok: boolean; message: string }>('settings.testEmbedding', async () => {
+    const s = repo.getSettings();
+    const cfg = s.embedding;
+    if (!cfg?.baseURL || !cfg.model) return { ok: false, message: '还没有配置' };
+    if (!isLocalUrl(cfg.baseURL) && !s.allowSensitiveToCloud) return { ok: false, message: '这个地址不在本机：记忆和聊天记录属于隐私内容，需要先在下方允许隐私任务使用云端服务，才会用它。' };
+    try {
+      const [v] = await new OpenAiEmbedder(cfg).embed(['测试']);
+      return v?.length ? { ok: true, message: `连通，向量长度 ${v.length}` } : { ok: false, message: '服务没有返回向量' };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
     }
@@ -355,12 +385,16 @@ export function registerIpc(ctx: AppContext, opts: {
     if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
     await ctx.executor.runNext();
   });
-  const wipe = () => {
+  const wipe = async () => {
     if (ctx.agent.state() || pendingUploads || activeActions.size) throw new Error('请等当前回复或文件导入结束后再清除数据。');
-    repo.wipe();
-    opts.onChatCleared?.();
+    clearingData = true;
+    try {
+      await ctx.images?.clear();
+      repo.wipe();
+      opts.onChatCleared?.();
+    } finally { clearingData = false; }
   };
-  handle('dev.wipe', async () => { wipe(); });
+  handle('dev.wipe', wipe);
   handle('dev.demoSubmitNext', async () => {
     const next = repo.listItems({ kind: 'assignment', done: false, dueAfter: new Date().toISOString(), limit: 1, dueBefore: new Date(Date.now() + 30 * 86_400_000).toISOString() })[0];
     if (next) opts.demo.elearning.submit(next.sourceId);
@@ -369,7 +403,7 @@ export function registerIpc(ctx: AppContext, opts: {
   });
   // 一键重置演示：清空数据 → 重新写入演示画像 → 首次同步 → 运行一次引擎 → 刷新界面（录视频前用）
   handle('dev.resetDemo', async () => {
-    wipe();
+    await wipe();
     opts.demo.elearning.reset();
     opts.demo.mail.reset();
     repo.setSettings({ demoMode: true });
