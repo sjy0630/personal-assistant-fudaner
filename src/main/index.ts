@@ -141,11 +141,14 @@ app.whenReady().then(async () => {
       return { status: res.status, text: await res.text() };
     }),
     treehole: () => treehole,
-    // 教务系统、校园卡：复用统一身份认证会话；eLearning 登录有效时才去读，避免没登录时反复碰壁
-    campusReader: () => (ctx.repo.getSettings().demoMode || auth.cachedStatus('elearning') !== 'ok' ? null : {
+    // 教务系统、校园卡：复用统一身份认证会话。不按本地缓存的状态拦截（刚启动时还没检查过，会被误当成没登录），
+    // 真没登录时读取会抛出 NeedLoginError，再提示用户登录
+    campusReader: () => (ctx.repo.getSettings().demoMode ? null : {
       getText: (url) => auth.getText('jwfw', url),
       render: (url, ready) => auth.renderPage('jwfw', url, ready),
     }),
+    // 每天的自动更新前先确认一次登录（会实际访问一次身份接口），没登录就不去碰壁
+    campusLoggedIn: async () => (await auth.status('elearning')) === 'ok',
     postPublic: async (url) => {
       const res = await net.fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
       return { status: res.status, text: await res.text() };
@@ -155,7 +158,7 @@ app.whenReady().then(async () => {
       if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' as const }));
       const elearning = probe ? await auth.status('elearning') : auth.cachedStatus('elearning');
       return [
-        elearning ? { platform: 'elearning', status: elearning } : { platform: 'elearning', status: 'unavailable', message: '本次启动后还没检查过' },
+        elearning ? { platform: 'elearning', status: elearning } : { platform: 'elearning', status: 'unavailable', message: '正在检查，状态未知；不要据此说用户没登录，直接用工具查询' },
         { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
         { platform: 'mail', status: s.mail?.user && sec().hasMailPassword() ? 'ok' : 'not_configured' },
       ];
@@ -174,6 +177,8 @@ app.whenReady().then(async () => {
   await ctx.start();
   // 外部 MCP 服务在后台连接，不拖慢启动
   void ctx.reloadExternal().catch(() => undefined);
+  // 启动时就检查一次复旦账号登录状态，旦旦从第一句话起就知道连没连上
+  if (!ctx.repo.getSettings().demoMode) void auth.status('elearning').catch(() => undefined);
 
   // 调度：引擎每 10 秒处理一次事件；平台每 30 分钟同步一次（加随机抖动，PRD §9）
   let paused = 0;

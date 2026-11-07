@@ -77,6 +77,7 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '',
     APP_GUIDE,
     `平台连接状态：\n${platformStatusText(p.platforms ?? [])}`,
+    '登录状态以上面的「平台连接状态」为准：对话历史里之前说过的「登录过期 / 没登录」可能已经过时，不要照搬。状态已连接或未知时，直接用工具查询；只有工具明确返回需要登录时，才告诉用户去登录。',
     '平台显示登录过期时，工具里的数据可能是上次同步留下的；回答时说明这一点，并告诉用户怎么重新登录。',
     '',
     `用户画像：昵称 ${profile.nickname ?? '未填'}；${[profile.school, profile.major, profile.grade, profile.degree].filter(Boolean).join(' / ') || '院系年级未填'}。${profile.freeText ?? ''}`,

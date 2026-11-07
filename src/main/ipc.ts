@@ -207,7 +207,14 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
   handle('platforms.status', async (): Promise<PlatformState[]> => ctx.platformStatus(true));
-  handle('platforms.login', async () => opts.auth.requestLogin());
+  // 登录成功后马上在后台同步一次（作业、课表、考试、校园卡……），不用再手动点「立即同步」
+  handle('platforms.login', async () => {
+    await opts.auth.requestLogin();
+    void ctx.syncAll(new Date(), { force: true })
+      .then(() => ctx.engine.tick())
+      .then(() => { opts.onChanged?.('feed'); opts.onChanged?.('goals'); })
+      .catch((e) => console.error('[sync after login]', e));
+  });
   handle('platforms.syncNow', async () => {
     const result = await ctx.syncAll(new Date(), { force: true });
     await ctx.engine.tick();

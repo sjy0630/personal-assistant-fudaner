@@ -43,6 +43,8 @@ export interface AppDeps {
   fetchText?: FetchText;
   /** 用统一身份认证会话读教务系统、校园卡（只读） */
   campusReader?: () => CampusReader | null;
+  /** 复旦账号登录是否有效（会实际检查一次） */
+  campusLoggedIn?: () => Promise<boolean>;
   /** 公开接口的 POST 请求（图书馆人数） */
   postPublic?: (url: string) => Promise<{ status: number; text: string }>;
   /** 图书馆文献检索（公开接口） */
@@ -296,7 +298,7 @@ export class AppContext {
     const last = this.repo.getKv<string | null>('campus_last_sync', null);
     if (!force && last && now.getTime() - Date.parse(last) < 20 * 3_600_000) return;
     const demo = this.repo.getSettings().demoMode;
-    if (!demo && !this.deps.campusReader?.()) return;
+    if (!demo && (!this.deps.campusReader?.() || !(await this.deps.campusLoggedIn?.().catch(() => false) ?? true))) return;
     this.repo.setKv('campus_last_sync', now.toISOString());
     const problems: Record<string, string> = {};
     const attempt = async (key: string, run: () => Promise<unknown>) => {
