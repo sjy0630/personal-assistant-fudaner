@@ -1,4 +1,4 @@
-import { NeedLoginError, PLATFORM_URLS, isUisLoginUrl, type FudanAuth } from '@fudaner/fudan-auth';
+import { NeedLoginError, PLATFORM_URLS, isPermissionDenied, isUisLoginUrl, type FudanAuth } from '@fudaner/fudan-auth';
 
 /** eLearning（Canvas）平台数据类型：只保留 Fudaner 用得到的字段。 */
 export interface CanvasCourse {
@@ -64,7 +64,12 @@ export class CanvasClient implements ElearningClient {
   private async request(url: string): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       const res = await this.auth.fetch('elearning', url, { headers: { Accept: 'application/json' } });
-      if (res.status === 401 || isUisLoginUrl(res.url)) throw new NeedLoginError('elearning');
+      if (isUisLoginUrl(res.url)) throw new NeedLoginError('elearning');
+      if (res.status === 401) {
+        // 已登录但没有权限（例如课程花名册不对学生开放）按 403 处理，由调用方决定跳过，不当成登录过期。
+        if (await isPermissionDenied(res)) throw Object.assign(new Error('没有权限查看这部分 eLearning 内容'), { status: 403 });
+        throw new NeedLoginError('elearning');
+      }
       if ((res.status === 429 || res.status >= 500) && attempt < 2) {
         const retry = res.headers.get('retry-after');
         const seconds = retry ? Number(retry) : NaN;

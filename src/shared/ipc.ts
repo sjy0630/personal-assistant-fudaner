@@ -1,4 +1,5 @@
 import type {
+  Item,
   ChatMessage, CardRef, EvalRecord, FeedCard, Goal, Memory, PlatformState, Profile, Resource,
   SearchHit, Settings, Task, Ticket, TodayOverview, ToolCallView,
 } from './types';
@@ -55,6 +56,26 @@ export interface FudanerApi {
     status(): Promise<PlatformState[]>;
     login(): Promise<void>;
     syncNow(): Promise<void>;
+  };
+  activities: {
+    /** 接下来 days 天的活动（默认 14 天） */
+    list(days?: number): Promise<Item[]>;
+    /** 导入一篇文章链接里的活动 */
+    import(url: string): Promise<{ title: string; activities: Item[]; past: number }>;
+    /** 立即读取所有订阅源 */
+    syncFeeds(): Promise<{ entries: number; activities: number; errors: string[] }>;
+  };
+  campus: {
+    status(): Promise<{ timetable: { semester?: string; courses: number; updatedAt: string } | null; exams: { exams: number; updatedAt: string } | null; problems: Record<string, string> }>;
+    importTimetable(): Promise<{ semester?: string; courses: number }>;
+    importExams(): Promise<{ exams: number; added: number }>;
+    library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
+    cardBalance(): Promise<{ balance: number; at: string }>;
+  };
+  notices: {
+    /** 全部可选来源，以及是否已关注、上次读取的问题 */
+    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; error?: string }[]>;
+    list(query?: string): Promise<Item[]>;
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;
   tickets(): Promise<Ticket[]>;

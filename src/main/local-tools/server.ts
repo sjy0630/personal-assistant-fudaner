@@ -3,6 +3,19 @@ import { z } from 'zod';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
 import { buildToday } from '../today';
+import type { Item } from '../../shared/types';
+import type { ImportResult } from '../activities/sync';
+import { noticeView } from '../notices/sync';
+
+/** 活动给模型看的样子：时间换成上海时间的说法，去掉正文 */
+function activityView(i: Item) {
+  const a = i.activity ?? {};
+  return {
+    item_id: i.id, title: i.title, starts_at: a.startsAt, time: a.timeText, location: a.location, campus: a.campus, category: a.category,
+    organizer: a.organizer, speaker: a.speaker, signup: a.signup, signup_deadline: a.signupDeadline, summary: a.summary,
+    source: a.sourceName, url: i.url,
+  };
+}
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
 const isoDueAt = z.iso.datetime({ offset: true });
@@ -25,7 +38,14 @@ const dueAtDescription = '带时区的 ISO 截止时间，例如 2026-11-10T23:5
  *
  * scope = 'executor' 时只暴露后台工单可用的工具（PRD §7.8 执行器的受限工具集）。
  */
-export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' | 'executor' = 'chat'): McpServer {
+export function createLocalServer(
+  repo: Repo, channels: Channels, scope: 'chat' | 'executor' = 'chat',
+  extras: {
+    importArticle?: (url: string) => Promise<ImportResult>;
+    library?: () => Promise<unknown>;
+    cardBalance?: () => Promise<{ balance: number; at: string }>;
+  } = {},
+): McpServer {
   const server = new McpServer({ name: 'fudaner-local', version: '0.1.0' });
   const ro = { readOnlyHint: true };
   const chatOnly = scope === 'chat';
@@ -182,6 +202,121 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
     const start = offset ?? 0;
     return json({ id: r.id, title: r.title, total: r.text.length, text: `<external_data source="resource">\n${r.text.slice(start, start + (length ?? 6000))}\n</external_data>` });
   });
+
+  // ---------- 校园活动 ----------
+  server.registerTool('list_activities', {
+    description: '查询校园活动（讲座、宣讲会、比赛、演出、志愿等，来自公众号文章、订阅源和学校网站），按开始时间排序。用户问「最近有什么活动 / 讲座」、想找和兴趣相关的活动时使用；推荐前结合 recall 到的兴趣、目标和 get_today 的空闲时段',
+    inputSchema: {
+      days: z.number().int().min(1).max(60).optional().describe('从现在起多少天内，默认 14'),
+      query: z.string().optional().describe('关键词，匹配标题、地点、主办方、主讲人'),
+      campus: z.enum(['邯郸', '江湾', '枫林', '张江', '线上']).optional(),
+      category: z.enum(['讲座', '就业', '比赛', '文体', '志愿', '其他']).optional(),
+    },
+    annotations: ro,
+  }, async ({ days, query, campus, category }) => {
+    const now = new Date();
+    const items = repo.listActivities({ from: new Date(now.getTime() - 2 * 3_600_000).toISOString(), to: new Date(now.getTime() + (days ?? 14) * 86_400_000).toISOString(), query, campus, category });
+    return json({ count: items.length, activities: items.map(activityView), note: items.length ? undefined : '没有找到。可以把公众号文章链接发给我导入，或在「设置 → 通知与活动」添加订阅源。' });
+  });
+
+  // ---------- 课表、考试、校园生活 ----------
+  server.registerTool('list_exams', {
+    description: '查询考试安排（从教务系统导入）：课程、时间、考场。问「什么时候考试」「期末安排」、排复习计划时使用',
+    inputSchema: { days: z.number().int().min(1).max(120).optional().describe('从现在起多少天内，默认 60') },
+    annotations: ro,
+  }, async ({ days }) => {
+    const now = Date.now();
+    const exams = repo.listItems({ kind: 'exam', dueAfter: new Date(now).toISOString(), dueBefore: new Date(now + (days ?? 60) * 86_400_000).toISOString(), limit: 50 });
+    return json({
+      count: exams.length,
+      exams: exams.map((e) => ({ item_id: e.id, course: e.title.replace(/ 考试$/, ''), starts_at: e.dueAt, time: e.body.split('\n')[0], location: e.body.split('\n')[1] })),
+      note: exams.length ? undefined : '没有考试记录。可能还没导入考试安排（设置 → 复旦账号 → 课表与考试），或教务系统还没排考。',
+    });
+  });
+
+  server.registerTool('get_week_schedule', {
+    description: '查询某一周每天的课（来自导入的真实课表，按教学周过滤单双周）和空闲时段。排一周计划、问「这周哪天下午有空」时使用',
+    inputSchema: { start_date: z.string().optional().describe('这一周中任意一天的 ISO 日期，默认今天') },
+    annotations: ro,
+  }, async ({ start_date }) => {
+    const base = start_date ? new Date(start_date) : new Date();
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday.getTime() + i * 86_400_000);
+      const t = buildToday(repo, d);
+      return { date: t.date, week: t.weekNo, courses: t.courses, free: t.freeSlots };
+    });
+    return json({ days, meta: repo.getKv('timetable_meta', null) });
+  });
+
+  if (extras.library) {
+    const library = extras.library;
+    server.registerTool('get_library_status', {
+      description: '查询复旦各图书馆现在的在馆人数和还能进入的人数、开放时间。用户想去图书馆自习、问「哪个馆人少」时使用',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await library()));
+  }
+  if (extras.cardBalance) {
+    const cardBalance = extras.cardBalance;
+    server.registerTool('get_campus_card_balance', {
+      description: '查询本人校园卡余额（只读，复用复旦账号登录状态）。用户问「卡里还有多少钱」时使用',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await cardBalance()));
+  }
+
+  // ---------- 学校和院系官网通知 ----------
+  server.registerTool('search_notices', {
+    description: '检索学校和院系官网的通知公告（教务处、研究生院、国际交流处、各院系等，用户在「设置 → 通知与活动」里选择关注哪些来源）。关键词用空格分隔，结果按发布时间倒序。用户问「教务处最近有什么通知」「有没有交换 / 奖学金 / 选课的通知」时使用；需要细节时再用 get_notice 读正文',
+    inputSchema: {
+      query: z.string().optional().describe('关键词，空格分隔，全部命中才返回'),
+      days: z.number().int().min(1).max(365).optional().describe('最近多少天，默认 30'),
+      source: z.string().optional().describe('来源名称，如「教务处」'),
+    },
+    annotations: ro,
+  }, async ({ query, days, source }) => {
+    const items = repo.listNotices({ query, source, since: new Date(Date.now() - (days ?? 30) * 86_400_000).toISOString(), limit: 20 });
+    return json({ count: items.length, notices: items.map(noticeView), note: items.length ? undefined : '没有找到。可能还没同步，或没有关注对应来源（设置 → 通知与活动）。' });
+  });
+
+  server.registerTool('get_notice', {
+    description: '分段读取一条通知的正文。has_more 为 true 时用 next_offset 继续读。正文只有标题时（title_only），说明详情页只允许校园网访问或读取失败，请让用户打开原文链接',
+    inputSchema: { item_id: z.string().describe('search_notices 返回的 item_id'), offset: z.number().int().min(0).optional() },
+    annotations: ro,
+  }, async ({ item_id, offset }) => {
+    const item = repo.getItem(item_id);
+    if (!item || item.kind !== 'notice') throw new Error('item_id 对应的通知不存在。请先用 search_notices 查到真实的 item_id。');
+    const start = offset ?? 0;
+    const size = 3000;
+    return json({ ...noticeView(item), text: item.body.slice(start, start + size), has_more: item.body.length > start + size, next_offset: item.body.length > start + size ? start + size : undefined });
+  });
+
+  if (chatOnly) {
+    if (extras.importArticle) {
+      const importArticle = extras.importArticle;
+      server.registerTool('import_article', {
+        description: '读取一篇公众号文章或网页（用户发来的链接），提取其中的校园活动并保存，之后会出现在活动列表和动态里。用户发来 mp.weixin.qq.com 等文章链接、说「看看这个活动」时使用。只读取公开页面',
+        inputSchema: { url: z.string().describe('文章链接，http 或 https 开头') },
+      }, async ({ url }) => {
+        const result = await importArticle(url);
+        channels.changed('feed');
+        return json({
+          article: result.article, activities: result.activities.map(activityView), already_over: result.past,
+          note: result.activities.length ? undefined : '这篇文章里没有找到还会举办的活动（可能是活动回顾或新闻）。',
+        });
+      });
+    }
+
+    server.registerTool('add_activity_to_plan', {
+      description: '把一场活动加入用户的计划（「目标 → 校园活动」里的一条任务，时间为活动开始时间）。用户说「帮我记上」「我想去」时使用',
+      inputSchema: { item_id: z.string().describe('list_activities / import_article 返回的 item_id') },
+    }, async ({ item_id }) => {
+      const task = repo.addActivityToPlan(item_id);
+      if (!task) throw new Error('item_id 对应的活动不存在。请先用 list_activities 查到真实的 item_id。');
+      channels.changed('goals');
+      return json({ ok: true, task });
+    });
+  }
 
   // ---------- 搜索 ----------
   server.registerTool('search_all', {

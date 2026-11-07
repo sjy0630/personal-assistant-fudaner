@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ModelConfig, PlatformState, Profile, Settings } from '../../../shared/types';
 import { api } from '../api';
 import { finishOnboarding, modelProblem, validateModel } from './onboarding-state';
+import { settingsErrorMessage } from './settings-state';
 import styles from './Onboarding.module.css';
 
 const STEPS = [
@@ -61,7 +62,8 @@ export function OnboardingPage({ onComplete, onClose }: { onComplete: () => void
     if (inFlight.current) return;
     inFlight.current = true; setBusy(name); setError(''); setNotice('');
     try { await action(); }
-    catch (err) { setError(err instanceof Error && err.message.startsWith('请') ? err.message : '操作未完成，请检查连接后重试。你的填写内容仍保留在这里。'); }
+    // 主进程的错误会带上「Error invoking remote method …」前缀，去掉后再判断能不能直接给用户看
+    catch (err) { setError(settingsErrorMessage(err, '操作未完成，请检查连接后重试。你的填写内容仍保留在这里。')); }
     finally { inFlight.current = false; setBusy(''); }
   };
   const editModel = (kind: 'cloud' | 'local', patch: Partial<ModelConfig>) => {

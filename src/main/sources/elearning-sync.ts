@@ -19,8 +19,11 @@ export async function syncElearning(client: ElearningClient, repo: Repo, now = n
   const courses = await client.listCourses();
   // 先完成网络读取，再写入，接口中途失败时下次同步仍能生成全部新事件。
   const assignments = new Map<string, Awaited<ReturnType<ElearningClient['listAssignments']>>>();
-  for (const c of courses) assignments.set(c.id, await client.listAssignments(c.id));
-  const anns = await client.listAnnouncements(courses.map((c) => c.id), lastSync ?? new Date(now.getTime() - 14 * 86_400_000).toISOString());
+  for (const c of courses) assignments.set(c.id, await skipIfForbidden(() => client.listAssignments(c.id), []));
+  const since = lastSync ?? new Date(now.getTime() - 14 * 86_400_000).toISOString();
+  // 一起查所有课的公告；某门课不开放公告时整批会失败，这时逐门课查，跳过没有权限的课。
+  const anns = await skipIfForbidden(() => client.listAnnouncements(courses.map((c) => c.id), since), null)
+    ?? (await Promise.all(courses.map((c) => skipIfForbidden(() => client.listAnnouncements([c.id], since), [])))).flat();
   return repo.db.tx(() => {
     for (const c of courses) {
       const { base, section } = parseCourseCode(c.courseCode);
@@ -71,6 +74,16 @@ export async function syncElearning(client: ElearningClient, repo: Repo, now = n
     repo.setKv('elearning_last_sync', now.toISOString());
     return { courses: courses.length, triggers };
   });
+}
+
+/** 某门课没有权限（403）或已不存在（404）时跳过，不影响其他课的同步 */
+async function skipIfForbidden<T>(read: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if ([403, 404].includes((error as { status?: number }).status ?? 0)) return fallback;
+    throw error;
+  }
 }
 
 export function stripHtml(html: string): string {

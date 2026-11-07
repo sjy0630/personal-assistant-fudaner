@@ -16,7 +16,7 @@ export function safeExternalUrl(value?: string): string | null {
 }
 
 const itemLabels: Record<Item['kind'], string> = {
-  assignment: '作业', announcement: '课程公告', email: '邮件', replay: '课程回放', notice: '通知',
+  assignment: '作业', announcement: '课程公告', email: '邮件', replay: '课程回放', notice: '通知', activity: '校园活动', exam: '考试',
 };
 const goalStatuses = { active: '进行中', done: '已完成', archived: '已归档' };
 const taskStatuses = { todo: '待完成', done: '已完成', skipped: '已跳过' };

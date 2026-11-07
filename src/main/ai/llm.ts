@@ -110,7 +110,8 @@ export const MODEL_PRESETS: { name: string; kind: 'cloud' | 'local'; baseURL: st
  * - 高敏感任务（邮件、记忆、研判）优先本地；本地不可用时，只有用户允许才改用云端，否则返回 null（调用方退回规则处理）。
  * - 复杂任务（对话、规划、工单）优先云端；云端不可用时用本地。
  */
-export type AiTask = 'mail_classify' | 'link' | 'memory_extract' | 'assess' | 'chat' | 'brief' | 'plan' | 'ticket';
+// activity_extract：从公开文章里提取活动，内容公开、不敏感，优先云端
+export type AiTask = 'mail_classify' | 'link' | 'memory_extract' | 'assess' | 'chat' | 'brief' | 'plan' | 'ticket' | 'activity_extract';
 const SENSITIVE: AiTask[] = ['mail_classify', 'link', 'memory_extract', 'assess'];
 
 export class ModelRouter {

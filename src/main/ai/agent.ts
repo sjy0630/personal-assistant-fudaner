@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CardRef, ChatMessage, ChatRun, ToolCallView } from '../../shared/types';
+import type { CardRef, ChatMessage, ChatRun, PlatformState, ToolCallView } from '../../shared/types';
 import type { Repo } from '../db/repo';
 import type { Channels } from '../engine/channels';
 import { fmt } from '../engine/engine';
@@ -118,6 +118,13 @@ function readItemCards(repo: Repo, result: Awaited<ReturnType<McpHub['call']>>):
 /**
  * 主对话智能体（PRD §5.1）。作为 MCP 客户端调用各平台工具。
  */
+/** eLearning 没登录、对话又在说登录或同步时，在回复下面放一个「登录复旦账号」按钮 */
+export function loginActions(platforms: PlatformState[], dialog: string): { label: string; action: string }[] {
+  const elearning = platforms.find((s) => s.platform === 'elearning');
+  if (elearning?.status !== 'need_login') return [];
+  return /登录|登陆|授权|认证|同步|elearning|连不上|没连上/i.test(dialog) ? [{ label: '登录复旦账号', action: 'login' }] : [];
+}
+
 export class ChatAgent {
   private readonly summarizer: ConversationSummarizer;
   private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
@@ -129,6 +136,7 @@ export class ChatAgent {
     private readonly router: ModelRouter,
     private readonly hub: McpHub,
     private readonly channels: Channels,
+    private readonly platformStatus: () => Promise<PlatformState[]> = async () => [],
   ) { this.summarizer = new ConversationSummarizer(repo, router); }
 
   async handleUserMessage(text: string, refs: CardRef[] = []): Promise<ChatMessage> {
@@ -163,7 +171,8 @@ export class ChatAgent {
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
     const policy = createToolPolicy(this.repo, llm);
-    const system = [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString() }), this.summarizer.context()].filter(Boolean).join('\n\n');
+    const platforms = await this.platformStatus().catch(() => []);
+    const system = [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString(), platforms }), this.summarizer.context()].filter(Boolean).join('\n\n');
     const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
@@ -186,7 +195,8 @@ export class ChatAgent {
         run.view.version++; this.publish(); this.channels.toolProgress(run.view.id, call);
       },
     });
-    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content: result.content || '模型没有返回正文，请重试。', toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
+    const content = result.content || '模型没有返回正文，请重试。';
+    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content, toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], actions: loginActions(platforms, `${text}\n${content}`) });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */
@@ -252,6 +262,13 @@ export class ChatAgent {
         role: 'assistant', content: mails.length ? `有 ${mails.length} 封邮件等你回复：\n${mails.map((m) => `· ${m.sender?.replace(/<.*>/, '')}：${m.title}`).join('\n')}` : '目前没有需要回复的邮件。',
         cards: mails.map((m) => ({ type: 'item', id: m.id, title: m.title, subtitle: m.sender })),
         toolCalls: [{ server: 'fudan-mail', name: 'list_action_required', args: {}, ok: true }],
+      });
+    }
+    if (/登录|登陆|授权|认证/.test(text)) {
+      return this.repo.addMessage({
+        role: 'assistant',
+        content: '登录复旦账号：点下面的「登录复旦账号」（或到「设置 → 复旦账号」），会弹出学校官方的统一身份认证页面。在那个窗口里自己输入学号和密码，页面要求时用企业微信扫码或确认。登录成功后窗口会自动关闭，再点「立即同步」。密码只在学校的页面里输入，应用不保存。',
+        actions: [{ label: '登录复旦账号', action: 'login' }],
       });
     }
     return this.repo.addMessage({ role: 'assistant', content: '我还没有接上大模型，现在只能回答「这周有什么 DDL」「有哪些邮件要回」这类问题。去「设置 → 模型」填一下 API Key，我就能陪你聊任何事了。' });

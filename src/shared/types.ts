@@ -3,8 +3,34 @@
  * 修改这里的类型时，请同步修改 src/main/db/schema.ts。
  */
 
-export type ItemSource = 'elearning' | 'mail' | 'icourse' | 'notice' | 'demo';
-export type ItemKind = 'assignment' | 'announcement' | 'email' | 'replay' | 'notice';
+export type ItemSource = 'elearning' | 'mail' | 'icourse' | 'notice' | 'jwfw' | 'demo';
+export type ItemKind = 'assignment' | 'announcement' | 'email' | 'replay' | 'notice' | 'activity' | 'exam';
+
+export type Campus = '邯郸' | '江湾' | '枫林' | '张江' | '线上';
+export type ActivityCategory = '讲座' | '就业' | '比赛' | '文体' | '志愿' | '其他';
+
+/** 校园活动（从公众号文章、订阅源、学校网站提取），存在 activity 类事项上 */
+export interface ActivityInfo {
+  /** 开始时间（ISO，带时区）；文章没写清楚时省略 */
+  startsAt?: string;
+  endsAt?: string;
+  /** 原文里的时间说法，例如「11月12日（周三）14:00—16:00」 */
+  timeText?: string;
+  location?: string;
+  campus?: Campus;
+  category?: ActivityCategory;
+  organizer?: string;
+  speaker?: string;
+  /** 报名方式：链接、二维码说明或「无需报名」 */
+  signup?: string;
+  signupDeadline?: string;
+  /** 一两句话介绍 */
+  summary?: string;
+  /** 来源：公众号名或订阅源名 */
+  sourceName?: string;
+  /** 来源文章标题（一篇文章可能有多场活动） */
+  articleTitle?: string;
+}
 export type MailCategory = 'reply' | 'action' | 'course' | 'notice' | 'other';
 
 /** 统一的「事项」：来自各平台的一条信息 */
@@ -27,6 +53,19 @@ export interface Item {
   aiSummary?: string;
   aiAction?: string;
   aiModelUsed?: string;
+  /** activity 类：活动的时间、地点等 */
+  activity?: ActivityInfo;
+  /** notice 类（学校和院系官网通知）：来源和附件 */
+  notice?: NoticeInfo;
+}
+
+export interface NoticeInfo {
+  /** 来源 id，见 src/main/notices/sources.ts */
+  source: string;
+  sourceName: string;
+  attachments?: { name: string; url: string }[];
+  /** 详情页没读到（只限校内访问、页面改版等），只有标题 */
+  titleOnly?: boolean;
 }
 
 export interface CourseTeacher { name: string; email?: string; role: 'teacher' | 'ta' }
@@ -48,7 +87,8 @@ export interface Course {
 }
 
 /** weekday：1 = 周一 … 7 = 周日；时间为 HH:MM */
-export interface CourseSlot { weekday: number; start: string; end: string; location?: string }
+/** 一段上课时间。weeks：上课的教学周（导入的真实课表有，单双周、前八周等）；没有表示每周都上 */
+export interface CourseSlot { weekday: number; start: string; end: string; location?: string; weeks?: number[] }
 
 export interface Link { id: string; fromItemId: string; toItemId: string; reason: string; confidence: number; confirmed: boolean }
 
@@ -155,7 +195,7 @@ export interface Task {
 export type VerifyCondition = { type: 'assignment_submitted'; itemId: string };
 
 // ---------- 动态 ----------
-export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'replay' | 'insight' | 'suggest_ticket';
+export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'campus_notice' | 'replay' | 'insight' | 'suggest_ticket';
 export interface FeedCard {
   id: string;
   type: FeedCardType;
@@ -186,14 +226,18 @@ export interface Resource {
 }
 
 // ---------- 主动引擎（PRD §5.7、§7.8，参考 dsh-superagent） ----------
-export type TriggerSourceKind = 'elearning' | 'mail' | 'icourse' | 'clock' | 'chat';
+export type TriggerSourceKind = 'elearning' | 'mail' | 'icourse' | 'clock' | 'chat' | 'notice';
 export type TriggerKind =
   | 'assignment_new' | 'assignment_changed' | 'assignment_submitted' | 'announcement_new'
   | 'mail_new'
   | 'deadline_72h' | 'deadline_24h' | 'deadline_3h'
   | 'morning' | 'weekly_plan' | 'followup_due' | 'phase_change'
   | 'user_commitment'
-  | 'auth_expired';
+  | 'auth_expired'
+  | 'activity_new'
+  | 'notice_new'
+  | 'exam_soon'
+  | 'card_low';
 
 export interface Trigger {
   id: string;
@@ -276,7 +320,13 @@ export interface Settings {
   observeRules?: string[];
   quietHours: { start: string; end: string };
   mail?: { host: string; port: number; user: string };
+  /** 活动订阅源（RSS / Atom）：公众号转成的 RSS 等 */
+  feeds?: FeedSource[];
+  /** 关注的学校和院系官网通知来源 id；未设置时默认教务处 + 本人院系 */
+  noticeSources?: string[];
 }
+
+export interface FeedSource { url: string; name?: string }
 
 export type PlatformName = 'elearning' | 'icourse' | 'mail';
 export interface PlatformState { platform: PlatformName; status: 'ok' | 'need_login' | 'unavailable' | 'not_configured' | 'demo'; message?: string; checkedAt?: string }
@@ -291,6 +341,8 @@ export interface TodayOverview {
   deadlines: { itemId: string; title: string; course?: string; dueAt: string; done: boolean }[];
   mailToReply: number;
   weekProgress: { done: number; total: number };
+  /** 14 天内的考试（导入考试安排后才有） */
+  exams?: { itemId: string; course: string; startsAt: string; location?: string }[];
 }
 
 export interface SearchHit { type: 'message' | 'feed' | 'goal' | 'task' | 'resource' | 'item' | 'memory'; id: string; title: string; snippet: string }

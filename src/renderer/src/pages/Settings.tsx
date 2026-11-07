@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react';
 import { DecisionsTab } from './Decisions';
 import { ModelSettings } from './settings/ModelSettings';
 import { AccountSettings } from './settings/AccountSettings';
+import { ActivitySettings } from './settings/ActivitySettings';
 import { PersonalSettings } from './settings/PersonalSettings';
 import { AssistantSettings } from './settings/AssistantSettings';
 import { DeveloperSettings } from './settings/DeveloperSettings';
 import styles from './settings/Settings.module.css';
 import { getThemePreference, setThemePreference, type ThemePreference } from '../theme';
 
-type Tab = 'model' | 'accounts' | 'me' | 'assistant' | 'decisions' | 'dev';
+type Tab = 'model' | 'accounts' | 'activities' | 'me' | 'assistant' | 'decisions' | 'dev';
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ['model', '模型'],
   ['accounts', '复旦账号'],
+  ['activities', '通知与活动'],
   ['me', '关于我'],
   ['assistant', '助理'],
   ['decisions', '主动决策'],
@@ -119,6 +121,7 @@ export function SettingsPage({
       >
         {tab === 'model' && <ModelSettings {...props} />}
         {tab === 'accounts' && <AccountSettings {...props} />}
+        {tab === 'activities' && <ActivitySettings {...props} />}
         {tab === 'me' && <PersonalSettings {...props} />}
         {tab === 'assistant' && <AssistantSettings {...props} />}
         {tab === 'dev' && <DeveloperSettings {...props} />}

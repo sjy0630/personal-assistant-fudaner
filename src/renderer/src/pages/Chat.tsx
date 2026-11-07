@@ -205,6 +205,15 @@ function TodayPanel({ today, goto, collapsed, open, suggest }: { today: TodayOve
           {today.courses.map((c) => <div key={c.name} className="row">{c.time} {c.name} <span className="muted">{c.location}</span></div>)}
         </section>
       )}
+      {today.exams && today.exams.length > 0 && (
+        <section>
+          <h3>考试</h3>
+          {today.exams.slice(0, 4).map((e) => {
+            const days = Math.ceil((Date.parse(e.startsAt) - Date.now()) / 86_400_000);
+            return <button type="button" key={e.itemId} className="ghost row today-deadline" onClick={() => open({ type: 'item', id: e.itemId, title: e.course })}><span>{days <= 1 ? '🔴' : days <= 7 ? '🟡' : '⚪'}</span> {e.course} <span className="muted">{fmtTime(e.startsAt)}{e.location ? ` · ${e.location}` : ''}</span></button>;
+          })}
+        </section>
+      )}
       <section>
         <h3>DDL</h3>
         {pending.length === 0 && <div className="muted">7 天内没有未交作业</div>}
