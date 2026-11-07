@@ -849,7 +849,7 @@ interface FudanAuth {
 
 | MCP 服务 | 已实现的工具 | 数据从哪来 | 说明 |
 |---|---|---|---|
-| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`、`get_assignment`、`list_announcements`、`refresh` | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
+| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`（可带 `refresh` 先实时同步）、`get_assignment`、`list_announcements` | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
 | `fudan-mail`（独立包） | `search_mail`、`get_mail`、`list_action_required` | 本地库（IMAP 同步） | 只读，不发信 |
 | `fudan-courses`（独立包） | `list_courses`、`get_course` | 本地库 | 跨平台课程总表 |
 | `fudaner-local` | 记忆、目标、动态、资源库、搜索，以及 11/7 新增的校园工具：`search_notices`、`get_notice`、`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`、`import_article`、`list_activities`、`add_activity_to_plan` | 本地库；图书馆、校园卡实时查询 | 校园工具先放在这里，决赛前拆成独立包 |
