@@ -12,7 +12,7 @@ import { useChatRun } from './chat/useChatRun';
 import type { ChatWorkspace } from './chat/useChatWorkspace';
 import './chat/chat.css';
 
-const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课周', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
+const PHASE: Record<string, string> = { regular: '平时', course_selection: '开学初', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
 const STARTERS = ['这周有哪些作业要交？', '今天有哪些邮件需要回？', '帮我看看本周目标的进度。'];
 
 interface ChatPageProps {

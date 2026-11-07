@@ -9,6 +9,7 @@ import { GoalsPage } from './pages/Goals';
 import { LibraryPage } from './pages/Library';
 import { SearchPage } from './pages/Search';
 import { SettingsPage } from './pages/Settings';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { OnboardingPage } from './pages/Onboarding';
 import { NavIcon } from './theme/NavIcon';
 import { useSidebarLayout } from './theme/useSidebarLayout';
@@ -131,12 +132,14 @@ export function App() {
         </button>
       </nav>
       <main className="main">
+        <ErrorBoundary scope="page" resetKey={page}>
         {page === 'chat' && <ChatPage assistantName={assistantName} location={chatLocation} returnToLatest={() => setChatLocation(null)} todayCollapsed={layout.rightCollapsed} toggleToday={() => toggle('rightCollapsed')} workspace={workspace} openReference={(ref) => void openReference(ref)} goto={navigate} />}
         {page === 'feed' && <FeedPage quote={quote} focus={pageFocus?.page === 'feed' ? pageFocus : null} />}
         {page === 'goals' && <GoalsPage quote={quote} focus={pageFocus?.page === 'goals' ? pageFocus : null} />}
         {page === 'library' && <LibraryPage quote={quote} focus={pageFocus?.page === 'library' ? pageFocus : null} />}
         {page === 'search' && <SearchPage quote={quote} />}
         {page === 'settings' && <SettingsPage onOpenOnboarding={() => {setSettingsDirty(false);setOnboarding(true);}} onDraftChange={setSettingsDirty} onBusyChange={setSettingsBusy} />}
+        </ErrorBoundary>
       </main>
       {referenceDetail && <ReferenceDialog detail={referenceDetail.detail} close={() => { setReferenceDetail(null); setReferenceError(''); }} error={referenceError} open={(ref) => void openReference(ref)} quote={() => quote(referenceDetail.ref)} />}
       {referenceError && !referenceDetail && <div className="reference-error" role="alert">{referenceError}<button type="button" onClick={() => setReferenceError('')}>关闭</button></div>}

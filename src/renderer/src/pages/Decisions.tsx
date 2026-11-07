@@ -7,7 +7,7 @@ const ROUTES: Record<EvalRecord['decision'], { icon: string; label: string }> = 
   card: { icon: '📰', label: '放进动态' }, digest: { icon: '☀️', label: '并入早安' },
   suggest_ticket: { icon: '🤝', label: '建议工单' }, record: { icon: '📋', label: '只记录' },
 };
-const PHASE: Record<string, string> = { regular: '平时', course_selection: '选课期', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
+const PHASE: Record<string, string> = { regular: '平时', course_selection: '开学初', midterm: '期中', pre_exam: '考试周前', exam: '考试周', holiday: '假期' };
 type DecisionData = Awaited<ReturnType<typeof api.decisions>>;
 
 /** F2：主动决策的去向、理由与注意力成本。 */
