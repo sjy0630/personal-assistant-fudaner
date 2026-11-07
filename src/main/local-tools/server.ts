@@ -108,6 +108,23 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
       repo.setTaskStatus(task_id, status); channels.changed('goals'); return json({ ok: true });
     });
 
+    server.registerTool('mark_item_done', {
+      description: '在应用里把邮件标记为「已处理」（不再出现在待回复里），或把作业标记为「已完成」（如组作业由组长提交、线下已交）。只改本地状态，不改邮箱或 eLearning。用户说「这封不用回了」「这个作业组长交了」时使用。',
+      inputSchema: {
+        item_id: z.string().describe('事项 id：search_mail / list_action_required / list_deadlines 等工具返回的真实 id'),
+        done: z.boolean().optional().describe('默认 true；false 表示撤销标记'),
+      },
+    }, async ({ item_id, done }) => {
+      const item = repo.getItem(item_id);
+      if (!item || (item.kind !== 'email' && item.kind !== 'assignment')) {
+        throw new Error('item_id 对应的邮件或作业不存在。请先用搜索或列表工具查到真实的事项 id，不能使用标题。');
+      }
+      repo.markItemDone(item_id, done ?? true);
+      channels.changed('goals');
+      channels.changed('feed');
+      return json({ ok: true, kind: item.kind, title: item.title, done: done ?? true, note: '只改了应用里的状态，邮箱和 eLearning 上没有变化' });
+    });
+
     server.registerTool('schedule_followup', {
       description: '安排一次跟进：到时间后助理会主动问进展。用户提到计划或承诺时使用（如「今晚写 Lab 5」→ 明早跟进）',
       inputSchema: {

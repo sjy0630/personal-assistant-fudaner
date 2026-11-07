@@ -113,6 +113,13 @@ export function registerIpc(ctx: AppContext, opts: {
     if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
       decideTicket(a.payload.ticketId, true, id);
     }
+    // 在本地标记邮件已处理 / 作业已完成（不改邮箱和 eLearning）
+    if (action === 'mark_done' && typeof a?.payload?.itemId === 'string') {
+      if (!repo.markItemDone(a.payload.itemId, true)) throw new Error('对应的邮件或作业已不存在。');
+      repo.setFeedStatus(id, 'accepted');
+      opts.onChanged?.('feed');
+      opts.onChanged?.('goals');
+    }
   });
 
   handle('goals.list', async () => ({ goals: repo.listGoals(), tasks: repo.listTasks() }));

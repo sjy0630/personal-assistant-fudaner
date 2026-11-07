@@ -108,6 +108,22 @@ export class Repo {
     );
     return { item: this.getItem(prev.id)!, created: false, changedFields: changed };
   }
+  /**
+   * 用户在本地把事项标记为完成 / 已处理，只改应用里的状态，不改邮箱或 eLearning：
+   * - 邮件：done = 已处理（不再出现在「待回复」里）；同步时保留（见 mail-sync）。
+   * - 作业：平台状态以 eLearning 为准，本地完成记在对应任务上（同步不会覆盖已完成的任务）。
+   */
+  markItemDone(id: string, done: boolean): Item | undefined {
+    const item = this.getItem(id);
+    if (!item) return undefined;
+    if (item.kind === 'assignment') {
+      const task = this.taskForItem(id);
+      if (task) this.setTaskStatus(task.id, done ? 'done' : 'todo');
+    } else {
+      this.db.run('UPDATE items SET done=? WHERE id=?', done ? 1 : 0, id);
+    }
+    return this.getItem(id);
+  }
   findSourceItem(source: string, kind: string, sourceId: string): Item | undefined {
     const row = this.db.get<Row>('SELECT * FROM items WHERE source = ? AND kind = ? AND source_id = ?', source, kind, sourceId);
     return row ? mapItem(row) : undefined;

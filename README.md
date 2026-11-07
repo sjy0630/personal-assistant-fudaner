@@ -10,6 +10,7 @@
 - 开发说明与分工：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 材料工作手册：[docs/MATERIALS.md](docs/MATERIALS.md)
 - 演示剧本（录视频用）：[docs/DEMO.md](docs/DEMO.md)
+- **真实账号试用指南**：[docs/TRIAL.md](docs/TRIAL.md)
 
 ## 快速开始
 

@@ -211,9 +211,17 @@ export class ProactiveEngine {
       : t.kind === 'mail_new' ? (t.payload.category === 'course' ? 'course_mail' : t.payload.category === 'notice' ? 'opportunity' : 'mail_action')
       : t.kind.startsWith('assignment') || t.kind.startsWith('deadline') ? 'assignment' : 'insight';
     const done = t.kind === 'assignment_new' ? '已加入课程目标' : t.payload.linkedTitle ? `已关联到作业「${t.payload.linkedTitle}」` : undefined;
+    // 需要处理的邮件和未完成的作业，卡片上可以直接在本地标记（不改邮箱 / eLearning）
+    const itemId = typeof t.payload.itemId === 'string' ? t.payload.itemId : undefined;
+    const markable = itemId && (
+      (t.kind === 'mail_new' && ['reply', 'action', 'course'].includes(String(t.payload.category))) ||
+      t.kind === 'assignment_new' || t.kind.startsWith('deadline_'));
+    const markAction = markable
+      ? [{ label: t.kind === 'mail_new' ? '标记已处理' : '标记完成', action: 'mark_done', payload: { itemId } }]
+      : [];
     this.repo.addFeedCard({
       type, title: String(t.payload.title ?? t.payload.subject ?? describeTrigger(t)), body: a.messageDraft, reason: a.reason, done, refs,
-      actions: [{ label: '引用到对话', action: 'quote' }, { label: '不感兴趣', action: 'dismiss' }],
+      actions: [{ label: '引用到对话', action: 'quote' }, ...markAction, { label: '不感兴趣', action: 'dismiss' }],
       score: a.value, dedupeKey: `${t.kind}:${t.sourceRef}`,
     });
     this.channels.changed('feed');
