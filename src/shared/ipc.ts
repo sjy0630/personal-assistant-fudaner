@@ -74,6 +74,7 @@ export interface FudanerApi {
     library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
     cardBalance(): Promise<{ balance: number; at: string }>;
     electricity(): Promise<{ room: string; remainingKwh: number; usedKwh?: number; updatedAt?: string; at: string }>;
+    grades(): Promise<{ gpa?: number; credits: number; semesters: number; courses: number; rank?: { ranking?: number; total: number; gpa?: number; note?: string }; updatedAt: string }>;
   };
   treehole: {
     status(): Promise<{ loggedIn: boolean; demo: boolean }>;

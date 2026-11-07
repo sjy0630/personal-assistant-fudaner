@@ -51,6 +51,11 @@ export async function importTimetable(repo: Repo, reader: CampusReader): Promise
     const data = await reader.getText(`${UNDERGRAD_TABLE_URL}/semester/${current.id}/print-data`);
     if (data.status >= 400) throw new Error(`教务系统返回 ${data.status}`);
     entries = parseUndergradTable(data.text);
+    // 教务系统内部的学生编号，考试安排、成绩接口要用
+    try {
+      const id = (JSON.parse(data.text) as { studentTableVms?: { id?: unknown }[] }).studentTableVms?.[0]?.id;
+      if (id !== undefined && id !== null) repo.setKv('jw_student_id', String(id));
+    } catch { /* 课表已经解析成功，编号拿不到不影响 */ }
   }
   const slots = toCourseSlots(entries);
   const applied: string[] = [];
@@ -76,7 +81,10 @@ export async function importTimetable(repo: Repo, reader: CampusReader): Promise
 /** 导入考试安排：每场考试是一个「考试」事项（有时间、考场），考前会提醒 */
 export async function importExams(repo: Repo, reader: CampusReader): Promise<{ exams: number; added: number }> {
   const looksLoaded = (html: string) => /<td[^>]*>[\s\S]*?20\d{2}\s*[-/.年]\s*\d{1,2}/.test(html) || /暂无|没有.*考试|无考试安排/.test(html);
-  let html = (await reader.getText(EXAM_URL)).text;
+  // 知道学生编号时直接读考试安排的数据页，否则读入口页（可能需要渲染）
+  const studentId = repo.getKv<string | null>('jw_student_id', null);
+  let html = (await reader.getText(studentId ? `${EXAM_URL}/info/${studentId}` : EXAM_URL)).text;
+  if (studentId && !looksLoaded(html)) html = (await reader.getText(EXAM_URL)).text;
   if (!looksLoaded(html) && reader.render) html = await reader.render(EXAM_URL, looksLoaded);
   // 一个月以前考完的不再导入（考试安排页会列出往届记录）
   const exams = parseExamPage(html).filter((e) => Date.parse(e.endsAt ?? e.startsAt) > Date.now() - 30 * 86_400_000);

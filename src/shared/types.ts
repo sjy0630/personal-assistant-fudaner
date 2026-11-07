@@ -158,6 +158,8 @@ export interface Profile {
   grade?: string;
   degree?: '本科' | '硕士' | '博士';
   freeText?: string;
+  /** 学号：用来在教务系统的绩点排名里找到本人（只存本机） */
+  studentNumber?: string;
   assistantName: string;
   style: 'warm' | 'concise' | 'playful';
   /** 主动程度：对应注意力预算 少 / 中 / 多 */
@@ -238,7 +240,8 @@ export type TriggerKind =
   | 'notice_new'
   | 'exam_soon'
   | 'card_low'
-  | 'power_low';
+  | 'power_low'
+  | 'grade_new';
 
 export interface Trigger {
   id: string;

@@ -52,6 +52,8 @@ export function createLocalServer(
     literature?: { search(q: LiteratureQuery): Promise<{ total: number; records: LiteratureRecord[]; searchUrl: string }>; get(id: string): LiteratureRecord | undefined };
     treehole?: () => TreeholeApi;
     electricity?: () => Promise<unknown>;
+    grades?: () => Promise<{ semesters: { name: string; courses: unknown[] }[]; gpa?: number; credits: number; updatedAt: string }>;
+    gpaRank?: () => Promise<unknown>;
   } = {},
 ): McpServer {
   const server = new McpServer({ name: 'fudaner-local', version: '0.1.0' });
@@ -174,9 +176,11 @@ export function createLocalServer(
         nickname: z.string().max(30).optional(), school: z.string().max(40).optional().describe('院系全称或常用简称，如「经济学院」'),
         major: z.string().max(40).optional(), grade: z.string().max(20).optional().describe('如「大二」「研一」'),
         degree: z.enum(['本科', '硕士', '博士']).optional(),
+        student_number: z.string().regex(/^\d{8,12}$/).optional().describe('学号，只用来在绩点排名里找到本人'),
       },
     }, async (a) => {
-      const patch: Record<string, unknown> = Object.fromEntries(Object.entries(a).filter(([, v]) => v !== undefined && v !== ''));
+      const { student_number: studentNumber, ...rest } = a;
+      const patch: Record<string, unknown> = Object.fromEntries(Object.entries({ ...rest, studentNumber }).filter(([, v]) => v !== undefined && v !== ''));
       // 「经院」「计院」这类简称存成全称，方便认出本院系的通知
       if (typeof patch.school === 'string') {
         const s = findNoticeSource(patch.school);
@@ -415,6 +419,27 @@ export function createLocalServer(
       description: '读取旦克上某门课的评价：各老师、学期的评分（综合、内容、工作量、考核）和文字评价。course_group_id 来自 search_course_reviews',
       inputSchema: { course_group_id: z.number().int(), max_reviews: z.number().int().min(1).max(30).optional() }, annotations: ro,
     }, async (a) => json(await hole().courseReviews(a.course_group_id, a.max_reviews)));
+  }
+
+  // ---------- 成绩与绩点（敏感：只有本地模型或用户允许时才开放给云端模型，见 tool-policy） ----------
+  if (extras.grades) {
+    const grades = extras.grades;
+    server.registerTool('get_grades', {
+      description: '查询本人在教务系统里的成绩（每门课的等级、绩点、学分，按学期）和学分加权绩点。用户问「我这学期成绩」「XX 课考得怎么样」时使用',
+      inputSchema: { semester: z.string().optional().describe('学期名称关键词，如「2025-2026学年2学期」；不填返回全部') },
+      annotations: ro,
+    }, async ({ semester }) => {
+      const r = await grades();
+      const semesters = semester ? r.semesters.filter((s) => s.name.includes(semester)) : r.semesters;
+      return json({ gpa: r.gpa, credits: r.credits, semesters, updated: r.updatedAt, note: '绩点按有绩点的课程学分加权计算，P/NP 课程不计入；以教务系统为准' });
+    });
+  }
+  if (extras.gpaRank) {
+    const gpaRank = extras.gpaRank;
+    server.registerTool('get_gpa', {
+      description: '查询本人的绩点和在本年级本院系的排名（教务系统「我的绩点」）。只返回本人和总人数。需要学号才能在排名里找到本人：没有时请用户告诉你，用 update_profile 记下 student_number',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await gpaRank()));
   }
 
   if (extras.electricity) {

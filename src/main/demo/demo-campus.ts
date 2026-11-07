@@ -1,6 +1,7 @@
 import type { LiteratureRecord } from '../sources/library-search';
 import type { DormElectricity } from '../sources/dorm';
 import type { WebResult } from '../sources/web-search';
+import type { GradeReport } from '../sources/grades';
 import type { Repo } from '../db/repo';
 import type { LibraryStatus } from '../sources/campus-life';
 
@@ -90,4 +91,15 @@ export async function demoSearch(query: string): Promise<WebResult[]> {
     { title: `${query}：本周值得关注的三件事（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/1`, snippet: `虚构资讯：和「${query}」有关的最新进展汇总。`, date: '1 天前', site: '演示资讯' },
     { title: `${query} 入门指南（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/2`, snippet: `虚构内容：适合本科生了解「${query}」的入门资料。`, date: '3 天前', site: '演示博客' },
   ];
+}
+
+/** 演示成绩（虚构） */
+export function demoGrades(): GradeReport {
+  const courses = [
+    { course: '数学分析 II（演示）', credits: 5, grade: 'A-', gp: 3.7, semester: '2025-2026学年2学期' },
+    { course: '程序设计（演示）', credits: 3, grade: 'A', gp: 4, semester: '2025-2026学年2学期' },
+    { course: '大学英语（演示）', credits: 2, grade: 'B+', gp: 3.3, semester: '2025-2026学年2学期' },
+    { course: '形势与政策（演示）', credits: 0.5, grade: 'P', semester: '2025-2026学年2学期' },
+  ];
+  return { semesters: [{ id: 'demo', name: '2025-2026学年2学期', courses }], gpa: 3.73, credits: 10.5, updatedAt: new Date().toISOString() };
 }
