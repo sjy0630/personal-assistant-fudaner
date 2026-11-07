@@ -14,6 +14,9 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
   const [status, setStatus] = useState<Status | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [card, setCard] = useState<{ balance: number; at: string } | null>(null);
+  const [grades, setGrades] = useState<Awaited<ReturnType<typeof api.campus.grades>> | null>(null);
+  const [program, setProgram] = useState<Awaited<ReturnType<typeof api.campus.program>> | null>(null);
+  const [selected, setSelected] = useState<Awaited<ReturnType<typeof api.campus.selected>> | null>(null);
   const [power, setPower] = useState<Awaited<ReturnType<typeof api.campus.electricity>> | null>(null);
   const [hole, setHole] = useState<{ loggedIn: boolean; demo: boolean } | null>(null);
   const [holeForm, setHoleForm] = useState({ email: '', password: '' });
@@ -26,7 +29,7 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
       <section className={styles.section}>
         <h2>课表与考试</h2>
         <p className={styles.hint}>
-          从教务系统读取本学期课表和考试安排（本科读教务系统，研究生读研究生选课系统，按「关于我」里的学历选择），之后每天自动更新。课表用来排计划、算空闲时间；考前 7 天和前一天会提醒。只读，不会改动选课。
+          从教务系统读取本学期课表、考试安排和成绩（本科读教务系统，研究生课表读研究生选课系统，按「关于我」里的学历选择），之后每天自动更新。课表用来排计划、算空闲时间；考前 7 天和前一天会提醒；出新成绩时告诉你。成绩只存在本机，只有用本地模型或你在「设置 → 模型」允许发送敏感内容时，旦旦才会把成绩交给模型。只读，不会改动选课。
         </p>
         <div className={styles.statusRows}>
           <div className={styles.statusRow}>
@@ -35,6 +38,37 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
               <p className={styles.hint}>{status?.timetable ? `${status.timetable.semester ?? '本学期'} · ${status.timetable.courses} 门课 · ${when(status.timetable.updatedAt)} 更新` : demo ? '演示模式使用内置课表。' : '还没有导入。'}{problem('timetable') ? ` 上次自动更新失败：${problem('timetable')}` : ''}</p>
             </div>
           </div>
+          {grades && (
+            <div className={styles.statusRow}>
+              <div>
+                <strong>成绩与绩点</strong>
+                <p className={styles.hint}>
+                  {grades.gpa !== undefined ? `绩点 ${grades.gpa.toFixed(2)}（按学分加权，P/NP 不计）· ` : ''}{grades.credits} 学分 · {grades.courses} 门课
+                  {grades.rank?.ranking ? ` · 本年级院系第 ${grades.rank.ranking} / ${grades.rank.total} 名` : grades.rank?.note ? ` · ${grades.rank.note}` : ''}
+                </p>
+              </div>
+            </div>
+          )}
+          {program && (
+            <div className={styles.statusRow}>
+              <div>
+                <strong>培养方案完成情况</strong>
+                <p className={styles.hint}>
+                  {program.modules.length
+                    ? program.modules.map((m) => `${m.name}${m.required !== undefined ? ` ${m.earned ?? '?'}/${m.required}` : ''}`).join(' · ')
+                    : '已读到页面内容，可以直接问旦旦「我还差多少学分」。'}
+                </p>
+              </div>
+            </div>
+          )}
+          {selected && (
+            <div className={styles.statusRow}>
+              <div>
+                <strong>选课结果（{selected.semester}）</strong>
+                <p className={styles.hint}>{selected.courses.map((c) => `${c.course}${c.credits !== undefined ? `（${c.credits} 学分）` : ''}`).join('、') || '这学期还没有选上的课'}{selected.totalCredits !== undefined ? ` · 共 ${selected.totalCredits} 学分` : ''}</p>
+              </div>
+            </div>
+          )}
           <div className={styles.statusRow}>
             <div>
               <strong>考试安排</strong>
@@ -50,6 +84,15 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
             if (!r.courses) throw new Error('请注意：教务系统里本学期还没有课表。');
           }, '课表已导入，右侧「今天」会显示当天的课。', '导入失败，请确认已登录复旦账号后重试。')}>
             {task.busy === 'timetable' ? '正在读取…' : '导入课表'}
+          </button>
+          <button type="button" onClick={() => void task.run('grades', async () => { setGrades(await api.campus.grades()); }, '已读取成绩。', '读取失败，请确认已登录复旦账号后重试。')}>
+            {task.busy === 'grades' ? '正在读取…' : '查看成绩与绩点'}
+          </button>
+          <button type="button" onClick={() => void task.run('program', async () => { setProgram(await api.campus.program()); }, '已读取培养方案完成情况。', '读取失败，请确认已登录复旦账号后重试。')}>
+            {task.busy === 'program' ? '正在读取…' : '培养方案完成情况'}
+          </button>
+          <button type="button" onClick={() => void task.run('selected', async () => { setSelected(await api.campus.selected('current')); }, '已读取选课结果。', '读取失败，请确认已登录复旦账号后重试。')}>
+            {task.busy === 'selected' ? '正在读取…' : '选课结果'}
           </button>
           <button type="button" onClick={() => void task.run('exams', async () => {
             const r = await api.campus.importExams();

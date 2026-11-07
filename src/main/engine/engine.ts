@@ -331,6 +331,7 @@ export function describeTrigger(t: Trigger): string {
     case 'announcement_new': return `[公告] ${p.course}：${p.title}`;
     case 'exam_soon': return `[考试] ${p.course}，${p.timeText ?? ''}，考场 ${p.location ?? '未知'}，还有 ${p.daysLeft} 天`;
     case 'card_low': return `[校园卡] 余额 ¥${p.balance}`;
+    case 'grade_new': return `[成绩] ${p.course}：${p.grade}`;
     case 'power_low': return `[宿舍电量] ${p.room} 剩 ${p.remaining} 度`;
     case 'notice_new': return `[学校通知/${p.sourceName}] ${p.title}${p.own ? '（本人院系）' : ''}${p.excerpt ? `\n正文开头：${p.excerpt}` : ''}`;
     case 'activity_new': return `[校园活动/${p.category ?? '其他'}] ${p.title}；时间 ${p.timeText ?? '未写明'}；地点 ${p.location ?? '未写明'}${p.campus ? `（${p.campus}）` : ''}；主办 ${p.organizer ?? '未写明'}。${p.summary ?? ''}${p.excerpt ? `\n原文开头：${p.excerpt}` : ''}`;

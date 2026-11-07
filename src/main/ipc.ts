@@ -261,6 +261,14 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
   handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
   handle<[], unknown>('campus.electricity', () => campusCall(() => ctx.electricity()));
+  handle<[], unknown>('campus.program', () => campusCall(() => ctx.programCompletion({ force: true })));
+  handle<[string?], unknown>('campus.selected', (which) => campusCall(() => ctx.selectedCourses(which || 'current')));
+  handle<[], unknown>('campus.grades', () => campusCall(async () => {
+    const r = await ctx.grades({ force: true });
+    let rank: unknown;
+    try { rank = await ctx.gpaRank(); } catch { rank = undefined; }
+    return { gpa: r.gpa, credits: r.credits, semesters: r.semesters.length, courses: r.semesters.reduce((n, s) => n + s.courses.length, 0), rank, updatedAt: r.updatedAt };
+  }));
   // 树洞账号：密码只用来换令牌，不保存
   handle<[], unknown>('treehole.status', async () => ({ loggedIn: repo.getSettings().demoMode || !!opts.treehole?.loggedIn(), demo: repo.getSettings().demoMode }));
   handle<[string, string], void>('treehole.login', (email, password) => campusCall(async () => {

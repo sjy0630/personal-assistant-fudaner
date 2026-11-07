@@ -31,6 +31,10 @@ import type { WebResult } from './sources/web-search';
 import { FeedCurator } from './engine/curator';
 import { demoSearch } from './demo/demo-campus';
 import { readElectricity, type DormElectricity } from './sources/dorm';
+import { readGpaRank, readGrades, type GpaRank, type GradeReport } from './sources/grades';
+import { demoGrades, demoProgram, demoSelected } from './demo/demo-campus';
+import { readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
+import { readStudentId } from './sources/grades';
 
 /**
  * 应用的组装根（参考 dsh-superagent 的 Runtime）：创建并连接所有部件，不包含业务规则。
@@ -132,6 +136,8 @@ export class AppContext {
       importArticle: (url) => this.importArticle(url), library: () => this.library(), cardBalance: () => this.cardBalance(),
       literature: { search: (q) => this.searchLiterature(q), get: (id) => this.getLiterature(id) },
       treehole: () => this.treehole(), electricity: () => this.electricity(),
+      grades: () => this.grades(), gpaRank: () => this.gpaRank(),
+      program: () => this.programCompletion(), selected: (which: string) => this.selectedCourses(which),
     }));
 
     await this.executorHub.connect('fudan-elearning', createElearningServer(elearningData));
@@ -379,6 +385,78 @@ export class AppContext {
     return client;
   }
 
+  /**
+   * 成绩（只读，本机缓存 30 分钟）。新出的成绩会生成「出成绩了」的提醒。
+   * 研究生成绩在另一个系统，暂不支持。
+   */
+  async grades(opts: { force?: boolean } = {}): Promise<GradeReport> {
+    const cached = this.repo.getKv<(GradeReport & { studentId?: string }) | null>('grades', null);
+    if (!opts.force && cached && Date.now() - Date.parse(cached.updatedAt) < 30 * 60_000) return cached;
+    if (this.repo.getSettings().demoMode) return demoGrades();
+    const degree = this.repo.getProfile().degree;
+    if (degree === '硕士' || degree === '博士') throw new Error('研究生成绩在研究生系统里，暂时还读不到；本科成绩可以查。');
+    const report = await readGrades(this.reader());
+    this.repo.setKv('jw_student_id', report.studentId);
+    // 和上次比，新出成绩的课
+    if (cached) {
+      const before = new Set(cached.semesters.flatMap((s) => s.courses.filter((c) => c.grade !== '未出').map((c) => `${s.id}|${c.code ?? c.course}`)));
+      for (const s of report.semesters) {
+        for (const c of s.courses) {
+          if (c.grade === '未出' || before.has(`${s.id}|${c.code ?? c.course}`)) continue;
+          this.repo.addTrigger({ source: 'clock', kind: 'grade_new', sourceRef: `${s.id}|${c.code ?? c.course}`, threadKey: 'grades', payload: { title: c.course, course: c.course, grade: c.grade, semester: s.name } });
+        }
+      }
+    }
+    this.repo.setKv('grades', report);
+    this.clearCampusProblem('grades');
+    return report;
+  }
+
+  private async studentId(): Promise<string> {
+    const cached = this.repo.getKv<string | null>('jw_student_id', null);
+    if (cached) return cached;
+    const { studentId } = await readStudentId(this.reader());
+    this.repo.setKv('jw_student_id', studentId);
+    return studentId;
+  }
+
+  private undergradOnly(): void {
+    const degree = this.repo.getProfile().degree;
+    if (degree === '硕士' || degree === '博士') throw new Error('研究生的培养方案和选课在研究生系统里，暂时还读不到。');
+  }
+
+  /** 培养方案完成情况（缓存 1 小时）。属于学业记录，按敏感内容处理 */
+  async programCompletion(opts: { force?: boolean } = {}): Promise<ProgramCompletion> {
+    if (this.repo.getSettings().demoMode) return demoProgram();
+    const cached = this.repo.getKv<ProgramCompletion | null>('program_completion', null);
+    if (!opts.force && cached && Date.now() - Date.parse(cached.updatedAt) < 3_600_000) return cached;
+    this.undergradOnly();
+    const r = await readProgramCompletion(this.reader(), await this.studentId());
+    this.repo.setKv('program_completion', r);
+    return r;
+  }
+
+  /** 选课结果：当前学期、下学期或指定学期选上的课 */
+  async selectedCourses(which = 'current'): Promise<SelectedCourses> {
+    if (this.repo.getSettings().demoMode) return demoSelected(which);
+    this.undergradOnly();
+    return readSelectedCourses(this.reader(), which);
+  }
+
+  /** 绩点排名：只返回本人一条和年级院系总人数 */
+  async gpaRank(): Promise<GpaRank & { note?: string }> {
+    if (this.repo.getSettings().demoMode) return { gpa: 3.62, credits: 48, ranking: 23, total: 186, department: '演示学院', grade: '2025' };
+    const report = await this.grades();
+    const studentId = (report as GradeReport & { studentId?: string }).studentId;
+    if (!studentId) throw new Error('请先查一次成绩。');
+    const mailUser = this.repo.getSettings().mail?.user?.split('@')[0];
+    const number = this.repo.getProfile().studentNumber ?? (mailUser && /^\d{8,12}$/.test(mailUser) ? mailUser : undefined);
+    const rank = await readGpaRank(this.reader(), studentId, number);
+    if (!rank) return { total: 0, note: '教务系统没有提供绩点排名（可能还没开放）。' };
+    if (rank.ranking === undefined) return { ...rank, note: number ? '排名列表里没有找到你的学号。' : '告诉我你的学号，我才能在排名里找到你（学号只存在本机）。' };
+    return rank;
+  }
+
   /** 宿舍电量（10 分钟内重复查询用缓存） */
   async electricity(): Promise<DormElectricity & { at: string }> {
     const cached = this.repo.getKv<(DormElectricity & { at: string }) | null>('dorm_electricity', null);
@@ -414,6 +492,7 @@ export class AppContext {
     };
     if (!demo) await attempt('timetable', () => this.importTimetable());
     await attempt('exams', () => this.importExams());
+    if (!demo) await attempt('grades', () => this.grades({ force: true }));
     await attempt('card', async () => {
       const { balance } = await this.cardBalance();
       if (balance < 30) {
