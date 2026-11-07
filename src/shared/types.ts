@@ -225,6 +225,13 @@ export interface Resource {
   createdAt: string;
 }
 
+export interface ResourceImage {
+  dataUrl: string;
+  mime: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
+}
+
 // ---------- 主动引擎（PRD §5.7、§7.8，参考 dsh-superagent） ----------
 export type TriggerSourceKind = 'elearning' | 'mail' | 'icourse' | 'clock' | 'chat' | 'notice';
 export type TriggerKind =

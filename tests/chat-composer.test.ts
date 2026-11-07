@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CardRef } from '../src/shared/types';
 import { createChatWorkspace, readDraft, writeDraft } from '../src/renderer/src/pages/chat/composer-state';
+import { uploadClipboardImage } from '../src/renderer/src/pages/chat/clipboard-image';
 
 const resource: CardRef = { type: 'resource', id: 'r1', title: '课程资料' };
 function storage(initial?: string) {
@@ -68,6 +69,33 @@ describe('主对话草稿', () => {
 });
 
 describe('主对话附件导入', () => {
+  it('清除草稿期间尚未读完的截图不会继续写入资源库', async () => {
+    const bytes = deferred<ArrayBuffer>();
+    let uploads = 0;
+    const screenshot = { ...file('image.png'), path: '', arrayBuffer: () => bytes.promise };
+    const state = createChatWorkspace<typeof screenshot>({
+      pathForFile: () => '',
+      upload: async () => resource,
+      uploadFromMemory: (file, active) => uploadClipboardImage(file, active, async () => { uploads++; return resource; }),
+    });
+    const importing = state.uploadFiles([screenshot]);
+    state.reset();
+    bytes.resolve(new ArrayBuffer(16));
+    await importing;
+    expect(uploads).toBe(0);
+    expect(state.getSnapshot().draft.refs).toEqual([]);
+  });
+  it('剪贴板图片没有磁盘路径时可通过内存导入，普通文件仍使用原路径', async () => {
+    let pathUploads = 0; let memoryUploads = 0;
+    const state = createChatWorkspace<TestFile>({
+      pathForFile: (file) => file.path,
+      upload: async () => { pathUploads++; return resource; },
+      uploadFromMemory: async () => { memoryUploads++; return { ...resource, id: 'clipboard' }; },
+    });
+    await state.uploadFiles([{ ...file('image.png'), path: '' }, file('notes.xlsx')]);
+    expect(pathUploads).toBe(1); expect(memoryUploads).toBe(1);
+    expect(state.getSnapshot().draft.refs.map((ref) => ref.id)).toEqual(['clipboard', 'r1']);
+  });
   it('并发导入后分别添加引用，成功项不再阻止发送', async () => {
     const a = deferred<CardRef>(); const b = deferred<CardRef>();
     const state = workspace({ upload: (path) => path.endsWith('a.pdf') ? a.promise : b.promise });

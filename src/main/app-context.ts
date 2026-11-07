@@ -2,6 +2,8 @@ import { createCoursesServer } from '@fudaner/mcp-fudan-courses';
 import { createElearningServer, type ElearningClient } from '@fudaner/mcp-fudan-elearning';
 import { createMailServer, type MailClient } from '@fudaner/mcp-fudan-mail';
 import { Db } from './db/db';
+import { dirname, join } from 'node:path';
+import { ResourceImages } from './library/resource-images';
 import { Repo } from './db/repo';
 import { ModelRouter } from './ai/llm';
 import { ChatAgent } from './ai/agent';
@@ -53,6 +55,7 @@ export interface AppDeps {
 
 export class AppContext {
   readonly repo: Repo;
+  readonly images: ResourceImages;
   readonly router: ModelRouter;
   readonly hub = new McpHub();
   readonly executorHub = new McpHub();
@@ -66,10 +69,11 @@ export class AppContext {
 
   constructor(private readonly deps: AppDeps) {
     this.repo = new Repo(new Db(deps.dbPath));
+    this.images = new ResourceImages(this.repo, join(dirname(deps.dbPath), 'attachment-images'));
     this.repo.setCalendar(buildCalendar());
     this.router = new ModelRouter(() => this.repo.getSettings());
     this.engine = new ProactiveEngine(this.repo, this.router, deps.channels);
-    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false));
+    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false), (id) => this.images.read(id));
     this.executor = new TicketExecutor(this.repo, this.router, this.executorHub, deps.channels);
   }
 

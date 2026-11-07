@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CardRef, Resource } from '../../../shared/types';
 import { api, fmtRelative } from '../api';
 import { MarkdownPreview } from '../components/MarkdownPreview';
+import { ResourceImagePreview } from '../components/ResourceImagePreview';
+import { ATTACHMENT_ACCEPT, ATTACHMENT_FORMATS_LABEL } from '../../../shared/attachment-formats';
 
 const KIND: Record<Resource['kind'], string> = { assistant_output: '旦旦做的', upload: '我上传的', replay_note: '回放笔记', courseware: '课件' };
 export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; focus?: { id: string } | null }) {
@@ -108,15 +110,18 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
     }
   };
   const isMarkdown = open?.mime.toLowerCase().split(';')[0].trim() === 'text/markdown';
-  const isDocument = open?.mime === 'application/pdf' || open?.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const isImage = open?.mime.startsWith('image/');
+  const isDocument = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'].includes(open?.mime ?? '');
   const canPreview = isMarkdown || isDocument;
   useEffect(() => {
     if (focus && open?.id === focus.id) view.current?.focus({ preventScroll: true });
   }, [focus, open?.id]);
   return <div className="page library" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void upload(Array.from(e.dataTransfer.files)); }}>
     <header className="page-header"><h1>资源库</h1><button disabled={uploading} onClick={() => fileRef.current?.click()}>{uploading ? '正在上传…' : '上传文件'}</button></header>
-    <input ref={fileRef} type="file" hidden multiple accept=".pdf,.docx,.md,.markdown,.txt,.csv,.json" onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }} />
-    <p className="library-upload-hint muted">把 PDF / Word（.docx）/ Markdown 拖进来，也可点击上传文件。文档按标题、段落和列表整理阅读。</p>
+    <input ref={fileRef} type="file" hidden multiple accept={ATTACHMENT_ACCEPT} onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }} />
+    <p className="library-upload-hint muted">支持{ATTACHMENT_FORMATS_LABEL}，可拖入或点击上传。单文件最大 25 MB，Excel 按工作表、PPT 按幻灯片整理阅读。</p>
     <div className="library-toolbar"><label>课程 <select value={course} onChange={(e) => setCourse(e.target.value)}><option value="">全部课程</option><option value="__none">未关联课程</option>{courseIds.map((id) => <option key={id} value={id}>{courseNames[id] || `课程 ${id}`}</option>)}</select></label><span className="muted small">{visible.length} 个资源</span></div>
     {loadError && <div className="goal-error" role="alert">{loadError}<button onClick={() => void load()}>重试</button></div>}
     {uploading && <p role="status">正在解析文件，请稍候…</p>}
@@ -139,9 +144,9 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
               deleteDialog.current?.showModal();
             }}>删除</button>
           </div>
-          <div className="resource-preview-toolbar"><span className="muted small">{isMarkdown ? 'Markdown 文档' : isDocument ? '文档阅读预览' : '提取的文字内容'}</span>{canPreview && <button className="ghost" aria-pressed={source} onClick={() => setSource(!source)}>{source ? '查看预览' : '查看提取文本'}</button>}</div>
+          <div className="resource-preview-toolbar"><span className="muted small">{isImage ? '图片预览' : isMarkdown ? 'Markdown 文档' : isDocument ? '文档阅读预览' : '提取的文字内容'}</span>{canPreview && <button className="ghost" aria-pressed={source} onClick={() => setSource(!source)}>{source ? '查看预览' : '查看提取文本'}</button>}</div>
           {isDocument && <p className="muted small">按提取结构展示，复杂分栏、合并单元格、公式和图片可能无法完整还原。早先上传的文件需重新上传以使用新版解析。</p>}
-          {!open.text.trim() ? <div className="empty">文件已保存，但没有提取到文字。如果是扫描版 PDF，请先识别文字后再上传。</div> : canPreview && !source ? <MarkdownPreview text={open.text} /> : <pre className="doc">{open.text}</pre>}
+          {isImage ? <ResourceImagePreview id={open.id} title={open.title} /> : !open.text.trim() ? <div className="empty">文件已保存，但没有提取到文字。如果是扫描版 PDF，请先识别文字后再上传。</div> : canPreview && !source ? <MarkdownPreview text={open.text} /> : <pre className="doc">{open.text}</pre>}
         </> : <div className="empty">选择左侧的资源查看内容</div>}
       </div>
     </div>

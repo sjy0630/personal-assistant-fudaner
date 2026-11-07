@@ -628,13 +628,15 @@ export class Repo {
 
   // ---------------- resources ----------------
   addResource(r: { title: string; kind: Resource['kind']; courseId?: string; mime: string; text: string; path?: string }): Resource {
-    const id = newId();
-    this.db.run('INSERT INTO resources (id, title, kind, course_id, mime, path, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      id, r.title, r.kind, r.courseId, r.mime, r.path, r.text, nowIso());
-    const chunks = chunkText(r.text);
-    chunks.forEach((t, i) => this.db.run('INSERT INTO resource_chunks (id, resource_id, seq, text) VALUES (?, ?, ?, ?)', newId(), id, i, t));
-    this.indexForSearch('resource', id, r.title, r.text.slice(0, 20000));
-    return this.getResource(id)!;
+    return this.db.tx(() => {
+      const id = newId();
+      this.db.run('INSERT INTO resources (id, title, kind, course_id, mime, path, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        id, r.title, r.kind, r.courseId, r.mime, r.path, r.text, nowIso());
+      const chunks = chunkText(r.text);
+      chunks.forEach((t, i) => this.db.run('INSERT INTO resource_chunks (id, resource_id, seq, text) VALUES (?, ?, ?, ?)', newId(), id, i, t));
+      this.indexForSearch('resource', id, r.title, r.text.slice(0, 20000));
+      return this.getResource(id)!;
+    });
   }
   getResource(id: string): Resource | undefined {
     const r = this.db.get<Row>('SELECT * FROM resources WHERE id = ?', id);
@@ -649,6 +651,9 @@ export class Repo {
   }
   listResources(courseId?: string): Resource[] {
     return this.db.all<Row>(`SELECT * FROM resources ${courseId ? 'WHERE course_id = ?' : ''} ORDER BY created_at DESC`, ...(courseId ? [courseId] : [])).map(mapResource);
+  }
+  getResourceFilePath(id: string): string | undefined {
+    return this.db.get<{ path: string | null }>('SELECT path FROM resources WHERE id=?', id)?.path ?? undefined;
   }
 
   // ---------------- search ----------------
