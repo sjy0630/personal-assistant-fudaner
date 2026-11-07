@@ -25,10 +25,24 @@ export function parseElectricity(body: string): DormElectricity {
   };
 }
 
+/**
+ * 先用后台请求走单点登录；统一身份认证最后一步靠页面脚本跳回，后台请求走不完时，
+ * 在隐藏窗口里打开单点登录入口（脚本会执行），拿到电量系统的会话后再读。
+ */
 export async function readElectricity(reader: CampusReader): Promise<DormElectricity> {
-  await reader.getText(ZLAPP_SSO);
-  const res = await reader.getText(ZLAPP_ELEC);
-  // 单点登录没成功时会被带到它自己的登录页
-  if (/\/uc\/wap\/login/.test(res.url) || /<html/i.test(res.text.slice(0, 200))) throw new NeedLoginError('jwfw');
+  const notLoggedIn = (r: { url: string; text: string }) => /\/uc\/wap\/login/.test(r.url) || /<html/i.test(r.text.slice(0, 300));
+  await reader.getText(ZLAPP_SSO).catch(() => undefined);
+  let res = await reader.getText(ZLAPP_ELEC);
+  if (notLoggedIn(res) && reader.render) {
+    await reader.render(ZLAPP_SSO, (_html, url) => {
+      try {
+        const u = new URL(url);
+        return u.hostname === 'zlapp.fudan.edu.cn' && !u.pathname.includes('/uc/wap/login') && !u.pathname.includes('/sso/');
+      } catch { return false; }
+    });
+    res = await reader.getText(ZLAPP_ELEC);
+  }
+  // 还是被带到它自己的登录页：复旦账号登录过期
+  if (notLoggedIn(res)) throw new NeedLoginError('jwfw');
   return parseElectricity(res.text);
 }

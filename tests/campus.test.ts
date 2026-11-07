@@ -114,6 +114,17 @@ describe('导入', () => {
     expect(repo.listCourses().filter((c) => c.name === '数据结构')).toHaveLength(1);
   });
 
+  it('第一次访问停在单点登录跳转页时再读一次；被带到登录页时要求重新登录', async () => {
+    const { repo } = context();
+    let first = true;
+    const r = await importTimetable(repo, { getText: async (url) => {
+      if (url.endsWith('/course-table') && first) { first = false; return { url, status: 200, text: '<html>正在跳转…</html>' }; }
+      return { url, status: 200, text: url.endsWith('/course-table') ? semesterPage : printData };
+    } });
+    expect(r.courses).toBe(2);
+    await expect(importTimetable(repo, { getText: async (url) => ({ url: 'https://id.fudan.edu.cn/idp/authCenter/authenticate', status: 200, text: '<html>统一身份认证</html>' }) })).rejects.toBeInstanceOf(NeedLoginError);
+  });
+
   it('研究生读研究生选课系统', async () => {
     const { repo } = context();
     repo.setProfile({ degree: '硕士' });
