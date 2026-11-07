@@ -9,15 +9,34 @@ const FILTERS = [
   { key: 'mail_action', label: '待处理邮件' },
   { key: 'opportunity', label: '活动与机会' },
   { key: 'campus_notice', label: '学校通知' },
+  { key: 'news', label: '资讯' },
   { key: 'suggest_ticket', label: '建议' },
 ];
-const TYPE_ICON: Record<string, string> = { assignment: '📝', announcement: '📢', course_mail: '📧', mail_action: '📮', opportunity: '🌏', campus_notice: '🏫', replay: '🎬', insight: '💡', suggest_ticket: '🤝' };
+const TYPE_ICON: Record<string, string> = { assignment: '📝', announcement: '📢', course_mail: '📧', mail_action: '📮', opportunity: '🌏', campus_notice: '🏫', news: '📰', replay: '🎬', insight: '💡', suggest_ticket: '🤝' };
 
 /** 动态（PRD §5.2）：助理推给你的卡片，每张都说明理由，可以引用到对话 */
 export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?: { id: string } | null }) {
   const [cards, setCards] = useState<FeedCard[]>([]);
   const [filter, setFilter] = useState('');
   const [actionError, setActionError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState('');
+  const [webOn, setWebOn] = useState(true);
+  useEffect(() => { void api.settings.get().then((s) => setWebOn(s.webCuration !== false)).catch(() => undefined); }, []);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshNote('');
+    try {
+      const r = await api.feed.refresh();
+      setRefreshNote(r.skipped === '没有配置模型' ? '整理动态需要先在「设置 → 模型」配置模型。' : r.campus + r.news ? `新整理了 ${r.campus + r.news} 条。` : '暂时没有新的值得推荐的内容。');
+      load();
+    } catch {
+      setRefreshNote('这次没有整理成功，稍后再试。');
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const load = () => void api.feed.list({ type: filter || undefined, includeId: focus?.id }).then(setCards);
   useEffect(() => { load(); return api.on('feed:changed', load); }, [filter, focus]);
   const target = useRef<HTMLElement>(null);
@@ -62,8 +81,15 @@ export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?
         <h1>动态</h1>
         <div className="filters">{FILTERS.map((f) => <button key={f.key} className={filter === f.key ? 'chip active' : 'chip'} onClick={() => setFilter(f.key)}>{f.label}</button>)}</div>
       </header>
+      <div className="feed-tools">
+        <button type="button" onClick={() => void refresh()} disabled={refreshing}>{refreshing ? '正在整理…' : '整理一下动态'}</button>
+        <label className="muted" title="开启后，旦旦每隔几小时按你的兴趣联网搜索资讯，只把检索词发给必应搜索">
+          <input type="checkbox" checked={webOn} onChange={(e) => { const on = e.target.checked; setWebOn(on); void api.settings.set({ webCuration: on }); }} /> 联网找资讯
+        </label>
+        {refreshNote && <span className="muted" role="status">{refreshNote}</span>}
+      </div>
       {actionError && <p role="alert" className="chat-error">{actionError}</p>}
-      {cards.length === 0 && <div className="empty">暂时没有新动态。旦旦会替你盯着 eLearning 和邮箱。</div>}
+      {cards.length === 0 && <div className="empty">暂时没有新动态。旦旦会替你盯着 eLearning、邮箱、学校通知和讲座，白天每隔几小时还会按你的兴趣整理一批资讯；也可以点「整理一下动态」。</div>}
       <div className="feed">
         {cards.map((c) => (
           <article key={c.id} className={focus?.id === c.id ? 'feed-card reference-highlight' : 'feed-card'} ref={focus?.id === c.id ? target : undefined} tabIndex={focus?.id === c.id ? -1 : undefined}>

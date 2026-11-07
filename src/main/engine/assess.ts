@@ -149,6 +149,7 @@ const BASE: Record<Trigger['kind'], Rule> = {
       reason: '一周内有考试', ticket: { title: `复习计划：${p(t, 'course')}`, request: `根据「${p(t, 'course')}」的考试时间（${where}）、我的课表和空闲时段，排一份到考试前的复习计划` },
     };
   },
+  grade_new: (t) => ({ value: 0.65, urgency: 0.4, action: 'chat', draft: `「${p(t, 'course')}」出成绩了：${p(t, 'grade')}。`, reason: '新出的成绩' }),
   power_low: (t) => ({ value: 0.6, urgency: 0.5, action: 'chat', draft: `宿舍（${p(t, 'room')}）电量只剩 ${p(t, 'remaining')} 度了，记得充电费，别半夜断电。`, reason: '宿舍电量低于 10 度' }),
   card_low: (t) => ({ value: 0.5, urgency: 0.3, action: 'card', draft: `校园卡余额只剩 ¥${Number(t.payload.balance).toFixed(2)}，记得充值，别在食堂门口卡住。`, reason: '校园卡余额低于 30 元' }),
   auth_expired: () => ({ value: 0.8, urgency: 0.6, action: 'chat_notify', draft: '复旦账号的登录过期了，eLearning 暂时同步不了。点下面的按钮重新登录一下就好。', reason: 'UIS 登录过期，无法同步' }),

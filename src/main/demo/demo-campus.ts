@@ -1,5 +1,8 @@
 import type { LiteratureRecord } from '../sources/library-search';
 import type { DormElectricity } from '../sources/dorm';
+import type { WebResult } from '../sources/web-search';
+import type { GradeReport } from '../sources/grades';
+import type { ProgramCompletion, SelectedCourses } from '../sources/academic';
 import type { Repo } from '../db/repo';
 import type { LibraryStatus } from '../sources/campus-life';
 
@@ -80,5 +83,47 @@ export function demoTreehole() {
         { teachers: '张老师（虚构）', term: '2025 学年第 1 学期', title: '要花时间', content: '每周要留出一晚上写 Lab，提前开始就不难。（虚构评价）', time: '2026-01-22', rating: { overall: 4, content: 4, workload: 2, assessment: 4 }, votes: 9, remark: 7 },
       ],
     }),
+  };
+}
+
+/** 演示用的联网搜索结果（虚构） */
+export async function demoSearch(query: string): Promise<WebResult[]> {
+  return [
+    { title: `${query}：本周值得关注的三件事（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/1`, snippet: `虚构资讯：和「${query}」有关的最新进展汇总。`, date: '1 天前', site: '演示资讯' },
+    { title: `${query} 入门指南（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/2`, snippet: `虚构内容：适合本科生了解「${query}」的入门资料。`, date: '3 天前', site: '演示博客' },
+  ];
+}
+
+/** 演示成绩（虚构） */
+export function demoGrades(): GradeReport {
+  const courses = [
+    { course: '数学分析 II（演示）', credits: 5, grade: 'A-', gp: 3.7, semester: '2025-2026学年2学期' },
+    { course: '程序设计（演示）', credits: 3, grade: 'A', gp: 4, semester: '2025-2026学年2学期' },
+    { course: '大学英语（演示）', credits: 2, grade: 'B+', gp: 3.3, semester: '2025-2026学年2学期' },
+    { course: '形势与政策（演示）', credits: 0.5, grade: 'P', semester: '2025-2026学年2学期' },
+  ];
+  return { semesters: [{ id: 'demo', name: '2025-2026学年2学期', courses }], gpa: 3.73, credits: 10.5, updatedAt: new Date().toISOString() };
+}
+
+/** 演示培养方案完成情况（虚构） */
+export function demoProgram(): ProgramCompletion {
+  const modules = [
+    { name: '通识教育（演示）', required: 46, earned: 30, remaining: 16 },
+    { name: '专业必修（演示）', required: 60, earned: 34, remaining: 26 },
+    { name: '专业选修（演示）', required: 20, earned: 6, remaining: 14 },
+    { name: '任意选修（演示）', required: 10, earned: 4, remaining: 6 },
+  ];
+  return { modules, text: modules.map((m) => `${m.name} | 要求 ${m.required} | 已获 ${m.earned}`).join('\n'), source: 'page', updatedAt: new Date().toISOString() };
+}
+
+/** 演示选课结果（虚构） */
+export function demoSelected(which: string): SelectedCourses {
+  return {
+    semester: which === 'next' ? '2026-2027学年2学期（演示）' : '2026-2027学年1学期（演示）',
+    courses: [
+      { course: '数据结构（演示）', teachers: ['张老师'], credits: 3, sessions: ['周一 第6–7节 H2215 1–16周'] },
+      { course: '线性代数（演示）', teachers: ['王老师'], credits: 4, sessions: ['周三 第1–2节 H3109 1–16周', '周五 第1–2节 H3109 1–16周'] },
+    ],
+    totalCredits: 7,
   };
 }

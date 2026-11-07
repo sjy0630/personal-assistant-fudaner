@@ -104,6 +104,8 @@ describe('旦旦知道连接状态和登录方法', () => {
     expect(prompt).toContain('客户端专用密码');
     expect(prompt).toContain('eLearning（复旦账号）：登录已过期');
     expect(prompt).toContain('学生邮箱：未配置');
+    // 历史消息里的旧说法不能覆盖当前状态
+    expect(prompt).toContain('对话历史里之前说过的「登录过期 / 没登录」可能已经过时');
     await ctx.close();
   });
 

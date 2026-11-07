@@ -9,12 +9,12 @@ import { demoLateMail, seedDemoProfile } from './demo/demo';
 import { NOTICE_SOURCES } from './notices/sources';
 import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
 import { nextOccurrence, validateRepeat } from './engine/reminders';
-import { enabledNoticeSources } from './notices/sync';
+import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile, parseImageBytes, type ParsedFile } from './library/parse';
 import { buildToday } from './today';
 import { OpenAiCompatClient } from './ai/llm';
-import { resolveChatReference } from './chat/references';
+import { resolveChatReference, safeExternalUrl } from './chat/references';
 
 /**
  * 把 FudanerApi（src/shared/ipc.ts）逐个映射到主进程实现。
@@ -23,6 +23,8 @@ import { resolveChatReference } from './chat/references';
 export function registerIpc(ctx: AppContext, opts: {
   auth: AuthManager; window: () => BrowserWindow | null;
   treehole?: { login(email: string, password: string): Promise<void>; logout(): void; loggedIn(): boolean };
+  downloadsDir?: () => string;
+  revealFile?: (path: string) => void;
   demo: { elearning: DemoElearningClient; mail: DemoMailClient };
   secrets: { setMailPassword(p: string): void; hasMailPassword(): boolean };
   restartScheduler(): void;
@@ -85,6 +87,16 @@ export function registerIpc(ctx: AppContext, opts: {
         return;
       }
       if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
+      // 打开下载的课件所在文件夹：只允许应用自己的下载文件夹
+      if (action === 'reveal_file' && typeof data?.path === 'string') {
+        if (!opts.revealFile || !opts.downloadsDir) throw new Error('当前环境不能打开文件夹。');
+        const { resolve, sep } = await import('node:path');
+        const root = resolve(opts.downloadsDir(), 'Fudaner') + sep;
+        const target = resolve(data.path);
+        if (!target.startsWith(root)) throw new Error('只能打开 Fudaner 下载的文件。');
+        opts.revealFile(target);
+        return;
+      }
       if (action === 'say' && typeof data?.text === 'string') {
         await ctx.agent.handleUserMessage(data.text);
         markUsed();
@@ -120,10 +132,23 @@ export function registerIpc(ctx: AppContext, opts: {
     }
     if (reason) repo.addMemory({ type: 'interest', content: `不关心：${reason}`, source: 'feedback' });
   });
+  // 现在整理一次动态（校园 + 联网资讯）
+  handle<[], unknown>('feed.refresh', async () => {
+    const r = await ctx.curator.run(new Date(), { force: true });
+    opts.onChanged?.('feed');
+    return r;
+  });
   handle<[string, string], void>('feed.act', async (id, action) => {
     const card = repo.getFeedCard(id);
     if (!card || card.status === 'dismissed') throw new Error('这条动态已不存在或已忽略。');
     const a = card.actions.find((x) => x.action === action);
+    // 资讯卡片：打开原文（只允许 http / https 链接）
+    if (action === 'open_url' && typeof a?.payload?.url === 'string') {
+      const url = safeExternalUrl(a.payload.url);
+      if (!url || !opts.openExternal) throw new Error('这个链接打不开。');
+      await opts.openExternal(url);
+      return;
+    }
     if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
       decideTicket(a.payload.ticketId, true, id);
     }
@@ -201,12 +226,14 @@ export function registerIpc(ctx: AppContext, opts: {
     const cur = repo.getSettings();
     // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
     delete patch.externalMcp;
+    const finishingOnboarding = patch.onboardingCompleted === true && !cur.onboardingCompleted;
     for (const k of ['cloud', 'local'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
     }
     repo.setSettings(patch);
     opts.restartScheduler();
+    if (finishingOnboarding) setTimeout(() => ctx.introduceNoticeSources(), 1500);
   });
   handle<[string], void>('settings.setMailPassword', async (p) => opts.secrets.setMailPassword(p));
   handle<['cloud' | 'local'], { ok: boolean; message: string }>('settings.testModel', async (which) => {
@@ -221,7 +248,14 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
   handle('platforms.status', async (): Promise<PlatformState[]> => ctx.platformStatus(true));
-  handle('platforms.login', async () => opts.auth.requestLogin());
+  // 登录成功后马上在后台同步一次（作业、课表、考试、校园卡……），不用再手动点「立即同步」
+  handle('platforms.login', async () => {
+    await opts.auth.requestLogin();
+    void ctx.syncAll(new Date(), { force: true })
+      .then(() => ctx.engine.tick())
+      .then(() => { opts.onChanged?.('feed'); opts.onChanged?.('goals'); })
+      .catch((e) => console.error('[sync after login]', e));
+  });
   handle('platforms.syncNow', async () => {
     const result = await ctx.syncAll(new Date(), { force: true });
     await ctx.engine.tick();
@@ -241,6 +275,14 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
   handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
   handle<[], unknown>('campus.electricity', () => campusCall(() => ctx.electricity()));
+  handle<[], unknown>('campus.program', () => campusCall(() => ctx.programCompletion({ force: true })));
+  handle<[string?], unknown>('campus.selected', (which) => campusCall(() => ctx.selectedCourses(which || 'current')));
+  handle<[], unknown>('campus.grades', () => campusCall(async () => {
+    const r = await ctx.grades({ force: true });
+    let rank: unknown;
+    try { rank = await ctx.gpaRank(); } catch { rank = undefined; }
+    return { gpa: r.gpa, credits: r.credits, semesters: r.semesters.length, courses: r.semesters.reduce((n, s) => n + s.courses.length, 0), rank, updatedAt: r.updatedAt };
+  }));
   // 树洞账号：密码只用来换令牌，不保存
   handle<[], unknown>('treehole.status', async () => ({ loggedIn: repo.getSettings().demoMode || !!opts.treehole?.loggedIn(), demo: repo.getSettings().demoMode }));
   handle<[string, string], void>('treehole.login', (email, password) => campusCall(async () => {
@@ -278,9 +320,12 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
   handle<[], unknown>('notices.sources', async () => {
-    const enabled = new Set(enabledNoticeSources(repo).map((s) => s.id));
+    const state = noticeFollowState(repo);
     const errors = repo.getKv<string[]>('notice_errors', []);
-    return NOTICE_SOURCES.map((s) => ({ ...s, enabled: enabled.has(s.id), error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) }));
+    return NOTICE_SOURCES.map((s) => {
+      const f = state.following.find((x) => x.id === s.id);
+      return { ...s, enabled: !!f, why: f?.why, auto: state.mode === 'auto', error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) };
+    });
   });
   handle<[string?], unknown>('notices.list', async (query) => repo.listNotices({ query, limit: 50 }));
 

@@ -5,6 +5,7 @@ import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
 import { AppContext } from './app-context';
 import { LibrarySearch } from './sources/library-search';
 import { TreeholeClient, type HoleTokens } from './sources/treehole';
+import { webSearch } from './sources/web-search';
 import { AuthManager } from './auth/auth-manager';
 import { DemoElearningClient, DemoMailClient, seedDemoProfile } from './demo/demo';
 import type { Channels } from './engine/channels';
@@ -136,16 +137,21 @@ app.whenReady().then(async () => {
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
     fetchText: readPublicPage,
+    downloadsDir: () => app.getPath('downloads'),
     library: new LibrarySearch(async (url, headers) => {
       const res = await net.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
       return { status: res.status, text: await res.text() };
     }),
     treehole: () => treehole,
-    // 教务系统、校园卡：复用统一身份认证会话；eLearning 登录有效时才去读，避免没登录时反复碰壁
-    campusReader: () => (ctx.repo.getSettings().demoMode || auth.cachedStatus('elearning') !== 'ok' ? null : {
+    webSearch: (q) => webSearch(renderSearchPage, q, { recent: 'week' }),
+    // 教务系统、校园卡：复用统一身份认证会话。不按本地缓存的状态拦截（刚启动时还没检查过，会被误当成没登录），
+    // 真没登录时读取会抛出 NeedLoginError，再提示用户登录
+    campusReader: () => (ctx.repo.getSettings().demoMode ? null : {
       getText: (url) => auth.getText('jwfw', url),
       render: (url, ready) => auth.renderPage('jwfw', url, ready),
     }),
+    // 每天的自动更新前先确认一次登录（会实际访问一次身份接口），没登录就不去碰壁
+    campusLoggedIn: async () => (await auth.status('elearning')) === 'ok',
     postPublic: async (url) => {
       const res = await net.fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
       return { status: res.status, text: await res.text() };
@@ -155,7 +161,7 @@ app.whenReady().then(async () => {
       if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' as const }));
       const elearning = probe ? await auth.status('elearning') : auth.cachedStatus('elearning');
       return [
-        elearning ? { platform: 'elearning', status: elearning } : { platform: 'elearning', status: 'unavailable', message: '本次启动后还没检查过' },
+        elearning ? { platform: 'elearning', status: elearning } : { platform: 'elearning', status: 'unavailable', message: '正在检查，状态未知；不要据此说用户没登录，直接用工具查询' },
         { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
         { platform: 'mail', status: s.mail?.user && sec().hasMailPassword() ? 'ok' : 'not_configured' },
       ];
@@ -174,6 +180,10 @@ app.whenReady().then(async () => {
   await ctx.start();
   // 外部 MCP 服务在后台连接，不拖慢启动
   void ctx.reloadExternal().catch(() => undefined);
+  // 老用户第一次用上这个版本时，也介绍一次自动关注的官网通知
+  setTimeout(() => ctx.introduceNoticeSources(), 5000);
+  // 启动时就检查一次复旦账号登录状态，旦旦从第一句话起就知道连没连上
+  if (!ctx.repo.getSettings().demoMode) void auth.status('elearning').catch(() => undefined);
 
   // 调度：引擎每 10 秒处理一次事件；平台每 30 分钟同步一次（加随机抖动，PRD §9）
   let paused = 0;
@@ -191,12 +201,14 @@ app.whenReady().then(async () => {
       // 定时提醒 / 定时任务（用户自己设的，暂停提醒期间顺延）
       await ctx.runReminders().catch((e) => console.error('[reminders]', e));
       await ctx.engine.tick().catch((e) => console.error('[engine]', e));
+      // 动态策展：白天每 4 小时一次，在后台进行，不挡住提醒和研判
+      void ctx.curator.run().catch((e) => console.error('[curator]', e));
       await ctx.executor.runNext().catch((e) => console.error('[executor]', e));
     }, 10_000);
     scheduleSync();
   };
 
-  registerIpc(ctx, { auth, treehole, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
+  registerIpc(ctx, { auth, treehole, downloadsDir: () => app.getPath('downloads'), revealFile: (p) => shell.showItemInFolder(p), window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
     openExternal: (url) => shell.openExternal(url), onMessageUpdated: (msg) => send('chat:updated', msg),
     copyText: (text) => clipboard.writeText(text), onChatCleared: () => send('chat:cleared'), onChanged: channels.changed,
   });
@@ -240,4 +252,26 @@ async function readPublicPage(url: string): Promise<{ url: string; status: numbe
   let text: string;
   try { text = new TextDecoder(charset).decode(buf); } catch { text = new TextDecoder('utf-8').decode(buf); }
   return { url: res.url || url, status: res.status, text };
+}
+
+/**
+ * 用隐藏的浏览器窗口打开搜索结果页（独立的会话，有自己的 Cookie），和普通浏览器访问一样，
+ * 搜索引擎不容易把它当成机器人。只读页面内容。
+ */
+async function renderSearchPage(url: string): Promise<{ status: number; url: string; text: string }> {
+  const win = new BrowserWindow({ show: false, webPreferences: { partition: 'persist:web-search', contextIsolation: true, nodeIntegration: false, sandbox: true, javascript: true } });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  try {
+    await win.loadURL(url, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36' }).catch(() => undefined);
+    let html = '';
+    for (let i = 0; i < 16; i++) {
+      if (win.isDestroyed()) break;
+      html = await win.webContents.executeJavaScript('document.documentElement.outerHTML').catch(() => '') as string;
+      if (/b_algo|b_no/.test(html)) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return { status: 200, url: win.isDestroyed() ? url : win.webContents.getURL(), text: html };
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
 }

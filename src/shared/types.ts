@@ -158,6 +158,8 @@ export interface Profile {
   grade?: string;
   degree?: '本科' | '硕士' | '博士';
   freeText?: string;
+  /** 学号：用来在教务系统的绩点排名里找到本人（只存本机） */
+  studentNumber?: string;
   assistantName: string;
   style: 'warm' | 'concise' | 'playful';
   /** 主动程度：对应注意力预算 少 / 中 / 多 */
@@ -195,7 +197,7 @@ export interface Task {
 export type VerifyCondition = { type: 'assignment_submitted'; itemId: string };
 
 // ---------- 动态 ----------
-export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'campus_notice' | 'replay' | 'insight' | 'suggest_ticket';
+export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'campus_notice' | 'news' | 'replay' | 'insight' | 'suggest_ticket';
 export interface FeedCard {
   id: string;
   type: FeedCardType;
@@ -245,7 +247,8 @@ export type TriggerKind =
   | 'notice_new'
   | 'exam_soon'
   | 'card_low'
-  | 'power_low';
+  | 'power_low'
+  | 'grade_new';
 
 export interface Trigger {
   id: string;
@@ -350,8 +353,10 @@ export interface Settings {
   mail?: { host: string; port: number; user: string };
   /** 活动订阅源（RSS / Atom）：公众号转成的 RSS 等 */
   feeds?: FeedSource[];
-  /** 关注的学校和院系官网通知来源 id；未设置时默认教务处 + 本人院系 */
-  noticeSources?: string[];
+  /** 关注的学校和院系官网通知来源 id；未设置（或 null）时由旦旦按院系、学历和兴趣自动选择 */
+  noticeSources?: string[] | null;
+  /** 动态：定时联网找用户可能感兴趣的资讯（只把检索词发给搜索引擎），默认开启 */
+  webCuration?: boolean;
   /** 接入的外部 MCP 服务（社区做的复旦校园服务等），见 src/main/mcp/external.ts */
   externalMcp?: ExternalMcpConfig[];
 }

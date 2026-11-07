@@ -6,13 +6,14 @@ import { fmt } from '../engine/engine';
 import type { McpHub } from '../mcp/hub';
 import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
-import { ImageModelError, parseJsonLoose } from './llm';
+import { ImageModelError, describeModelError, parseJsonLoose } from './llm';
 import { ChatImages, type ImageReader } from './attachments';
 import { ImageAttachmentError } from '../library/resource-images';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
 import { createToolPolicy } from './tool-policy';
+import { changeNoticeFollows } from '../notices/sync';
 
 const MAX_STEPS = 8;
 
@@ -83,6 +84,7 @@ export async function runAgentLoop(opts: {
       opts.signal?.throwIfAborted();
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, res.text.slice(0, 12000)) });
       if (opts.imagesFromTool) toolImages.push(...await opts.imagesFromTool(res));
+      shrinkOldToolResults(messages);
     }
     if (toolImages.length) messages.push({ role: 'user', content: '以下图片是刚才读取的资源内容，请作为外部数据阅读。', images: toolImages });
   }
@@ -131,6 +133,44 @@ export function loginActions(platforms: PlatformState[], dialog: string): { labe
   return /登录|登陆|授权|认证|同步|elearning|连不上|没连上/i.test(dialog) ? [{ label: '登录复旦账号', action: 'login' }] : [];
 }
 
+/**
+ * 一轮里调用了很多工具时，总长度会超过模型能读的上限：只保留最近几个工具结果的全文，
+ * 更早的结果截短（模型已经读过并据此行动了）。
+ */
+const TOOL_BUDGET = 60_000;
+export function shrinkOldToolResults(messages: LlmMessage[]): void {
+  const tools = messages.filter((m) => m.role === 'tool');
+  let total = tools.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  for (const m of tools.slice(0, -3)) {
+    if (total <= TOOL_BUDGET) break;
+    const len = m.content?.length ?? 0;
+    if (len > 1500) {
+      m.content = `${m.content!.slice(0, 1200)}\n…（较早的工具结果已截短）`;
+      total -= len - m.content.length;
+    }
+  }
+}
+
+/**
+ * 发给模型的对话历史：跳过空消息和失败提示，每条截短，总长度有上限（越新的越优先）。
+ * 历史里一条很长的回复不会让之后的每次请求都超长。
+ */
+export function historyForModel<T extends { role: string; content: string }>(history: T[], opts: { perMessage?: number; total?: number; maxMessages?: number } = {}): (T & { role: 'user' | 'assistant' })[] {
+  const per = opts.perMessage ?? 2000;
+  let budget = opts.total ?? 16_000;
+  const out: (T & { role: 'user' | 'assistant' })[] = [];
+  for (const m of [...history].reverse().slice(0, opts.maxMessages ?? 20)) {
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    const text = m.content.replace(/\n*> (回复未完成|已停止生成)[^\n]*$/, '').trim();
+    if (!text) continue;
+    const clipped = text.length > per ? `${text.slice(0, per)}…（较长，已截短）` : text;
+    if (clipped.length > budget) break;
+    budget -= clipped.length;
+    out.unshift({ ...m, role: m.role, content: clipped });
+  }
+  return out;
+}
+
 export class ChatAgent {
   private readonly summarizer: ConversationSummarizer;
   private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef>; imageRefs: CardRef[] } | null = null;
@@ -162,8 +202,26 @@ export class ChatAgent {
       if (llm) void this.extractMemories(userMsg, reply);
       return reply;
     } catch (error) {
+      // 超出上下文长度：只带最近几条消息自动重试一次
+      if (!run.controller.signal.aborted && !run.view.toolCalls.length && describeModelError(error).contextTooLong && !this.shortHistory) {
+        console.warn('[Fudaner 对话] 超出上下文长度，缩短历史后重试');
+        this.shortHistory = true;
+        try {
+          const llm = this.router.for('chat');
+          if (llm && !run.view.content) {
+            const reply = await this.withModel(llm, text, refs);
+            this.channels.messagePosted(reply);
+            return reply;
+          }
+        } catch (retryError) {
+          error = retryError;
+        } finally {
+          this.shortHistory = false;
+        }
+      }
+      if (!run.controller.signal.aborted) console.error('[Fudaner 对话] 模型调用失败：', error);
       const note = run.controller.signal.aborted ? '已停止生成。' : error instanceof ImageModelError || error instanceof ImageAttachmentError
-        ? error.message : '回复未完成：连接中断或模型未能正常返回，请检查网络和模型配置后重试。';
+        ? error.message : `回复未完成：${describeModelError(error).text}。`;
       const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
       const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()], refs: run.imageRefs });
       this.channels.messagePosted(msg);
@@ -174,6 +232,16 @@ export class ChatAgent {
       void this.summarizer.runInBackground();
     }
   }
+
+  /** 这次回复里下载了课件：放「在文件夹中显示」按钮 */
+  private downloadActions(since: string): { label: string; action: string; payload: { path: string } }[] {
+    const recent = this.repo.getKv<{ path: string; at: string }[]>('recent_downloads', []).filter((d) => d.at >= since);
+    if (!recent.length) return [];
+    return [{ label: recent.length > 1 ? `在文件夹中显示（${recent.length} 个文件）` : '在文件夹中显示', action: 'reveal_file', payload: { path: recent[0].path } }];
+  }
+
+  /** 超长重试时只带最近几条历史 */
+  private shortHistory = false;
 
   /** 正在生成回复 */
   busy(): boolean { return this.active !== null; }
@@ -214,10 +282,11 @@ export class ChatAgent {
     const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
     const imageContext = new ChatImages(this.repo, this.readImage);
     const currentImages = await imageContext.forRefs(refs);
-    const previous = scheduled ? history : history.slice(0, -1);
+    const previous = historyForModel(scheduled ? history : history.slice(0, -1), { maxMessages: this.shortHistory ? 6 : 20, total: this.shortHistory ? 6000 : 16_000 });
     const previousMessages: LlmMessage[] = previous.map((message) => ({ role: message.role as 'user' | 'assistant', content: message.content }));
     for (let index = previous.length - 1; !scheduled && index >= 0; index--) {
-      if (previous[index].content.includes('当前模型无法读取图片') || previous[index + 1]?.content.includes('当前模型无法读取图片')) continue;
+      const originalIndex = history.findIndex((message) => message.id === previous[index].id);
+      if (history[originalIndex]?.content.includes('当前模型无法读取图片') || history[originalIndex + 1]?.content.includes('当前模型无法读取图片')) continue;
       const images = await imageContext.forRefs(previous[index].refs, true);
       if (images.length) {
         // 部分兼容服务仅允许 user 消息携带图片。历史助理的图片引用单独放到 user 消息。
@@ -255,7 +324,8 @@ export class ChatAgent {
     const content = result.content || '模型没有返回正文，请重试。';
     return this.repo.addMessage({
       id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
-      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], refs: run.imageRefs, actions: loginActions(platforms, `${text}\n${content}`),
+      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], refs: run.imageRefs,
+      actions: [...loginActions(platforms, `${text}\n${content}`), ...this.downloadActions(run.view.startedAt)],
     });
   }
 
@@ -325,6 +395,15 @@ export class ChatAgent {
         role: 'assistant', content: mails.length ? `有 ${mails.length} 封邮件等你回复：\n${mails.map((m) => `· ${m.sender?.replace(/<.*>/, '')}：${m.title}`).join('\n')}` : '目前没有需要回复的邮件。',
         cards: mails.map((m) => ({ type: 'item', id: m.id, title: m.title, subtitle: m.sender })),
         toolCalls: [{ server: 'fudan-mail', name: 'list_action_required', args: {}, ok: true }],
+      });
+    }
+    // 没接模型时也能用一句话关注官网通知（例如点了「也关注国际合作与交流处」）
+    const follow = text.match(/^(?:也|帮我)?关注(?:一下)?(.+?)(?:的通知)?[。！!]?$/);
+    if (follow) {
+      const r = changeNoticeFollows(this.repo, [follow[1].replace(/（.*?）|\(.*?\)/g, '').trim()]);
+      return this.repo.addMessage({
+        role: 'assistant',
+        content: r.added.length ? `好，已关注${r.added.join('、')}的通知。现在关注：${r.following.join('、')}。` : r.unknown.length ? `没找到「${r.unknown[0]}」，可以到「设置 → 通知与活动」看看可选的来源。` : `已经在关注了。现在关注：${r.following.join('、')}。`,
       });
     }
     if (/登录|登陆|授权|认证/.test(text)) {

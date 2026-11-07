@@ -46,6 +46,23 @@ export interface CanvasAnnouncement {
   htmlUrl: string;
 }
 
+/** 课程文件（课件、讲义等） */
+export interface CanvasFile {
+  id: string;
+  name: string;
+  size?: number;
+  contentType?: string;
+  updatedAt?: string;
+  /** 所在文件夹或单元，例如「课件」「第 5 讲」 */
+  folder?: string;
+}
+
+/** 下载到内存的文件内容 */
+export interface DownloadedFile { name: string; contentType?: string; data: Uint8Array }
+
+/** 单个文件最大 200 MB，再大的请用户在网页上下载 */
+export const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
+
 /** 连接器的平台客户端接口。真实实现和演示实现都满足它。 */
 export interface ElearningClient {
   listCourses(): Promise<CanvasCourse[]>;
@@ -53,6 +70,10 @@ export interface ElearningClient {
   listAnnouncements(courseIds: string[], since?: string): Promise<CanvasAnnouncement[]>;
   /** 轻量检查会话是否有效 */
   ping(): Promise<boolean>;
+  /** 课程文件列表（只读） */
+  listFiles?(courseId: string, search?: string): Promise<CanvasFile[]>;
+  /** 下载一个课程文件（只读） */
+  downloadFile?(fileId: string): Promise<DownloadedFile>;
 }
 
 /** 通过 UIS 共享会话访问 Canvas REST API 的真实实现（只读）。 */
@@ -115,6 +136,15 @@ export class CanvasClient implements ElearningClient {
       url = next ? new URL(next, url) : undefined;
     }
     return rows as T;
+  }
+
+  /** 返回单个对象的接口（例如某个文件的信息） */
+  private async getObject<T>(path: string): Promise<T> {
+    const res = await this.request(new URL(`/api/v1${path}`, this.base).href);
+    if (!res.headers.get('content-type')?.includes('json')) throw new Error('eLearning 未返回接口数据，请重新登录后同步');
+    const data: unknown = await res.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('eLearning 返回的数据格式不正确');
+    return data as T;
   }
 
   async ping(): Promise<boolean> {
@@ -210,6 +240,59 @@ export class CanvasClient implements ElearningClient {
       updatedAt: a.updated_at,
       markedDone: planner.has(String(a.id)) || modules.has(String(a.id)) || a.submission?.excused === true,
     }));
+  }
+
+  /**
+   * 课程文件。先读「文件」栏目；老师把「文件」栏目隐藏时（没有权限），改从「单元」里找文件条目。
+   */
+  async listFiles(courseId: string, search?: string): Promise<CanvasFile[]> {
+    type RawFile = { id: number; display_name?: string; filename?: string; size?: number; 'content-type'?: string; updated_at?: string; folder_id?: number; locked_for_user?: boolean; hidden_for_user?: boolean };
+    const toFile = (f: RawFile, folder?: string): CanvasFile => ({
+      id: String(f.id), name: f.display_name ?? f.filename ?? `文件 ${f.id}`, size: f.size, contentType: f['content-type'], updatedAt: f.updated_at, folder,
+    });
+    const term = search?.trim();
+    try {
+      const params: Record<string, string> = { sort: 'updated_at', order: 'desc' };
+      if (term && term.length >= 2) params.search_term = term;
+      const [files, folders] = await Promise.all([
+        this.get<RawFile[]>(`/courses/${courseId}/files`, params),
+        this.get<{ id: number; full_name?: string; name?: string }[]>(`/courses/${courseId}/folders`).catch(() => []),
+      ]);
+      const folderName = new Map(folders.map((f) => [f.id, (f.full_name ?? f.name ?? '').replace(/^course files\/?/, '')]));
+      return files.filter((f) => !f.locked_for_user && !f.hidden_for_user).map((f) => toFile(f, folderName.get(f.folder_id ?? -1) || undefined));
+    } catch (error) {
+      if (![403, 404].includes((error as { status?: number }).status ?? 0)) throw error;
+    }
+    type Module = { name?: string; items?: { type: string; content_id?: number; title?: string }[] };
+    const modules = await this.get<Module[]>(`/courses/${courseId}/modules`, { 'include[]': ['items'] });
+    const out: CanvasFile[] = [];
+    for (const m of modules) {
+      for (const item of m.items ?? []) {
+        if (item.type !== 'File' || item.content_id == null) continue;
+        if (term && !(item.title ?? '').toLowerCase().includes(term.toLowerCase()) && !(m.name ?? '').toLowerCase().includes(term.toLowerCase())) continue;
+        try {
+          const f = await this.getObject<RawFile>(`/courses/${courseId}/files/${item.content_id}`);
+          if (!f.locked_for_user) out.push(toFile(f, m.name));
+        } catch (error) {
+          if (![403, 404].includes((error as { status?: number }).status ?? 0)) throw error;
+        }
+      }
+    }
+    return out;
+  }
+
+  /** 下载课程文件：先读文件信息拿到带校验的下载地址，再用同一登录会话下载 */
+  async downloadFile(fileId: string): Promise<DownloadedFile> {
+    if (!/^\d+$/.test(fileId)) throw new Error('文件 id 不对，请用课件列表里返回的 id。');
+    const info = await this.getObject<{ display_name?: string; filename?: string; size?: number; 'content-type'?: string; url?: string; locked_for_user?: boolean }>(`/files/${fileId}`);
+    if (info.locked_for_user) throw new Error('这个文件还没开放，暂时不能下载。');
+    if ((info.size ?? 0) > MAX_DOWNLOAD_BYTES) throw new Error('文件超过 200 MB，请在 eLearning 网页上下载。');
+    if (!info.url) throw new Error('eLearning 没有返回这个文件的下载地址，可能需要在网页上下载。');
+    const res = await this.auth.fetch('elearning', info.url);
+    if (!res.ok) throw Object.assign(new Error(`下载失败（${res.status}）`), { status: res.status });
+    const data = new Uint8Array(await res.arrayBuffer());
+    if (data.byteLength > MAX_DOWNLOAD_BYTES) throw new Error('文件超过 200 MB，请在 eLearning 网页上下载。');
+    return { name: info.display_name ?? info.filename ?? `文件 ${fileId}`, contentType: info['content-type'] ?? res.headers.get('content-type') ?? undefined, data };
   }
 
   async listAnnouncements(courseIds: string[], since?: string): Promise<CanvasAnnouncement[]> {

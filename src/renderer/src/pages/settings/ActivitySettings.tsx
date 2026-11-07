@@ -46,7 +46,10 @@ export function ActivitySettings({ onDirty, onBusy }: PanelProps) {
       <section className={styles.section}>
         <h2>学校和院系官网通知</h2>
         <p className={styles.hint}>
-          勾选要关注的官网「通知公告」栏目，旦旦每 2 小时看一次。和你的目标、兴趣、院系相关的通知会放进「动态」，讲座和宣讲会会整理成活动。部分网站只允许校园网访问，校外请先连学校 VPN。
+          {sources[0]?.auto
+            ? `旦旦按你的院系、学历和兴趣自动选好了：${sources.filter((s) => s.enabled).map((s) => `${s.name}${s.why ? `（${s.why}）` : ''}`).join('、')}。以后它记住你新的兴趣会自动调整。`
+            : '现在是手动选择的来源。'}
+          想加减直接在对话里说，比如「也关注一下经院的通知」「别推保卫处的了」；也可以在下面勾选。每 2 小时看一次，相关的通知放进「动态」，讲座和宣讲会整理成活动。部分网站只允许校园网访问，校外请先连学校 VPN。
         </p>
         {(['学校部门', '院系'] as const).map((group) => (
           <div key={group}>
@@ -79,6 +82,16 @@ export function ActivitySettings({ onDirty, onBusy }: PanelProps) {
           >
             {task.busy === 'notices' ? '正在读取…' : '保存并读取'}
           </button>
+          {sources.length > 0 && !sources[0].auto && (
+            <button type="button" onClick={() => void task.run('auto', async () => {
+              await api.settings.set({ noticeSources: null });
+              const next = await api.notices.sources();
+              setSources(next);
+              const on = next.filter((s) => s.enabled).map((s) => s.id);
+              setPicked(on);
+              setSavedPicked(on);
+            }, '已恢复自动选择。')}>恢复自动选择</button>
+          )}
         </div>
       </section>
 

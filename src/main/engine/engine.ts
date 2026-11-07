@@ -108,7 +108,10 @@ export class ProactiveEngine {
     // 2. 研判（本地模型；没有模型时用规则）
     const memories = this.repo.listMemories(['goal', 'interest', 'preference', 'schedule']);
     const { assessment, model } = await assess(passed, {
-      llm: this.router.for('assess'), memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
+      // 研判优先用本地模型；只有本地模型时才能看邮件等隐私内容。学校通知和活动是公开信息，
+      // 没有本地模型时也可以交给云端模型判断（否则只能按关键词规则，动态会很少）
+      llm: this.router.for('assess') ?? (passed.every((t) => PUBLIC_KINDS.includes(t.kind)) ? this.router.for('activity_extract') : null),
+      memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
     });
 
     // 3. 决定：注意力预算 + 静默时段 + 观察模式
@@ -310,6 +313,9 @@ export class ProactiveEngine {
   }
 }
 
+/** 内容是公开信息的事件（学校官网通知、校园活动） */
+const PUBLIC_KINDS: Trigger['kind'][] = ['notice_new', 'activity_new'];
+
 /** 来自校内平台的事件来源 */
 const PLATFORM_SOURCES: Trigger['source'][] = ['elearning', 'mail', 'icourse', 'notice'];
 /** 建议工单的价值达到这个值时，除了动态卡片，还会在对话里直接问 */
@@ -325,6 +331,7 @@ export function describeTrigger(t: Trigger): string {
     case 'announcement_new': return `[公告] ${p.course}：${p.title}`;
     case 'exam_soon': return `[考试] ${p.course}，${p.timeText ?? ''}，考场 ${p.location ?? '未知'}，还有 ${p.daysLeft} 天`;
     case 'card_low': return `[校园卡] 余额 ¥${p.balance}`;
+    case 'grade_new': return `[成绩] ${p.course}：${p.grade}`;
     case 'power_low': return `[宿舍电量] ${p.room} 剩 ${p.remaining} 度`;
     case 'notice_new': return `[学校通知/${p.sourceName}] ${p.title}${p.own ? '（本人院系）' : ''}${p.excerpt ? `\n正文开头：${p.excerpt}` : ''}`;
     case 'activity_new': return `[校园活动/${p.category ?? '其他'}] ${p.title}；时间 ${p.timeText ?? '未写明'}；地点 ${p.location ?? '未写明'}${p.campus ? `（${p.campus}）` : ''}；主办 ${p.organizer ?? '未写明'}。${p.summary ?? ''}${p.excerpt ? `\n原文开头：${p.excerpt}` : ''}`;

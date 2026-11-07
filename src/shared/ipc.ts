@@ -26,6 +26,8 @@ export interface FudanerApi {
     list(filter?: { type?: string; includeId?: string }): Promise<FeedCard[]>;
     dismiss(id: string, reason?: string): Promise<void>;
     act(id: string, action: string): Promise<void>;
+    /** 现在整理一次动态 */
+    refresh(): Promise<{ campus: number; news: number; skipped?: string }>;
   };
   goals: {
     list(): Promise<{ goals: Goal[]; tasks: Task[] }>;
@@ -74,6 +76,9 @@ export interface FudanerApi {
     library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
     cardBalance(): Promise<{ balance: number; at: string }>;
     electricity(): Promise<{ room: string; remainingKwh: number; usedKwh?: number; updatedAt?: string; at: string }>;
+    program(): Promise<{ modules: { name: string; required?: number; earned?: number; remaining?: number }[]; text: string; source: string; updatedAt: string }>;
+    selected(which?: string): Promise<{ semester: string; courses: { course: string; teachers: string[]; credits?: number; sessions: string[] }[]; totalCredits?: number; rounds?: string }>;
+    grades(): Promise<{ gpa?: number; credits: number; semesters: number; courses: number; rank?: { ranking?: number; total: number; gpa?: number; note?: string }; updatedAt: string }>;
   };
   treehole: {
     status(): Promise<{ loggedIn: boolean; demo: boolean }>;
@@ -95,7 +100,7 @@ export interface FudanerApi {
   };
   notices: {
     /** 全部可选来源，以及是否已关注、上次读取的问题 */
-    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; error?: string }[]>;
+    sources(): Promise<{ id: string; name: string; group: string; url: string; enabled: boolean; why?: string; auto: boolean; error?: string }[]>;
     list(query?: string): Promise<Item[]>;
   };
   decisions(limit?: number): Promise<{ evals: EvalRecord[]; budget: { date: string; budget: number; spent: number; phase: string } }>;

@@ -95,15 +95,24 @@ export class OpenAiCompatClient implements LlmClient {
         if (choice.finish_reason) finished = choice.finish_reason;
       }
       opts.signal?.throwIfAborted();
-      if (finished !== 'stop' && finished !== 'tool_calls') throw new Error('模型回复未完整结束');
       const toolCalls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => c);
+      // 回复太长、碰到输出上限：保留已经生成的正文，提示被截断（没有半截的工具调用时）
+      if (finished === 'length' && content && !toolCalls.length) {
+        const note = '\n\n> 回复太长，后面被截断了。可以让我「接着说」。';
+        opts.onDelta(note);
+        return { content: content + note, toolCalls: [] };
+      }
+      if (finished !== 'stop' && finished !== 'tool_calls') throw new Error(`模型回复未完整结束（${finished ?? '连接提前断开'}）`);
       if (toolCalls.some((c) => !c.id || !c.name)) throw new Error('工具调用未完整接收');
       return { content, toolCalls };
     }
     const res = await this.client.chat.completions.create(params, { signal: opts.signal });
     const choice = res.choices[0];
+    if (choice?.finish_reason === 'length' && choice.message.content && !choice.message.tool_calls?.length) {
+      return { content: `${choice.message.content}\n\n> 回复太长，后面被截断了。`, toolCalls: [] };
+    }
     if (!choice || (choice.finish_reason !== 'stop' && choice.finish_reason !== 'tool_calls')) {
-      throw new Error('模型回复未完整结束');
+      throw new Error(`模型回复未完整结束（${choice?.finish_reason ?? '没有返回内容'}）`);
     }
     const m = choice.message;
     const toolCalls = (m.tool_calls ?? [])
@@ -175,4 +184,24 @@ export function parseJsonLoose<T>(text: string): T | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * 模型调用失败的原因，翻译成用户看得懂、能自己处理的话（不包含 API Key 等敏感内容）。
+ * contextTooLong：请求超出模型的上下文长度，可以缩短后重试。
+ */
+export function describeModelError(e: unknown): { text: string; contextTooLong: boolean } {
+  const err = e as { status?: number; message?: string; code?: string; cause?: { code?: string } };
+  const msg = String(err?.message ?? e ?? '').replace(/sk-[\w-]{6,}/g, 'sk-***').slice(0, 200);
+  const status = err?.status;
+  if (status === 400 && /context|length|token|too long|maximum/i.test(msg)) return { text: '这段对话太长，超出了模型一次能读的长度', contextTooLong: true };
+  if (status === 401 || /invalid.*api.?key|authentication/i.test(msg)) return { text: 'API Key 无效或已过期，请到「设置 → 模型」检查', contextTooLong: false };
+  if (status === 402 || /insufficient.*balance|余额/i.test(msg)) return { text: '模型账户余额不足，请到模型服务商那里充值', contextTooLong: false };
+  if (status === 429) return { text: '请求太频繁或模型服务限流了，稍等一会儿再试', contextTooLong: false };
+  if (status && status >= 500) return { text: `模型服务暂时不可用（${status}），稍后再试`, contextTooLong: false };
+  if (status === 400) return { text: '模型服务拒绝了这次请求（400），可能是模型名或参数不对，详细原因已记录在运行日志里', contextTooLong: false };
+  if (/timeout|timed out/i.test(msg)) return { text: '模型响应超时，可能是网络慢或问题太复杂，请重试', contextTooLong: false };
+  if (/ENOTFOUND|ECONNREFUSED|ECONNRESET|fetch failed|network|Connection error/i.test(msg + (err?.cause?.code ?? ''))) return { text: '连不上模型服务，请检查网络和「设置 → 模型」里的服务地址', contextTooLong: false };
+  // 其他错误不把服务返回的原文放进对话（可能包含敏感内容），详细原因只打印到运行日志
+  return { text: '连接中断或模型未能正常返回，请检查网络和模型配置后重试', contextTooLong: false };
 }

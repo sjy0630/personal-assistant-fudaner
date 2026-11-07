@@ -81,3 +81,49 @@ it('未配置模型时说明附件尚未分析，避免用无关作业规则回�
   expect(response.content).toContain('分析附件需要先');
   expect(response.content).not.toContain('接下来 7 天');
 });
+
+it('长历史缩短并自动重试时，仍为正确的历史消息附上图片', async () => {
+  const snapshots: LlmMessage[][] = [];
+  const { repo, agent, resource } = await setup(async (messages) => {
+    snapshots.push(structuredClone(messages));
+    await imageColor(messages);
+    if (snapshots.length === 1) throw Object.assign(new Error('maximum context length exceeded'), { status: 400 });
+    return { content: '图片仍是红色。', toolCalls: [] };
+  });
+  for (let i = 0; i < 10; i++) {
+    repo.addMessage({ role: 'user', content: `旧问题 ${i}` });
+    repo.addMessage({ role: 'assistant', content: '旧回复'.repeat(800) });
+  }
+  repo.addMessage({ role: 'user', content: '先看看这张图', refs: [{ type: 'resource', id: resource.id, title: resource.title }] });
+  repo.addMessage({ role: 'assistant', content: '是红色。' });
+  expect((await agent.handleUserMessage('继续说说颜色')).content).toBe('图片仍是红色。');
+  expect(snapshots).toHaveLength(2);
+  expect(snapshots[1].length).toBeLessThan(snapshots[0].length);
+  for (const messages of snapshots) {
+    expect(messages.find((message) => message.images?.length)?.content).toBe('先看看这张图');
+    expect(messages.at(-1)?.images).toBeUndefined();
+    expect(messages.every((message) => !message.content || message.role === 'system' || message.content.length <= 2020)).toBe(true);
+  }
+});
+
+it('长回复之后工具读图失败，历史截短不会让下一次普通对话再次带上失败图片', async () => {
+  let calls = 0;
+  const { agent } = await setup(async (messages) => {
+    if (++calls === 1) return { content: '正在检查资源。'.repeat(400), toolCalls: [{ id: 'read-image', name: 'fudaner_local__read_resource', arguments: '{}' }] };
+    if (calls === 2) throw new ImageModelError();
+    expect(messages.flatMap((message) => message.images ?? [])).toEqual([]);
+    return { content: '普通对话正常。', toolCalls: [] };
+  });
+  expect((await agent.handleUserMessage('查看资源库里的图')).content).toContain('选择支持图片的模型');
+  expect((await agent.handleUserMessage('你好')).content).toBe('普通对话正常。');
+});
+
+it('已执行工具后上下文超长时不重新开始整轮，避免重复下载或导入', async () => {
+  let calls = 0;
+  const { agent } = await setup(async () => {
+    if (++calls === 1) return { content: '', toolCalls: [{ id: 'read-image', name: 'fudaner_local__read_resource', arguments: '{}' }] };
+    throw Object.assign(new Error('maximum context length exceeded'), { status: 400 });
+  });
+  expect((await agent.handleUserMessage('读取资源')).content).toContain('超出了模型一次能读的长度');
+  expect(calls).toBe(2);
+});

@@ -7,7 +7,8 @@ import type { Item } from '../../shared/types';
 import type { ImportResult } from '../activities/sync';
 import type { LiteratureQuery, LiteratureRecord } from '../sources/library-search';
 import type { TreeholeApi } from '../sources/treehole';
-import { noticeView } from '../notices/sync';
+import { changeNoticeFollows, noticeFollowState, noticeView } from '../notices/sync';
+import { findNoticeSource, NOTICE_SOURCES } from '../notices/sources';
 import { describeRepeat, nextOccurrence, validateRepeat } from '../engine/reminders';
 import type { ReminderRepeat } from '../../shared/types';
 
@@ -51,6 +52,10 @@ export function createLocalServer(
     literature?: { search(q: LiteratureQuery): Promise<{ total: number; records: LiteratureRecord[]; searchUrl: string }>; get(id: string): LiteratureRecord | undefined };
     treehole?: () => TreeholeApi;
     electricity?: () => Promise<unknown>;
+    grades?: () => Promise<{ semesters: { name: string; courses: unknown[] }[]; gpa?: number; credits: number; updatedAt: string }>;
+    gpaRank?: () => Promise<unknown>;
+    program?: () => Promise<unknown>;
+    selected?: (which: string) => Promise<unknown>;
   } = {},
 ): McpServer {
   const server = new McpServer({ name: 'fudaner-local', version: '0.1.0' });
@@ -166,6 +171,50 @@ export function createLocalServer(
   }
 
   if (chatOnly) {
+    // ---------- 通过对话调整设置：画像、关注的官网通知 ----------
+    server.registerTool('update_profile', {
+      description: '更新用户画像（院系、专业、年级、学历、昵称）。用户在对话里说「我是经院大二的」「我在读研」时使用；院系和学历会影响自动关注哪些官网通知、读哪个系统的课表。改了什么要告诉用户',
+      inputSchema: {
+        nickname: z.string().max(30).optional(), school: z.string().max(40).optional().describe('院系全称或常用简称，如「经济学院」'),
+        major: z.string().max(40).optional(), grade: z.string().max(20).optional().describe('如「大二」「研一」'),
+        degree: z.enum(['本科', '硕士', '博士']).optional(),
+        student_number: z.string().regex(/^\d{8,12}$/).optional().describe('学号，只用来在绩点排名里找到本人'),
+      },
+    }, async (a) => {
+      const { student_number: studentNumber, ...rest } = a;
+      const patch: Record<string, unknown> = Object.fromEntries(Object.entries({ ...rest, studentNumber }).filter(([, v]) => v !== undefined && v !== ''));
+      // 「经院」「计院」这类简称存成全称，方便认出本院系的通知
+      if (typeof patch.school === 'string') {
+        const s = findNoticeSource(patch.school);
+        if (s?.group === '院系') patch.school = s.name;
+      }
+      if (!Object.keys(patch).length) throw new Error('没有要更新的内容。');
+      repo.setProfile(patch);
+      const follow = noticeFollowState(repo);
+      return json({ ok: true, profile: repo.getProfile(), notices: follow.mode === 'auto' ? `已按新的画像自动关注：${follow.following.map((s) => s.name).join('、')}` : undefined });
+    });
+
+    server.registerTool('list_notice_sources', {
+      description: '查看现在关注了哪些学校和院系官网通知（auto 表示按院系、学历、兴趣自动选的，并附理由），以及还可以关注哪些',
+      inputSchema: {}, annotations: ro,
+    }, async () => {
+      const state = noticeFollowState(repo);
+      const on = new Set(state.following.map((s) => s.id));
+      return json({ ...state, available: NOTICE_SOURCES.filter((s) => !on.has(s.id)).map((s) => `${s.name}（${s.group}）`) });
+    });
+
+    server.registerTool('follow_notice_sources', {
+      description: '关注或取消关注学校和院系的官网通知。用户说「也关注一下国际交流处」「别推保卫处的了」，或者聊到兴趣（想交换 → 国际合作与交流处；想保研 → 研究生院和本院系）时使用，并告诉用户改了什么。名称可以用简称',
+      inputSchema: {
+        follow: z.array(z.string()).optional().describe('要关注的来源名称或 id，如「国际合作与交流处」「经院」'),
+        unfollow: z.array(z.string()).optional(),
+      },
+    }, async (a) => {
+      const r = changeNoticeFollows(repo, a.follow, a.unfollow);
+      channels.changed('feed');
+      return json({ ...r, note: r.unknown.length ? `没找到：${r.unknown.join('、')}。可以用 list_notice_sources 看可选的来源。` : undefined });
+    });
+
     // ---------- 定时提醒 / 定时任务 ----------
     server.registerTool('create_reminder', {
       description: '创建定时提醒或定时任务。用户说「每天 22:00 提醒我背单词」「明早 8 点叫我交表」「每周一早上帮我汇总上周的通知和本周 DDL」时使用。'
@@ -372,6 +421,43 @@ export function createLocalServer(
       description: '读取旦克上某门课的评价：各老师、学期的评分（综合、内容、工作量、考核）和文字评价。course_group_id 来自 search_course_reviews',
       inputSchema: { course_group_id: z.number().int(), max_reviews: z.number().int().min(1).max(30).optional() }, annotations: ro,
     }, async (a) => json(await hole().courseReviews(a.course_group_id, a.max_reviews)));
+  }
+
+  // ---------- 成绩与绩点（敏感：只有本地模型或用户允许时才开放给云端模型，见 tool-policy） ----------
+  if (extras.grades) {
+    const grades = extras.grades;
+    server.registerTool('get_grades', {
+      description: '查询本人在教务系统里的成绩（每门课的等级、绩点、学分，按学期）和学分加权绩点。用户问「我这学期成绩」「XX 课考得怎么样」时使用',
+      inputSchema: { semester: z.string().optional().describe('学期名称关键词，如「2025-2026学年2学期」；不填返回全部') },
+      annotations: ro,
+    }, async ({ semester }) => {
+      const r = await grades();
+      const semesters = semester ? r.semesters.filter((s) => s.name.includes(semester)) : r.semesters;
+      return json({ gpa: r.gpa, credits: r.credits, semesters, updated: r.updatedAt, note: '绩点按有绩点的课程学分加权计算，P/NP 课程不计入；以教务系统为准' });
+    });
+  }
+  if (extras.gpaRank) {
+    const gpaRank = extras.gpaRank;
+    server.registerTool('get_gpa', {
+      description: '查询本人的绩点和在本年级本院系的排名（教务系统「我的绩点」）。只返回本人和总人数。需要学号才能在排名里找到本人：没有时请用户告诉你，用 update_profile 记下 student_number',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await gpaRank()));
+  }
+
+  if (extras.program) {
+    const program = extras.program;
+    server.registerTool('get_program_completion', {
+      description: '查询本人的培养方案完成情况：各类别（通识、专业必修、专业选修等）要求学分、已获学分、还差多少。问「我还差多少学分毕业」「专业选修修够了吗」、规划选课时使用。modules 是认出来的汇总，text 是教务系统页面上表格的原文',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await program()));
+  }
+  if (extras.selected) {
+    const selected = extras.selected;
+    server.registerTool('get_selected_courses', {
+      description: '查询选课结果：某学期选上的课（课程、老师、学分、上课时间地点）和总学分；rounds 是选课页面上的轮次信息（读得到时）。问「我这学期 / 下学期选了什么课」「一共多少学分」时使用',
+      inputSchema: { semester: z.string().optional().describe('current 当前学期（默认）、next 下学期，或学期名称关键词如「2026-2027学年2学期」') },
+      annotations: ro,
+    }, async ({ semester }) => json(await selected(semester || 'current')));
   }
 
   if (extras.electricity) {
