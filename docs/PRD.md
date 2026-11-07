@@ -653,6 +653,12 @@
 - 对话工具：`search_treehole`、`read_treehole`、`latest_treehole`、`search_course_reviews`、`get_course_reviews`、`search_literature`、`get_literature`、`get_dorm_electricity`。
 - 原先作为外部 MCP 预设的图书馆文献检索和旦挞已移除（内置后用户不需要安装 Python、uv 或克隆代码）；外部预设只保留 ehall 的体育场馆空闲。
 
+### 5.8.6 课件下载 · 11/7 新增
+
+- 用户说「帮我下载数据结构第 5 讲的课件」，助理用 `list_files` 找到文件、`download_file` 下载。读「文件」栏目；老师隐藏了「文件」栏目时，从「单元」里找文件条目。
+- 保存到系统「下载/Fudaner/课程名」，同名文件不覆盖；PDF、Word、PPT（.pptx，按页提取文字和备注）、文本自动导入资源库（课件类，关联课程），之后可以读内容、总结、出题。回复带「在文件夹中显示」按钮（只允许打开 Fudaner 下载的文件）。
+- 只读取 eLearning；单个文件最大 200 MB，超过 30 MB 只下载不导入资源库。
+
 ### 5.9 随叫随到 · P1
 
 - 全局快捷键（如 `Alt + Space`）唤出一个小对话框，随时问一句；需要展开时跳转到主对话。
@@ -867,7 +873,7 @@ interface FudanAuth {
 
 | MCP 服务 | 已实现的工具 | 数据从哪来 | 说明 |
 |---|---|---|---|
-| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`（可带 `refresh` 先实时同步）、`get_assignment`、`list_announcements` | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
+| `fudan-elearning`（独立包） | `list_courses`、`list_assignments`（可带 `refresh` 先实时同步）、`get_assignment`、`list_announcements`、`list_files`、`download_file`（课件下载到本机「下载/Fudaner/课程名」并导入资源库） | 本地库（后台定时同步 Canvas） | 已用真实账号联调 |
 | `fudan-mail`（独立包） | `search_mail`、`get_mail`、`list_action_required` | 本地库（IMAP 同步） | 只读，不发信 |
 | `fudan-courses`（独立包） | `list_courses`、`get_course` | 本地库 | 跨平台课程总表 |
 | `fudaner-local` | 记忆、目标、动态、资源库、搜索，以及 11/7 新增的校园工具：`search_notices`、`get_notice`、`get_week_schedule`、`list_exams`、`get_library_status`、`get_campus_card_balance`、`import_article`、`list_activities`、`add_activity_to_plan` | 本地库；图书馆、校园卡实时查询 | 校园工具先放在这里，决赛前拆成独立包 |

@@ -108,14 +108,14 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
     }
   };
   const isMarkdown = open?.mime.toLowerCase().split(';')[0].trim() === 'text/markdown';
-  const isDocument = open?.mime === 'application/pdf' || open?.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const isDocument = open?.mime === 'application/pdf' || open?.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || open?.mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   const canPreview = isMarkdown || isDocument;
   useEffect(() => {
     if (focus && open?.id === focus.id) view.current?.focus({ preventScroll: true });
   }, [focus, open?.id]);
   return <div className="page library" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void upload(Array.from(e.dataTransfer.files)); }}>
     <header className="page-header"><h1>资源库</h1><button disabled={uploading} onClick={() => fileRef.current?.click()}>{uploading ? '正在上传…' : '上传文件'}</button></header>
-    <input ref={fileRef} type="file" hidden multiple accept=".pdf,.docx,.md,.markdown,.txt,.csv,.json" onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }} />
+    <input ref={fileRef} type="file" hidden multiple accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.csv,.json" onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }} />
     <p className="library-upload-hint muted">把 PDF / Word（.docx）/ Markdown 拖进来，也可点击上传文件。文档按标题、段落和列表整理阅读。</p>
     <div className="library-toolbar"><label>课程 <select value={course} onChange={(e) => setCourse(e.target.value)}><option value="">全部课程</option><option value="__none">未关联课程</option>{courseIds.map((id) => <option key={id} value={id}>{courseNames[id] || `课程 ${id}`}</option>)}</select></label><span className="muted small">{visible.length} 个资源</span></div>
     {loadError && <div className="goal-error" role="alert">{loadError}<button onClick={() => void load()}>重试</button></div>}

@@ -167,6 +167,13 @@ export class ChatAgent {
     }
   }
 
+  /** 这次回复里下载了课件：放「在文件夹中显示」按钮 */
+  private downloadActions(since: string): { label: string; action: string; payload: { path: string } }[] {
+    const recent = this.repo.getKv<{ path: string; at: string }[]>('recent_downloads', []).filter((d) => d.at >= since);
+    if (!recent.length) return [];
+    return [{ label: recent.length > 1 ? `在文件夹中显示（${recent.length} 个文件）` : '在文件夹中显示', action: 'reveal_file', payload: { path: recent[0].path } }];
+  }
+
   /** 正在生成回复 */
   busy(): boolean { return this.active !== null; }
 
@@ -229,7 +236,8 @@ export class ChatAgent {
     const content = result.content || '模型没有返回正文，请重试。';
     return this.repo.addMessage({
       id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
-      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()], actions: loginActions(platforms, `${text}\n${content}`),
+      toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()],
+      actions: [...loginActions(platforms, `${text}\n${content}`), ...this.downloadActions(run.view.startedAt)],
     });
   }
 

@@ -45,6 +45,8 @@ export interface AppDeps {
   campusReader?: () => CampusReader | null;
   /** 复旦账号登录是否有效（会实际检查一次） */
   campusLoggedIn?: () => Promise<boolean>;
+  /** 课件下载到这个文件夹（主进程里是系统「下载」文件夹） */
+  downloadsDir?: () => string;
   /** 公开接口的 POST 请求（图书馆人数） */
   postPublic?: (url: string) => Promise<{ status: number; text: string }>;
   /** 图书馆文献检索（公开接口） */
@@ -94,6 +96,8 @@ export class AppContext {
         return repo.listItems({ kind: 'announcement', courseId: course?.id, since: f.since }).map((i) => ({ id: i.id, title: i.title, at: i.publishedAt, body: i.body.slice(0, 500) }));
       },
       refresh: () => this.syncAll().then(() => undefined),
+      listFiles: (courseCode: string, query?: string) => this.listCourseFiles(courseCode, query),
+      downloadFile: (fileId: string, opts: { courseCode?: string; addToLibrary: boolean }) => this.downloadCourseFile(fileId, opts),
     };
     const mailData = {
       search: async (f: { query?: string; since?: string; category?: string; limit?: number }) =>
@@ -249,6 +253,71 @@ export class AppContext {
     if (this.repo.getSettings().demoMode) return demoLibrary();
     if (!this.deps.postPublic) throw new Error('当前环境不能访问网络。');
     return readLibrary(this.deps.postPublic);
+  }
+
+  private courseForFiles(courseCode: string) {
+    const course = this.repo.findCourse(courseCode);
+    if (!course?.elearningId) throw new Error(`没有找到课程「${courseCode}」。请用 list_courses 里的课程代码或课程名。`);
+    return course;
+  }
+
+  /** 课程文件（课件）列表，实时读 eLearning */
+  async listCourseFiles(courseCode: string, query?: string) {
+    const client = this.deps.elearning();
+    if (!client?.listFiles) throw new Error('请先在「设置 → 复旦账号」登录复旦账号。');
+    const course = this.courseForFiles(courseCode);
+    const files = await client.listFiles(course.elearningId!, query);
+    return {
+      course: course.name, count: files.length,
+      files: files.slice(0, 60).map((f) => ({ file_id: f.id, name: f.name, size_kb: f.size ? Math.round(f.size / 1024) : undefined, updated: f.updatedAt?.slice(0, 10), folder: f.folder })),
+      note: files.length ? undefined : '这门课的「文件」和「单元」里都没有找到文件（也可能老师没有开放）。',
+    };
+  }
+
+  /**
+   * 下载课件到「下载/Fudaner/课程名/」，同名文件不覆盖；PDF、Word、PPT、文本导入资源库，之后可以直接读内容。
+   * 只读取 eLearning，不改动任何内容。
+   */
+  async downloadCourseFile(fileId: string, opts: { courseCode?: string; addToLibrary: boolean }) {
+    const client = this.deps.elearning();
+    if (!client?.downloadFile) throw new Error('请先在「设置 → 复旦账号」登录复旦账号。');
+    const dir = this.deps.downloadsDir?.();
+    if (!dir) throw new Error('当前环境不能保存文件。');
+    const course = opts.courseCode ? this.repo.findCourse(opts.courseCode) : undefined;
+    const file = await client.downloadFile(fileId);
+    const { mkdir, writeFile, access } = await import('node:fs/promises');
+    const { join, extname, basename } = await import('node:path');
+    const safe = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '').trim().slice(0, 120) || '文件';
+    const folder = join(dir, 'Fudaner', safe(course?.name ?? '课件'));
+    await mkdir(folder, { recursive: true });
+    const ext = extname(file.name);
+    const stem = safe(basename(file.name, ext));
+    let target = join(folder, `${stem}${ext}`);
+    for (let i = 1; i < 100; i++) {
+      try { await access(target); target = join(folder, `${stem} (${i})${ext}`); } catch { break; }
+    }
+    await writeFile(target, file.data);
+    let resourceId: string | undefined;
+    let note: string | undefined;
+    if (opts.addToLibrary) {
+      const { parseFile, PARSEABLE } = await import('./library/parse');
+      if (!PARSEABLE.includes(ext.toLowerCase())) note = `已下载；${ext || '这种'}文件不能导入资源库，只能在电脑上打开。`;
+      else if (file.data.byteLength > 30 * 1024 * 1024) note = '已下载；文件超过 30 MB，没有导入资源库。';
+      else {
+        try {
+          const parsed = await parseFile(target);
+          resourceId = this.repo.addResource({ title: parsed.title, kind: 'courseware', courseId: course?.id, mime: parsed.mime, text: parsed.text, path: target }).id;
+          this.deps.channels.changed('library');
+          if (!parsed.text.trim()) note = '已下载并导入资源库，但没有读到文字（可能是扫描版或全是图片）。';
+        } catch (e) {
+          note = `已下载；导入资源库失败：${(e as Error).message}`;
+        }
+      }
+    }
+    // 记下来，回复里放「在文件夹中显示」按钮
+    const recent = this.repo.getKv<{ path: string; at: string }[]>('recent_downloads', []);
+    this.repo.setKv('recent_downloads', [{ path: target, at: new Date().toISOString() }, ...recent].slice(0, 20));
+    return { saved_to: target, name: basename(target), size_kb: Math.round(file.data.byteLength / 1024), resource_id: resourceId, note };
   }
 
   /** 图书馆文献检索（演示模式下返回虚构文献） */

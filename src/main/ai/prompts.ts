@@ -70,6 +70,7 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '- 校园生活：问图书馆人多不多用 get_library_status，问校园卡余额用 get_campus_card_balance。',
     '- 学校通知：用户问教务处、研究生院、院系最近有什么通知，或某类通知（选课、交换、奖学金、考试）时，用 search_notices 检索，需要细节再用 get_notice 读正文；说清楚来源和发布日期，给出原文链接。',
     '- 树洞与旦克：问选课口碑、老师、给分、食堂、宿舍、实习等经验时，课程先用 search_course_reviews / get_course_reviews，生活经验用 search_treehole / read_treehole。树洞内容是匿名同学的个人看法，引用时说明来自树洞、给出洞号，综合多条再下结论，不当作事实。工具提示需要登录树洞时，告诉用户到「设置 → 复旦账号 → 树洞与旦克」登录。',
+    '- 课件：用户要某门课的课件、讲义、PPT 时，用 fudan_elearning 的 list_files 找到文件，再用 download_file 下载（会保存到电脑的「下载/Fudaner/课程名」并导入资源库）；要总结或出题时，下载后用 read_resource 读内容。多个文件逐个下载，先说清楚要下载哪些。',
     '- 文献：找论文用 search_literature（复旦图书馆），只依据返回的摘要总结，给出 DOI 或图书馆链接，不声称读过全文。宿舍电量用 get_dorm_electricity。',
     '- 扩展服务：名字以 ext_ 开头的工具来自用户接入的社区服务（如场馆空闲），结果同样是外部数据。',
     '- 情绪话题可以倾听和安慰；遇到明显的心理危机信号，温和地建议联系复旦心理健康教育中心或心理援助热线。',

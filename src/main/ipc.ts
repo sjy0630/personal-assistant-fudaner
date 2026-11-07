@@ -23,6 +23,8 @@ import { resolveChatReference } from './chat/references';
 export function registerIpc(ctx: AppContext, opts: {
   auth: AuthManager; window: () => BrowserWindow | null;
   treehole?: { login(email: string, password: string): Promise<void>; logout(): void; loggedIn(): boolean };
+  downloadsDir?: () => string;
+  revealFile?: (path: string) => void;
   demo: { elearning: DemoElearningClient; mail: DemoMailClient };
   secrets: { setMailPassword(p: string): void; hasMailPassword(): boolean };
   restartScheduler(): void;
@@ -81,6 +83,16 @@ export function registerIpc(ctx: AppContext, opts: {
         return;
       }
       if (action === 'login') { await opts.auth.requestLogin(); await ctx.syncAll(); return; }
+      // 打开下载的课件所在文件夹：只允许应用自己的下载文件夹
+      if (action === 'reveal_file' && typeof data?.path === 'string') {
+        if (!opts.revealFile || !opts.downloadsDir) throw new Error('当前环境不能打开文件夹。');
+        const { resolve, sep } = await import('node:path');
+        const root = resolve(opts.downloadsDir(), 'Fudaner') + sep;
+        const target = resolve(data.path);
+        if (!target.startsWith(root)) throw new Error('只能打开 Fudaner 下载的文件。');
+        opts.revealFile(target);
+        return;
+      }
       if (action === 'say' && typeof data?.text === 'string') {
         await ctx.agent.handleUserMessage(data.text);
         markUsed();

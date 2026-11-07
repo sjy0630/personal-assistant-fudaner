@@ -136,6 +136,7 @@ app.whenReady().then(async () => {
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
     fetchText: readPublicPage,
+    downloadsDir: () => app.getPath('downloads'),
     library: new LibrarySearch(async (url, headers) => {
       const res = await net.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
       return { status: res.status, text: await res.text() };
@@ -201,7 +202,7 @@ app.whenReady().then(async () => {
     scheduleSync();
   };
 
-  registerIpc(ctx, { auth, treehole, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
+  registerIpc(ctx, { auth, treehole, downloadsDir: () => app.getPath('downloads'), revealFile: (p) => shell.showItemInFolder(p), window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
     openExternal: (url) => shell.openExternal(url), onMessageUpdated: (msg) => send('chat:updated', msg),
     copyText: (text) => clipboard.writeText(text), onChatCleared: () => send('chat:cleared'), onChanged: channels.changed,
   });

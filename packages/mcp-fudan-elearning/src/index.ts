@@ -15,6 +15,10 @@ export interface ElearningData {
   listAnnouncements(filter: { courseCode?: string; since?: string }): Promise<unknown[]>;
   /** refresh=true 时由宿主触发一次实时同步 */
   refresh?(): Promise<void>;
+  /** 课程文件（课件）列表：实时读取 */
+  listFiles?(courseCode: string, query?: string): Promise<unknown>;
+  /** 下载课件到本机（宿主决定保存位置，可同时导入资源库） */
+  downloadFile?(fileId: string, opts: { courseCode?: string; addToLibrary: boolean }): Promise<unknown>;
 }
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
@@ -55,6 +59,30 @@ export function createElearningServer(data: ElearningData, _client?: ElearningCl
     inputSchema: { course_code: z.string().optional(), since: z.string().optional() },
     annotations: ro,
   }, async (args) => json(await data.listAnnouncements({ courseCode: args.course_code, since: args.since })));
+
+  if (data.listFiles) {
+    const listFiles = data.listFiles.bind(data);
+    server.registerTool('list_files', {
+      description: '列出某门课在 eLearning 上的文件（课件、讲义、参考资料），按更新时间排序，返回文件 id、名称、大小、所在文件夹。用户要课件、讲义、PPT 时先用它找到文件',
+      inputSchema: {
+        course_code: z.string().describe('课程代码或课程名，如 COMP130004.01 或「数据结构」'),
+        query: z.string().optional().describe('文件名关键词，如「第5讲」「链表」'),
+      },
+      annotations: ro,
+    }, async (args) => json(await listFiles(args.course_code, args.query)));
+  }
+
+  if (data.downloadFile) {
+    const downloadFile = data.downloadFile.bind(data);
+    server.registerTool('download_file', {
+      description: '把 eLearning 上的一个文件下载到用户电脑的「下载/Fudaner/课程名」文件夹，并（默认）导入资源库，之后可以用 read_resource 读内容、总结、出题。只读取 eLearning，不会改动任何内容。一次一个文件，多个文件就多次调用',
+      inputSchema: {
+        file_id: z.string().describe('list_files 返回的文件 id'),
+        course_code: z.string().optional().describe('文件所属课程，用来决定保存的文件夹'),
+        add_to_library: z.boolean().optional().describe('是否导入资源库（默认是；PDF、Word、PPT、文本可以导入）'),
+      },
+    }, async (args) => json(await downloadFile(args.file_id, { courseCode: args.course_code, addToLibrary: args.add_to_library ?? true })));
+  }
 
   return server;
 }
