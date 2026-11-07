@@ -9,6 +9,7 @@ import { courseRegistryData } from './courses/registry';
 import { buildCalendar, localDate } from './engine/calendar';
 import { applyDemoCourseExtras } from './demo/demo';
 import type { Channels } from './engine/channels';
+import type { PlatformState } from '../shared/types';
 import { ProactiveEngine } from './engine/engine';
 import { TicketExecutor } from './engine/executor';
 import { createLocalServer } from './local-tools/server';
@@ -25,6 +26,8 @@ export interface AppDeps {
   channels: Channels;
   elearning: () => ElearningClient | null;
   mail: () => MailClient | null;
+  /** 各平台连接状态。probe=false 时只用已知状态、不发网络请求 */
+  platformStatus?: (probe: boolean) => Promise<PlatformState[]>;
 }
 
 export class AppContext {
@@ -42,7 +45,7 @@ export class AppContext {
     this.repo.setCalendar(buildCalendar());
     this.router = new ModelRouter(() => this.repo.getSettings());
     this.engine = new ProactiveEngine(this.repo, this.router, deps.channels);
-    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels);
+    this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false));
     this.executor = new TicketExecutor(this.repo, this.router, this.executorHub, deps.channels);
   }
 
@@ -89,6 +92,10 @@ export class AppContext {
     await this.executorHub.connect('fudan-mail', createMailServer(mailData));
     await this.executorHub.connect('fudan-courses', createCoursesServer(courses));
     await this.executorHub.connect('fudaner-local', createLocalServer(repo, this.deps.channels, 'executor'));
+  }
+
+  async platformStatus(probe = true): Promise<PlatformState[]> {
+    return this.deps.platformStatus ? this.deps.platformStatus(probe) : [];
   }
 
   /** 同步所有已连接的平台，然后做闭环验证 */

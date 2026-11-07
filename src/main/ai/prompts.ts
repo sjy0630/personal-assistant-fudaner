@@ -1,4 +1,4 @@
-import type { Memory, Profile, TodayOverview } from '../../shared/types';
+import type { Memory, PlatformState, Profile, TodayOverview } from '../../shared/types';
 
 /** 外部数据的统一包裹（防提示词注入，PRD 附录 B） */
 export function externalData(label: string, content: string): string {
@@ -15,8 +15,30 @@ const STYLES: Record<Profile['style'], string> = {
   playful: '说话轻松幽默，偶尔用一个表情，但不油腻。',
 };
 
+const PLATFORM_LABEL: Record<PlatformState['platform'], string> = { elearning: 'eLearning（复旦账号）', icourse: 'iCourse', mail: '学生邮箱' };
+const STATUS_LABEL: Record<PlatformState['status'], string> = {
+  ok: '已连接', need_login: '登录已过期 / 未登录', unavailable: '暂时连不上', not_configured: '未配置', demo: '演示模式（演示数据）',
+};
+
+/** 各平台现在连没连上，用户问「为什么没数据」「怎么授权」时要用 */
+export function platformStatusText(platforms: PlatformState[]): string {
+  if (!platforms.length) return '（未知）';
+  return platforms.map((s) => `- ${PLATFORM_LABEL[s.platform]}：${STATUS_LABEL[s.status]}${s.message ? `（${s.message}）` : ''}`).join('\n');
+}
+
+/** 应用怎么用：用户问怎么登录、怎么接邮箱时照这个回答，不要说不知道 */
+export const APP_GUIDE = [
+  '应用使用说明（用户问怎么登录、怎么授权、怎么接邮箱、为什么同步不了时，按这里回答，不要说不知道）：',
+  '- 登录复旦账号（eLearning）：到「设置 → 复旦账号」点「登录复旦账号」（对话里出现「登录复旦账号」按钮时点它也行），会弹出学校官方的统一身份认证页面。用户在那个窗口里自己输入学号和密码，页面要求时用手机企业微信扫码或在企业微信里点「确认」。登录成功后窗口自动关闭，再点「立即同步」。',
+  '- 登录状态会过期，过期后重复上面的步骤即可。校外网络连不上时，先连学校 VPN。',
+  '- 学生邮箱：先在网页版学生邮箱的设置里开启 IMAP，生成「客户端专用密码」；再到「设置 → 复旦账号 → 学生邮箱」填 学号@m.fudan.edu.cn 和这个专用密码（不是邮箱登录密码）。',
+  '- 模型：在「设置 → 模型」填服务地址、模型名和 API Key。',
+  '- iCourse 还没接入。',
+  '- 你自己不能替用户登录，也看不到登录窗口。不要让用户把密码、验证码发到对话里；密码只在学校官方登录页输入，应用不保存。',
+].join('\n');
+
 /** 助理系统提示（PRD 附录 B：身份 → 风格 → 准则 → 画像 → 记忆 → 今日概况 → 工具说明） */
-export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: TodayOverview; nowIso: string }): string {
+export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: TodayOverview; nowIso: string; platforms?: PlatformState[] }): string {
   const { profile, memories, today } = p;
   const mem = memories.length ? memories.map((m) => `- [${m.type}] ${m.content}`).join('\n') : '（暂无）';
   const dl = today.deadlines.slice(0, 8).map((d) => `- ${d.title}${d.course ? `（${d.course}）` : ''} 截止 ${d.dueAt}${d.done ? ' 已提交' : ''}`).join('\n') || '（无）';
@@ -38,6 +60,10 @@ export function personaPrompt(p: { profile: Profile; memories: Memory[]; today: 
     '- 用户说某封邮件不用回 / 已处理，或某份作业其实已经完成（比如组作业由组长提交）时，用 mark_item_done 在应用里标记，这只改本地状态、不改邮箱和 eLearning；标记前先用工具查到真实的事项 id。',
     '- 情绪话题可以倾听和安慰；遇到明显的心理危机信号，温和地建议联系复旦心理健康教育中心或心理援助热线。',
     `- ${EXTERNAL_RULE}`,
+    '',
+    APP_GUIDE,
+    `平台连接状态：\n${platformStatusText(p.platforms ?? [])}`,
+    '平台显示登录过期时，工具里的数据可能是上次同步留下的；回答时说明这一点，并告诉用户怎么重新登录。',
     '',
     `用户画像：昵称 ${profile.nickname ?? '未填'}；${[profile.school, profile.major, profile.grade, profile.degree].filter(Boolean).join(' / ') || '院系年级未填'}。${profile.freeText ?? ''}`,
     `关于用户的记忆：\n${mem}`,

@@ -116,6 +116,16 @@ app.whenReady().then(async () => {
   ctx = new AppContext({
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
+    platformStatus: async (probe) => {
+      const s = ctx.repo.getSettings();
+      if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' as const }));
+      const elearning = probe ? await auth.status('elearning') : auth.cachedStatus('elearning');
+      return [
+        elearning ? { platform: 'elearning', status: elearning } : { platform: 'elearning', status: 'unavailable', message: '本次启动后还没检查过' },
+        { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
+        { platform: 'mail', status: s.mail?.user && sec().hasMailPassword() ? 'ok' : 'not_configured' },
+      ];
+    },
     elearning: () => (ctx.repo.getSettings().demoMode ? demoElearning : new CanvasClient(auth)),
     mail: () => {
       const s = ctx.repo.getSettings();

@@ -38,6 +38,23 @@ export const PLATFORM_URLS: Record<FudanPlatform, { base: string; entry: string 
 /** UIS 登录页所在的主机名（用于判断是否被重定向到了登录页）。 */
 export const UIS_HOSTS = ['id.fudan.edu.cn', 'uis.fudan.edu.cn'];
 
+/**
+ * eLearning（Canvas）对「已登录但没有权限」也返回 401，例如课程花名册、单元不对学生开放。
+ * 两种 401 靠响应体区分：没有权限是 {"status":"unauthorized"}，未登录是 {"status":"unauthenticated"}。
+ * 没有权限不代表登录过期，不能让用户重新登录。
+ */
+export async function isPermissionDenied(res: Response): Promise<boolean> {
+  if (res.status !== 401) return false;
+  try {
+    const body = await res.clone().json() as { status?: unknown; errors?: { message?: unknown }[] };
+    if (body?.status === 'unauthorized') return true;
+    if (body?.status === 'unauthenticated') return false;
+    return (body?.errors ?? []).some((e) => typeof e?.message === 'string' && /not authorized to perform/i.test(e.message));
+  } catch {
+    return false;
+  }
+}
+
 export function isUisLoginUrl(url: string): boolean {
   try {
     return UIS_HOSTS.includes(new URL(url).hostname);

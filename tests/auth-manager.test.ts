@@ -52,4 +52,12 @@ describe('UIS 登录生命周期', () => {
     await expect(auth.fetch('elearning', 'https://elearning.fudan.edu.cn/api/v1/courses')).rejects.toThrow('重新登录');
     expect(await auth.status('elearning')).toBe('need_login');
   });
+  it('已登录但没有权限的 401（如课程花名册）不算登录过期', async () => {
+    state.fetch.mockResolvedValueOnce(json({ id: 12 })).mockResolvedValueOnce(json({ status: 'unauthorized', errors: [{ message: 'user not authorized to perform that action' }] }, 401));
+    const auth = new AuthManager(); expect(await auth.status('elearning')).toBe('ok');
+    const res = await auth.fetch('elearning', 'https://elearning.fudan.edu.cn/api/v1/courses/1/users');
+    expect(res.status).toBe(401);
+    expect(await auth.status('elearning')).toBe('ok');
+    expect(auth.cachedStatus('elearning')).toBe('ok');
+  });
 });

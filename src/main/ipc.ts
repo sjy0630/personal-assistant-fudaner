@@ -187,15 +187,7 @@ export function registerIpc(ctx: AppContext, opts: {
     }
   });
 
-  handle('platforms.status', async (): Promise<PlatformState[]> => {
-    const s = repo.getSettings();
-    if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' }));
-    return [
-      { platform: 'elearning', status: await opts.auth.status('elearning') },
-      { platform: 'icourse', status: 'unavailable', message: 'iCourse 尚未接入，课程回放暂不参与同步。' },
-      { platform: 'mail', status: s.mail?.user && opts.secrets.hasMailPassword() ? 'ok' : 'not_configured' },
-    ];
-  });
+  handle('platforms.status', async (): Promise<PlatformState[]> => ctx.platformStatus(true));
   handle('platforms.login', async () => opts.auth.requestLogin());
   handle('platforms.syncNow', async () => {
     const result = await ctx.syncAll();
