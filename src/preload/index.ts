@@ -34,7 +34,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   notices: { sources: call('notices.sources'), list: call('notices.list') } as FudanerApi['notices'],
   external: { presets: call('external.presets'), status: call('external.status'), save: call('external.save') } as FudanerApi['external'],
   reminders: { list: call('reminders.list'), add: call('reminders.add'), setEnabled: call('reminders.setEnabled'), remove: call('reminders.remove') } as FudanerApi['reminders'],
-  campus: { status: call('campus.status'), importTimetable: call('campus.importTimetable'), importExams: call('campus.importExams'), library: call('campus.library'), cardBalance: call('campus.cardBalance'), electricity: call('campus.electricity'), grades: call('campus.grades') } as FudanerApi['campus'],
+  campus: { status: call('campus.status'), importTimetable: call('campus.importTimetable'), importExams: call('campus.importExams'), library: call('campus.library'), cardBalance: call('campus.cardBalance'), electricity: call('campus.electricity'), grades: call('campus.grades'), program: call('campus.program'), selected: call('campus.selected') } as FudanerApi['campus'],
   treehole: { status: call('treehole.status'), login: call('treehole.login'), logout: call('treehole.logout') } as FudanerApi['treehole'],
   decisions: call('decisions') as FudanerApi['decisions'],
   tickets: call('tickets') as FudanerApi['tickets'],

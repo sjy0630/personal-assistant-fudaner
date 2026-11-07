@@ -261,6 +261,8 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
   handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
   handle<[], unknown>('campus.electricity', () => campusCall(() => ctx.electricity()));
+  handle<[], unknown>('campus.program', () => campusCall(() => ctx.programCompletion({ force: true })));
+  handle<[string?], unknown>('campus.selected', (which) => campusCall(() => ctx.selectedCourses(which || 'current')));
   handle<[], unknown>('campus.grades', () => campusCall(async () => {
     const r = await ctx.grades({ force: true });
     let rank: unknown;

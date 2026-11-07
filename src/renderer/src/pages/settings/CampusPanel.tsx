@@ -15,6 +15,8 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
   const [library, setLibrary] = useState<Library | null>(null);
   const [card, setCard] = useState<{ balance: number; at: string } | null>(null);
   const [grades, setGrades] = useState<Awaited<ReturnType<typeof api.campus.grades>> | null>(null);
+  const [program, setProgram] = useState<Awaited<ReturnType<typeof api.campus.program>> | null>(null);
+  const [selected, setSelected] = useState<Awaited<ReturnType<typeof api.campus.selected>> | null>(null);
   const [power, setPower] = useState<Awaited<ReturnType<typeof api.campus.electricity>> | null>(null);
   const [hole, setHole] = useState<{ loggedIn: boolean; demo: boolean } | null>(null);
   const [holeForm, setHoleForm] = useState({ email: '', password: '' });
@@ -47,6 +49,26 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
               </div>
             </div>
           )}
+          {program && (
+            <div className={styles.statusRow}>
+              <div>
+                <strong>培养方案完成情况</strong>
+                <p className={styles.hint}>
+                  {program.modules.length
+                    ? program.modules.map((m) => `${m.name}${m.required !== undefined ? ` ${m.earned ?? '?'}/${m.required}` : ''}`).join(' · ')
+                    : '已读到页面内容，可以直接问旦旦「我还差多少学分」。'}
+                </p>
+              </div>
+            </div>
+          )}
+          {selected && (
+            <div className={styles.statusRow}>
+              <div>
+                <strong>选课结果（{selected.semester}）</strong>
+                <p className={styles.hint}>{selected.courses.map((c) => `${c.course}${c.credits !== undefined ? `（${c.credits} 学分）` : ''}`).join('、') || '这学期还没有选上的课'}{selected.totalCredits !== undefined ? ` · 共 ${selected.totalCredits} 学分` : ''}</p>
+              </div>
+            </div>
+          )}
           <div className={styles.statusRow}>
             <div>
               <strong>考试安排</strong>
@@ -65,6 +87,12 @@ export function CampusPanel({ onBusy, demo }: Pick<PanelProps, 'onBusy'> & { dem
           </button>
           <button type="button" onClick={() => void task.run('grades', async () => { setGrades(await api.campus.grades()); }, '已读取成绩。', '读取失败，请确认已登录复旦账号后重试。')}>
             {task.busy === 'grades' ? '正在读取…' : '查看成绩与绩点'}
+          </button>
+          <button type="button" onClick={() => void task.run('program', async () => { setProgram(await api.campus.program()); }, '已读取培养方案完成情况。', '读取失败，请确认已登录复旦账号后重试。')}>
+            {task.busy === 'program' ? '正在读取…' : '培养方案完成情况'}
+          </button>
+          <button type="button" onClick={() => void task.run('selected', async () => { setSelected(await api.campus.selected('current')); }, '已读取选课结果。', '读取失败，请确认已登录复旦账号后重试。')}>
+            {task.busy === 'selected' ? '正在读取…' : '选课结果'}
           </button>
           <button type="button" onClick={() => void task.run('exams', async () => {
             const r = await api.campus.importExams();

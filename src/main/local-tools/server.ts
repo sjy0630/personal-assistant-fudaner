@@ -54,6 +54,8 @@ export function createLocalServer(
     electricity?: () => Promise<unknown>;
     grades?: () => Promise<{ semesters: { name: string; courses: unknown[] }[]; gpa?: number; credits: number; updatedAt: string }>;
     gpaRank?: () => Promise<unknown>;
+    program?: () => Promise<unknown>;
+    selected?: (which: string) => Promise<unknown>;
   } = {},
 ): McpServer {
   const server = new McpServer({ name: 'fudaner-local', version: '0.1.0' });
@@ -440,6 +442,22 @@ export function createLocalServer(
       description: '查询本人的绩点和在本年级本院系的排名（教务系统「我的绩点」）。只返回本人和总人数。需要学号才能在排名里找到本人：没有时请用户告诉你，用 update_profile 记下 student_number',
       inputSchema: {}, annotations: ro,
     }, async () => json(await gpaRank()));
+  }
+
+  if (extras.program) {
+    const program = extras.program;
+    server.registerTool('get_program_completion', {
+      description: '查询本人的培养方案完成情况：各类别（通识、专业必修、专业选修等）要求学分、已获学分、还差多少。问「我还差多少学分毕业」「专业选修修够了吗」、规划选课时使用。modules 是认出来的汇总，text 是教务系统页面上表格的原文',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await program()));
+  }
+  if (extras.selected) {
+    const selected = extras.selected;
+    server.registerTool('get_selected_courses', {
+      description: '查询选课结果：某学期选上的课（课程、老师、学分、上课时间地点）和总学分；rounds 是选课页面上的轮次信息（读得到时）。问「我这学期 / 下学期选了什么课」「一共多少学分」时使用',
+      inputSchema: { semester: z.string().optional().describe('current 当前学期（默认）、next 下学期，或学期名称关键词如「2026-2027学年2学期」') },
+      annotations: ro,
+    }, async ({ semester }) => json(await selected(semester || 'current')));
   }
 
   if (extras.electricity) {

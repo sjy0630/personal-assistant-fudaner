@@ -32,7 +32,9 @@ import { FeedCurator } from './engine/curator';
 import { demoSearch } from './demo/demo-campus';
 import { readElectricity, type DormElectricity } from './sources/dorm';
 import { readGpaRank, readGrades, type GpaRank, type GradeReport } from './sources/grades';
-import { demoGrades } from './demo/demo-campus';
+import { demoGrades, demoProgram, demoSelected } from './demo/demo-campus';
+import { readProgramCompletion, readSelectedCourses, type ProgramCompletion, type SelectedCourses } from './sources/academic';
+import { readStudentId } from './sources/grades';
 
 /**
  * 应用的组装根（参考 dsh-superagent 的 Runtime）：创建并连接所有部件，不包含业务规则。
@@ -135,6 +137,7 @@ export class AppContext {
       literature: { search: (q) => this.searchLiterature(q), get: (id) => this.getLiterature(id) },
       treehole: () => this.treehole(), electricity: () => this.electricity(),
       grades: () => this.grades(), gpaRank: () => this.gpaRank(),
+      program: () => this.programCompletion(), selected: (which: string) => this.selectedCourses(which),
     }));
 
     await this.executorHub.connect('fudan-elearning', createElearningServer(elearningData));
@@ -407,6 +410,37 @@ export class AppContext {
     this.repo.setKv('grades', report);
     this.clearCampusProblem('grades');
     return report;
+  }
+
+  private async studentId(): Promise<string> {
+    const cached = this.repo.getKv<string | null>('jw_student_id', null);
+    if (cached) return cached;
+    const { studentId } = await readStudentId(this.reader());
+    this.repo.setKv('jw_student_id', studentId);
+    return studentId;
+  }
+
+  private undergradOnly(): void {
+    const degree = this.repo.getProfile().degree;
+    if (degree === '硕士' || degree === '博士') throw new Error('研究生的培养方案和选课在研究生系统里，暂时还读不到。');
+  }
+
+  /** 培养方案完成情况（缓存 1 小时）。属于学业记录，按敏感内容处理 */
+  async programCompletion(opts: { force?: boolean } = {}): Promise<ProgramCompletion> {
+    if (this.repo.getSettings().demoMode) return demoProgram();
+    const cached = this.repo.getKv<ProgramCompletion | null>('program_completion', null);
+    if (!opts.force && cached && Date.now() - Date.parse(cached.updatedAt) < 3_600_000) return cached;
+    this.undergradOnly();
+    const r = await readProgramCompletion(this.reader(), await this.studentId());
+    this.repo.setKv('program_completion', r);
+    return r;
+  }
+
+  /** 选课结果：当前学期、下学期或指定学期选上的课 */
+  async selectedCourses(which = 'current'): Promise<SelectedCourses> {
+    if (this.repo.getSettings().demoMode) return demoSelected(which);
+    this.undergradOnly();
+    return readSelectedCourses(this.reader(), which);
   }
 
   /** 绩点排名：只返回本人一条和年级院系总人数 */

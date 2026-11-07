@@ -2,6 +2,7 @@ import type { LiteratureRecord } from '../sources/library-search';
 import type { DormElectricity } from '../sources/dorm';
 import type { WebResult } from '../sources/web-search';
 import type { GradeReport } from '../sources/grades';
+import type { ProgramCompletion, SelectedCourses } from '../sources/academic';
 import type { Repo } from '../db/repo';
 import type { LibraryStatus } from '../sources/campus-life';
 
@@ -102,4 +103,27 @@ export function demoGrades(): GradeReport {
     { course: '形势与政策（演示）', credits: 0.5, grade: 'P', semester: '2025-2026学年2学期' },
   ];
   return { semesters: [{ id: 'demo', name: '2025-2026学年2学期', courses }], gpa: 3.73, credits: 10.5, updatedAt: new Date().toISOString() };
+}
+
+/** 演示培养方案完成情况（虚构） */
+export function demoProgram(): ProgramCompletion {
+  const modules = [
+    { name: '通识教育（演示）', required: 46, earned: 30, remaining: 16 },
+    { name: '专业必修（演示）', required: 60, earned: 34, remaining: 26 },
+    { name: '专业选修（演示）', required: 20, earned: 6, remaining: 14 },
+    { name: '任意选修（演示）', required: 10, earned: 4, remaining: 6 },
+  ];
+  return { modules, text: modules.map((m) => `${m.name} | 要求 ${m.required} | 已获 ${m.earned}`).join('\n'), source: 'page', updatedAt: new Date().toISOString() };
+}
+
+/** 演示选课结果（虚构） */
+export function demoSelected(which: string): SelectedCourses {
+  return {
+    semester: which === 'next' ? '2026-2027学年2学期（演示）' : '2026-2027学年1学期（演示）',
+    courses: [
+      { course: '数据结构（演示）', teachers: ['张老师'], credits: 3, sessions: ['周一 第6–7节 H2215 1–16周'] },
+      { course: '线性代数（演示）', teachers: ['王老师'], credits: 4, sessions: ['周三 第1–2节 H3109 1–16周', '周五 第1–2节 H3109 1–16周'] },
+    ],
+    totalCredits: 7,
+  };
 }
