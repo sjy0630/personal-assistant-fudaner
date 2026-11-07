@@ -224,13 +224,23 @@ export class AppContext {
       applyDemoCourseExtras(this.repo, new Date());
       return { kind: 'undergraduate' as const, semester: '演示学期', courses: this.repo.listCourses().length, entries: 0 };
     }
-    return importTimetable(this.repo, this.reader());
+    const r = await importTimetable(this.repo, this.reader());
+    this.clearCampusProblem('timetable');
+    return r;
+  }
+
+  /** 手动导入成功后，清掉自动更新留下的失败记录 */
+  private clearCampusProblem(key: string): void {
+    const problems = this.repo.getKv<Record<string, string>>('campus_problems', {});
+    if (key in problems) { delete problems[key]; this.repo.setKv('campus_problems', problems); }
   }
 
   /** 导入考试安排 */
   async importExams() {
     if (this.repo.getSettings().demoMode) return demoExams(this.repo, new Date());
-    return importExams(this.repo, this.reader());
+    const r = await importExams(this.repo, this.reader());
+    this.clearCampusProblem('exams');
+    return r;
   }
 
   async library(): Promise<LibraryStatus[]> {

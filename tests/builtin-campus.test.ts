@@ -102,6 +102,37 @@ describe('树洞与旦克', () => {
     expect(JSON.stringify(tokens.get())).not.toContain('right');
   });
 
+  it('WebVPN 直接返回它的登录页面（200）时也能识别，登录后重试', async () => {
+    let vpnReady = false;
+    const fetch: RawFetch = async (url) => {
+      if (url.startsWith('https://forum.fduhole.com')) throw new Error('offline');
+      if (!vpnReady) return { status: 200, url, contentType: 'text/html', text: '<html><head><title>资源访问控制系统</title></head><a href="/login?cas_login=true">统一身份认证登录</a></html>' };
+      return json({ access: 'a', refresh: 'r' });
+    };
+    const ensureWebvpn = vi.fn(async () => { vpnReady = true; });
+    const tokens = store();
+    await new TreeholeClient({ fetch, ensureWebvpn, tokens }).login('me@m.fudan.edu.cn', 'pw');
+    expect(ensureWebvpn).toHaveBeenCalledTimes(1);
+    expect(tokens.get()).toEqual({ access: 'a', refresh: 'r' });
+  });
+
+  it('直连拿到「请使用校园网」之类的网页时改走 WebVPN', async () => {
+    const urls: string[] = [];
+    const fetch: RawFetch = async (url) => {
+      urls.push(url);
+      if (url.endsWith('/divisions')) return json([]);
+      if (url.startsWith('https://auth.fduhole.com')) return { status: 200, url, contentType: 'text/html', text: '<html><title>请使用校园网访问</title></html>' };
+      return json({ access: 'a', refresh: 'r' });
+    };
+    await new TreeholeClient({ fetch, ensureWebvpn: async () => {}, tokens: store() }).login('me@m.fudan.edu.cn', 'pw');
+    expect(urls.at(-1)).toContain('webvpn.fudan.edu.cn/https/');
+  });
+
+  it('拿到看不懂的网页时，错误里写明是哪个页面', async () => {
+    const fetch: RawFetch = async (url) => (url.endsWith('/divisions') ? json([]) : { status: 200, url: 'https://auth.fduhole.com/api/login', contentType: 'text/plain', text: 'maintenance' });
+    await expect(new TreeholeClient({ fetch, ensureWebvpn: async () => {}, tokens: store() }).login('a', 'b')).rejects.toThrow('auth.fduhole.com');
+  });
+
   it('旦克课程评价按推荐数排序', async () => {
     const fetch: RawFetch = async (url) => url.endsWith('/divisions') ? json([]) : json({
       name: '数据结构', code: 'COMP130004', review_count: 2, course_list: [{ teachers: '张老师', year: 2025, semester: 1, review_list: [
@@ -126,6 +157,19 @@ describe('宿舍电量', () => {
     expect(ok.remainingKwh).toBe(9.5);
     expect(urls[0]).toContain('/sso/');
     await expect(readElectricity({ getText: async (url) => ({ url: url.includes('sso') ? url : 'https://zlapp.fudan.edu.cn/uc/wap/login?redirect=x', status: 200, text: '<html>登录</html>' }) })).rejects.toBeInstanceOf(NeedLoginError);
+  });
+
+  it('后台请求走不完单点登录时，用隐藏窗口完成再读', async () => {
+    let session = false;
+    const rendered: string[] = [];
+    const r = await readElectricity({
+      getText: async (url) => (session || url.includes('sso')
+        ? { url, status: 200, text: url.includes('sso') ? '<html>跳转中</html>' : JSON.stringify({ e: 0, d: { fj_surplus: 12 } }) }
+        : { url: 'https://zlapp.fudan.edu.cn/uc/wap/login?redirect=x', status: 200, text: '<html>登录</html>' }),
+      render: async (url, ready) => { rendered.push(url); session = ready('', 'https://zlapp.fudan.edu.cn/site/home'); return ''; },
+    });
+    expect(rendered).toHaveLength(1);
+    expect(r.remainingKwh).toBe(12);
   });
 });
 

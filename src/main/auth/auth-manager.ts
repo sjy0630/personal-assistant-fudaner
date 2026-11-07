@@ -71,14 +71,55 @@ export class AuthManager implements FudanAuth {
     return { status: res.status, url: res.url || url, contentType: res.headers.get('content-type') ?? '', text: await res.text() };
   }
 
-  /** 建立 WebVPN 会话：访问它的统一身份认证登录入口，复旦账号已登录时会自动完成 */
-  async ensureWebvpn(): Promise<void> {
-    const res = await this.ses.fetch('https://webvpn.fudan.edu.cn/login?cas_login=true', { credentials: 'include', redirect: 'follow', signal: AbortSignal.timeout(20_000) } as RequestInit);
-    await res.body?.cancel().catch(() => undefined);
-    if (isUisLoginUrl(res.url)) {
-      this.setStatus('elearning', 'need_login');
-      throw new NeedLoginError('elearning', '复旦账号登录已过期，WebVPN 连不上，请重新登录复旦账号');
+  /** WebVPN 会话是否有效：访问首页不会被带回它的登录页 */
+  private async webvpnAlive(): Promise<boolean> {
+    try {
+      const res = await this.ses.fetch('https://webvpn.fudan.edu.cn/', { credentials: 'include', redirect: 'follow', signal: AbortSignal.timeout(15_000) } as RequestInit);
+      await res.body?.cancel().catch(() => undefined);
+      const u = new URL(res.url);
+      return res.ok && u.hostname === 'webvpn.fudan.edu.cn' && !u.pathname.startsWith('/login');
+    } catch {
+      return false;
     }
+  }
+
+  private webvpnLogin: Promise<void> | null = null;
+
+  /**
+   * 建立 WebVPN 会话。统一身份认证最后一步靠页面脚本跳回 WebVPN，后台请求走不完，
+   * 所以在隐藏窗口里打开 WebVPN 的统一身份认证入口：复旦账号已登录时几秒内自动完成；
+   * 学校要求输入密码或二次验证时，把窗口显示出来让用户自己完成。
+   */
+  ensureWebvpn(): Promise<void> {
+    if (this.webvpnLogin) return this.webvpnLogin;
+    this.webvpnLogin = (async () => {
+      if (await this.webvpnAlive()) return;
+      const win = new BrowserWindow({
+        show: false, width: 480, height: 720, title: '登录 WebVPN（用于校外访问树洞）', autoHideMenuBar: true,
+        webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
+      });
+      win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      try {
+        void win.loadURL('https://webvpn.fudan.edu.cn/login?cas_login=true').catch(() => {});
+        const start = Date.now();
+        let shownAt = 0;
+        for (;;) {
+          await new Promise((r) => setTimeout(r, 500));
+          if (win.isDestroyed()) throw new NeedLoginError('elearning', '没有完成 WebVPN 登录');
+          const url = win.webContents.getURL();
+          let host = '';
+          let path = '';
+          try { ({ hostname: host, pathname: path } = new URL(url)); } catch { /* 还没开始加载 */ }
+          if (host === 'webvpn.fudan.edu.cn' && !path.startsWith('/login') && !win.webContents.isLoading() && await this.webvpnAlive()) return;
+          // 停在统一身份认证页面：需要用户自己输入密码 / 二次验证
+          if (isUisLoginUrl(url) && !shownAt && Date.now() - start > 4000) { win.show(); shownAt = Date.now(); }
+          if (Date.now() - start > (shownAt ? 180_000 : 30_000)) throw new NeedLoginError('elearning', 'WebVPN 登录超时，请重新登录复旦账号后再试');
+        }
+      } finally {
+        if (!win.isDestroyed()) win.destroy();
+      }
+    })().finally(() => { this.webvpnLogin = null; });
+    return this.webvpnLogin;
   }
 
   /** 用登录会话读一个页面的文字（教务系统等）。被带到登录页时抛出 NeedLoginError */
@@ -91,27 +132,34 @@ export class AuthManager implements FudanAuth {
    * 在隐藏窗口里打开页面，等页面脚本渲染完再取 HTML（含同源 iframe）。
    * 用于考试安排、校园卡这类靠脚本加载内容的页面。只读页面内容，不点击、不提交。
    */
-  async renderPage(platform: FudanPlatform, url: string, ready: (html: string) => boolean, timeoutMs = 20_000): Promise<string> {
+  async renderPage(platform: FudanPlatform, url: string, ready: (html: string, url: string) => boolean, timeoutMs = 20_000): Promise<string> {
     const win = new BrowserWindow({ show: false, webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     try {
       void win.loadURL(url).catch(() => {});
       const deadline = Date.now() + timeoutMs;
       let html = '';
+      let onUisSince = 0;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 500));
         if (win.isDestroyed()) break;
+        // 单点登录会短暂经过统一身份认证页面再跳回来；停在那里超过 5 秒才说明需要重新登录
         if (isUisLoginUrl(win.webContents.getURL())) {
-          this.setStatus(platform, 'need_login');
-          throw new NeedLoginError(platform);
+          onUisSince ||= Date.now();
+          if (Date.now() - onUisSince > 5000) {
+            this.setStatus(platform, 'need_login');
+            throw new NeedLoginError(platform);
+          }
+          continue;
         }
+        onUisSince = 0;
         if (win.webContents.isLoading()) continue;
         html = await win.webContents.executeJavaScript(`(() => {
           const parts = [document.documentElement.outerHTML];
           for (const f of document.querySelectorAll('iframe')) { try { if (f.contentDocument) parts.push(f.contentDocument.documentElement.outerHTML); } catch {} }
           return parts.join('\n');
         })()`).catch(() => '') as string;
-        if (ready(html)) return html;
+        if (ready(html, win.webContents.getURL())) return html;
       }
       return html;
     } finally {

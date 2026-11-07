@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { NeedLoginError } from '@fudaner/fudan-auth';
 import type { Repo } from '../db/repo';
 import { phaseFor, localDate } from '../engine/calendar';
 import {
@@ -10,10 +11,27 @@ import {
 export interface CampusReader {
   getText(url: string): Promise<{ url: string; status: number; text: string }>;
   /** 页面靠脚本加载内容时，在隐藏窗口里渲染后再读（测试里可以不提供） */
-  render?(url: string, ready: (html: string) => boolean): Promise<string>;
+  render?(url: string, ready: (html: string, url: string) => boolean): Promise<string>;
 }
 
 export interface TimetableResult { kind: 'undergraduate' | 'postgraduate'; semester?: string; courses: number; entries: number }
+
+/**
+ * 「我的课表」页。刚登录时第一次访问可能停在单点登录的跳转页，读不到学期列表就再读一次；
+ * 被带到登录页时按「需要重新登录」处理，而不是「格式变了」。
+ */
+async function readSemesterPage(reader: CampusReader): Promise<ReturnType<typeof parseSemesterPage>> {
+  for (let attempt = 0; ; attempt++) {
+    const page = await reader.getText(UNDERGRAD_TABLE_URL);
+    if (page.status >= 400) throw new Error(`教务系统返回 ${page.status}`);
+    try {
+      return parseSemesterPage(page.text);
+    } catch (error) {
+      if (/id\.fudan\.edu\.cn|uis\.fudan\.edu\.cn|authserver|统一身份认证/.test(page.url + page.text.slice(0, 3000))) throw new NeedLoginError('jwfw');
+      if (attempt >= 1) throw error;
+    }
+  }
+}
 
 /** 导入课表：写入每门课的上课时间；在 eLearning 上找得到同名课程时写到那门课上 */
 export async function importTimetable(repo: Repo, reader: CampusReader): Promise<TimetableResult> {
@@ -26,9 +44,7 @@ export async function importTimetable(repo: Repo, reader: CampusReader): Promise
     if (res.status >= 400) throw new Error(`研究生选课系统返回 ${res.status}`);
     entries = parsePostgradTable(res.text);
   } else {
-    const page = await reader.getText(UNDERGRAD_TABLE_URL);
-    if (page.status >= 400) throw new Error(`教务系统返回 ${page.status}`);
-    const { semesters, currentId } = parseSemesterPage(page.text);
+    const { semesters, currentId } = await readSemesterPage(reader);
     const current = semesters.find((s) => s.id === currentId) ?? semesters[0];
     if (!current) throw new TimetableFormatError();
     semester = current.name;
@@ -62,7 +78,8 @@ export async function importExams(repo: Repo, reader: CampusReader): Promise<{ e
   const looksLoaded = (html: string) => /<td[^>]*>[\s\S]*?20\d{2}\s*[-/.年]\s*\d{1,2}/.test(html) || /暂无|没有.*考试|无考试安排/.test(html);
   let html = (await reader.getText(EXAM_URL)).text;
   if (!looksLoaded(html) && reader.render) html = await reader.render(EXAM_URL, looksLoaded);
-  const exams = parseExamPage(html);
+  // 一个月以前考完的不再导入（考试安排页会列出往届记录）
+  const exams = parseExamPage(html).filter((e) => Date.parse(e.endsAt ?? e.startsAt) > Date.now() - 30 * 86_400_000);
   let added = 0;
   repo.db.tx(() => {
     for (const e of exams) {

@@ -64,19 +64,28 @@ export class TreeholeClient implements TreeholeApi {
   /** 发请求；WebVPN 会话失效时重新建立一次 */
   private async send(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> {
     const via = await this.via();
-    if (via === 'direct') return this.deps.fetch(url, init);
+    if (via === 'direct') {
+      const direct = await this.deps.fetch(url, init).catch(() => undefined);
+      // 直连拿到的是网页（例如「请使用校园网访问」）或连不上：改走 WebVPN
+      if (direct && (/json/.test(direct.contentType) || !/<html/i.test(direct.text))) return direct;
+      this.route = { via: 'webvpn', until: this.now() + 10 * 60_000 };
+    }
     const target = toWebvpnUrl(url);
     let res = await this.deps.fetch(target, init);
-    if (isWebvpnLogin(res.url) || (!/json/.test(res.contentType) && /<html/i.test(res.text))) {
+    if (vpnLoginPage(res)) {
       await this.deps.ensureWebvpn();
       res = await this.deps.fetch(target, init);
-      if (isWebvpnLogin(res.url)) throw new TreeholeError('WebVPN 登录没有成功：请先在「设置 → 复旦账号」重新登录复旦账号。');
+      if (vpnLoginPage(res)) throw new TreeholeError('WebVPN 登录没有成功：请先在「设置 → 复旦账号」重新登录复旦账号，再登录树洞。');
     }
     return res;
   }
 
   private parse<T>(res: RawResponse): T {
-    if (!/json/.test(res.contentType)) throw new TreeholeError(`树洞服务返回的不是数据（${res.status}），请稍后再试。`);
+    if (!/json/.test(res.contentType)) {
+      // 带上是哪个页面，方便排查（例如学校的提示页、WebVPN 的中间页）
+      console.warn('[Fudaner 树洞] 返回的不是数据', res.status, res.url, pageTitle(res.text));
+      throw new TreeholeError(`树洞服务返回的不是数据（${res.status}，${hostOf(res.url)}${pageTitle(res.text) ? `「${pageTitle(res.text)}」` : ''}），请稍后再试。`);
+    }
     try { return JSON.parse(res.text) as T; } catch { throw new TreeholeError('树洞服务返回的格式和预期不同。'); }
   }
 
@@ -179,6 +188,19 @@ interface RawFloor { floor_id?: number; hole_id?: number; ranking?: number; anon
 interface RawHole { hole_id?: number; division_id?: number; tags?: { name?: string }[]; reply?: number; view?: number; time_created?: string; floors?: { first_floor?: RawFloor; prefetch?: RawFloor[] } }
 interface RawCourseGroup { id?: number; name?: string; code?: string; department?: string; credits?: number[] | number; campus_name?: string; review_count?: number; course_count?: number }
 interface RawCourse { teachers?: string; year?: number; semester?: number; review_list?: { title?: string; content?: string; time_created?: string; rank?: Record<string, number>; vote?: number; remark?: number }[] }
+
+/** WebVPN 的登录页：被重定向到 /login，或者直接返回了它的登录页面 */
+function vpnLoginPage(r: RawResponse): boolean {
+  if (isWebvpnLogin(r.url)) return true;
+  if (/json/.test(r.contentType)) return false;
+  return /<html/i.test(r.text) && (/cas_login|webvpn/i.test(r.text) || /资源访问|统一身份认证/.test(pageTitle(r.text)));
+}
+function pageTitle(html: string): string {
+  return (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? '').trim().slice(0, 40);
+}
+function hostOf(url: string): string {
+  try { return new URL(url).hostname; } catch { return '未知地址'; }
+}
 
 function floorView(f: RawFloor, max: number) {
   return { hole_id: f.hole_id, floor_id: f.floor_id, floor: f.ranking, who: f.anonyname, time: f.time_created?.slice(0, 16).replace('T', ' '), likes: f.like, reply_to: f.reply_to || undefined, content: clean(f.content, max) };
