@@ -192,12 +192,15 @@ app.whenReady().then(async () => {
   const scheduleSync = () => {
     clearTimeout(syncTimer);
     const jitter = Math.random() * 5 * 60_000;
-    syncTimer = setTimeout(async () => { await ctx.syncAll().catch(() => undefined); scheduleSync(); }, 30 * 60_000 + jitter);
+    // 各平台每 15 分钟同步一次（加随机抖动）；邮件靠推送实时到达
+    syncTimer = setTimeout(async () => { await ctx.syncAll().catch(() => undefined); scheduleSync(); }, 15 * 60_000 + jitter);
   };
   const restartScheduler = () => {
     clearInterval(engineTimer);
     engineTimer = setInterval(async () => {
       if (Date.now() < paused) return;
+      // 邮箱推送连不上时，每 3 分钟查一次
+      void ctx.pollRealtime().catch(() => undefined);
       // 定时提醒 / 定时任务（用户自己设的，暂停提醒期间顺延）
       await ctx.runReminders().catch((e) => console.error('[reminders]', e));
       await ctx.engine.tick().catch((e) => console.error('[engine]', e));
@@ -206,6 +209,8 @@ app.whenReady().then(async () => {
       await ctx.executor.runNext().catch((e) => console.error('[executor]', e));
     }, 10_000);
     scheduleSync();
+    // 设置变了（例如邮箱配置）：重新连接邮箱推送
+    void ctx.restartWatchers().catch(() => undefined);
   };
 
   registerIpc(ctx, { auth, treehole, downloadsDir: () => app.getPath('downloads'), revealFile: (p) => shell.showItemInFolder(p), window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,

@@ -73,7 +73,8 @@ const BASE: Record<Trigger['kind'], Rule> = {
   announcement_new: (t) => ({ value: 0.45, urgency: 0.3, action: 'card', draft: `${p(t, 'course')} 有新公告：「${p(t, 'title')}」。`, reason: '你选的课发了公告' }),
   mail_new: (t, ctx) => {
     const cat = p(t, 'category');
-    if (cat === 'reply') return { value: 0.65, urgency: 0.5, action: 'chat', draft: `${p(t, 'from')} 来信「${p(t, 'subject')}」，需要你回复。`, reason: '需要回复的邮件' };
+    // 需要回复的邮件：在对话里说，同时弹系统通知（静默时段并入早安消息）
+    if (cat === 'reply') return { value: 0.65, urgency: 0.55, action: 'chat_notify', draft: `${p(t, 'from')} 来信「${p(t, 'subject')}」，需要你回复。`, reason: '需要回复的邮件' };
     if (t.payload.linkedTitle) return { value: 0.7, urgency: 0.55, action: 'chat', draft: `关于「${p(t, 'linkedTitle')}」：${p(t, 'summary') || p(t, 'subject')}`, reason: `${p(t, 'course') ? `「${p(t, 'course')}」` : ''}课程邮件，涉及你还没交的作业` };
     if (cat === 'course' || cat === 'action') return { value: 0.5, urgency: 0.4, action: 'card', draft: `${p(t, 'subject')}：${p(t, 'summary')}`, reason: cat === 'course' ? '课程相关邮件' : '需要处理的邮件' };
     if (cat === 'notice') {

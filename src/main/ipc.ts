@@ -221,7 +221,7 @@ export function registerIpc(ctx: AppContext, opts: {
     opts.restartScheduler();
     if (finishingOnboarding) setTimeout(() => ctx.introduceNoticeSources(), 1500);
   });
-  handle<[string], void>('settings.setMailPassword', async (p) => opts.secrets.setMailPassword(p));
+  handle<[string], void>('settings.setMailPassword', async (p) => { opts.secrets.setMailPassword(p); void ctx.restartWatchers().catch(() => undefined); });
   handle<['cloud' | 'local'], { ok: boolean; message: string }>('settings.testModel', async (which) => {
     const cfg = repo.getSettings()[which];
     if (!cfg) return { ok: false, message: '还没有配置' };

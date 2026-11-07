@@ -99,6 +99,7 @@ export class AppContext {
     const elearningData = {
       listCourses: async () => repo.listCourses().map((c) => ({ code: c.code, name: c.name, teachers: c.teachers })),
       listAssignments: async (f: { courseCode?: string; dueBefore?: string; status?: string }) => {
+        await this.freshElearning();
         const course = f.courseCode ? repo.findCourse(f.courseCode) : undefined;
         return repo.listItems({ kind: 'assignment', courseId: course?.id, dueBefore: f.dueBefore, done: f.status === 'pending' ? false : f.status === 'submitted' ? true : undefined })
           .map((i) => ({ id: i.id, title: i.title, course: i.courseId ? repo.getCourse(i.courseId)?.name : undefined, dueAt: i.dueAt, submitted: i.done, url: i.url }));
@@ -108,6 +109,7 @@ export class AppContext {
         return i ? { ...i, related: repo.linksOf(id).map((l) => ({ title: l.item.title, reason: l.reason })) } : null;
       },
       listAnnouncements: async (f: { courseCode?: string; since?: string }) => {
+        await this.freshElearning();
         const course = f.courseCode ? repo.findCourse(f.courseCode) : undefined;
         return repo.listItems({ kind: 'announcement', courseId: course?.id, since: f.since }).map((i) => ({ id: i.id, title: i.title, at: i.publishedAt, body: i.body.slice(0, 500) }));
       },
@@ -116,14 +118,14 @@ export class AppContext {
       downloadFile: (fileId: string, opts: { courseCode?: string; addToLibrary: boolean }) => this.downloadCourseFile(fileId, opts),
     };
     const mailData = {
-      search: async (f: { query?: string; since?: string; category?: string; limit?: number }) =>
+      search: async (f: { query?: string; since?: string; category?: string; limit?: number }) => (await this.freshMail(),
         repo.listItems({ kind: 'email', query: f.query, since: f.since, category: f.category, limit: f.limit ?? 20 })
-          .map((i) => ({ id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, category: i.aiCategory, summary: i.aiSummary, action: i.aiAction })),
+          .map((i) => ({ id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, category: i.aiCategory, summary: i.aiSummary, action: i.aiAction }))),
       get: async (id: string) => {
         const i = repo.getItem(id);
         return i && i.kind === 'email' ? { id: i.id, from: i.sender, subject: i.title, date: i.publishedAt, body: i.body.slice(0, 4000), summary: i.aiSummary } : null;
       },
-      listActionRequired: async () => repo.listItems({ kind: 'email', done: false, limit: 50 })
+      listActionRequired: async () => (await this.freshMail(), repo.listItems({ kind: 'email', done: false, limit: 50 }))
         .filter((i) => i.aiCategory === 'reply' || i.aiCategory === 'action')
         .map((i) => ({ id: i.id, from: i.sender, subject: i.title, summary: i.aiSummary, action: i.aiAction })),
     };
@@ -246,6 +248,84 @@ export class AppContext {
       actions: [...ideas.map(([, text]) => ({ label: text, action: 'say', payload: { text } })), ...(school ? [] : [{ label: '我来说一下院系', action: 'say', payload: { text: '我想告诉你我的院系' } }])],
     });
     this.deps.channels.messagePosted(msg);
+  }
+
+  // ---------------- 实时：邮件推送、按需刷新 ----------------
+  private mailSyncing: Promise<unknown> | null = null;
+  private elearningSyncing: Promise<unknown> | null = null;
+  private stopMailWatch?: () => Promise<void>;
+  private mailWatchState: 'off' | 'watching' | 'reconnecting' = 'off';
+  private mailDebounce?: ReturnType<typeof setTimeout>;
+
+  /** 只同步邮箱（几秒），然后马上研判：需要回复的邮件会主动提醒 */
+  async syncMailNow(now = new Date()): Promise<void> {
+    if (this.mailSyncing) { await this.mailSyncing; return; }
+    const mail = this.deps.mail();
+    if (!mail) return;
+    this.mailSyncing = (async () => {
+      try {
+        await syncMail(mail, this.repo, this.router, now);
+        await this.engine.tick();
+        this.deps.channels.changed('feed');
+      } catch (e) {
+        console.warn('[Fudaner 邮箱] 同步失败：', (e as Error).message);
+      }
+    })().finally(() => { this.mailSyncing = null; });
+    await this.mailSyncing;
+  }
+
+  /** 只同步 eLearning */
+  async syncElearningNow(now = new Date()): Promise<void> {
+    if (this.elearningSyncing) { await this.elearningSyncing; return; }
+    const el = this.deps.elearning();
+    if (!el) return;
+    this.elearningSyncing = syncElearning(el, this.repo, now).then(() => this.engine.tick()).catch((e) => console.warn('[Fudaner eLearning] 同步失败：', (e as Error).message))
+      .finally(() => { this.elearningSyncing = null; });
+    await this.elearningSyncing;
+  }
+
+  /** 查邮件前：超过 2 分钟没同步就先同步（最多等 20 秒，超时用已有数据） */
+  private async freshMail(): Promise<void> {
+    if (this.repo.getSettings().demoMode) return; // 演示数据不会变
+    const last = this.repo.getKv<string | null>('mail_last_sync', null);
+    if (last && Date.now() - Date.parse(last) < 2 * 60_000) return;
+    await Promise.race([this.syncMailNow(), new Promise((r) => setTimeout(r, 20_000))]);
+  }
+
+  /** 查作业、公告前：超过 10 分钟没同步就先同步（最多等 25 秒） */
+  private async freshElearning(): Promise<void> {
+    if (this.repo.getSettings().demoMode) return;
+    const last = this.repo.getKv<string | null>('elearning_last_sync', null);
+    if (last && Date.now() - Date.parse(last) < 10 * 60_000) return;
+    await Promise.race([this.syncElearningNow(), new Promise((r) => setTimeout(r, 25_000))]);
+  }
+
+  /**
+   * 开始盯着收件箱：新邮件到达时服务器会马上通知，等 8 秒（同一批邮件合并）后同步并研判。
+   * 邮箱设置变化时重新开始。演示模式不需要。
+   */
+  async restartWatchers(): Promise<void> {
+    await this.stopMailWatch?.().catch(() => undefined);
+    this.stopMailWatch = undefined;
+    this.mailWatchState = 'off';
+    if (this.repo.getSettings().demoMode) return;
+    const mail = this.deps.mail();
+    if (!mail?.watch) return;
+    this.stopMailWatch = mail.watch(() => {
+      clearTimeout(this.mailDebounce);
+      this.mailDebounce = setTimeout(() => void this.syncMailNow(), 8000);
+    }, (state) => { this.mailWatchState = state === 'stopped' ? 'off' : state; });
+  }
+
+  /** 推送连不上时的兜底：每 3 分钟查一次邮箱。由主进程每 10 秒调用 */
+  async pollRealtime(now = new Date()): Promise<void> {
+    if (this.mailWatchState === 'watching' || this.repo.getSettings().demoMode || !this.deps.mail()) return;
+    const last = this.repo.getKv<string | null>('mail_last_sync', null);
+    if (!last || now.getTime() - Date.parse(last) >= 3 * 60_000) await this.syncMailNow(now);
+  }
+
+  realtimeStatus(): { mail: 'off' | 'watching' | 'reconnecting' } {
+    return { mail: this.mailWatchState };
   }
 
   /** 读取网页：演示模式下只读虚构文章 */
@@ -604,6 +684,8 @@ export class AppContext {
 
   async close(): Promise<void> {
     this.externalVersion++;
+    clearTimeout(this.mailDebounce);
+    await this.stopMailWatch?.().catch(() => undefined);
     await this.hub.close();
     await this.executorHub.close();
     this.repo.db.close();
