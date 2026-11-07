@@ -5,6 +5,7 @@ import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
 import { AppContext } from './app-context';
 import { LibrarySearch } from './sources/library-search';
 import { TreeholeClient, type HoleTokens } from './sources/treehole';
+import { webSearch } from './sources/web-search';
 import { AuthManager } from './auth/auth-manager';
 import { DemoElearningClient, DemoMailClient, seedDemoProfile } from './demo/demo';
 import type { Channels } from './engine/channels';
@@ -142,6 +143,7 @@ app.whenReady().then(async () => {
       return { status: res.status, text: await res.text() };
     }),
     treehole: () => treehole,
+    webSearch: (q) => webSearch(renderSearchPage, q, { recent: 'week' }),
     // 教务系统、校园卡：复用统一身份认证会话。不按本地缓存的状态拦截（刚启动时还没检查过，会被误当成没登录），
     // 真没登录时读取会抛出 NeedLoginError，再提示用户登录
     campusReader: () => (ctx.repo.getSettings().demoMode ? null : {
@@ -199,6 +201,8 @@ app.whenReady().then(async () => {
       // 定时提醒 / 定时任务（用户自己设的，暂停提醒期间顺延）
       await ctx.runReminders().catch((e) => console.error('[reminders]', e));
       await ctx.engine.tick().catch((e) => console.error('[engine]', e));
+      // 动态策展：白天每 4 小时一次，在后台进行，不挡住提醒和研判
+      void ctx.curator.run().catch((e) => console.error('[curator]', e));
       await ctx.executor.runNext().catch((e) => console.error('[executor]', e));
     }, 10_000);
     scheduleSync();
@@ -248,4 +252,26 @@ async function readPublicPage(url: string): Promise<{ url: string; status: numbe
   let text: string;
   try { text = new TextDecoder(charset).decode(buf); } catch { text = new TextDecoder('utf-8').decode(buf); }
   return { url: res.url || url, status: res.status, text };
+}
+
+/**
+ * 用隐藏的浏览器窗口打开搜索结果页（独立的会话，有自己的 Cookie），和普通浏览器访问一样，
+ * 搜索引擎不容易把它当成机器人。只读页面内容。
+ */
+async function renderSearchPage(url: string): Promise<{ status: number; url: string; text: string }> {
+  const win = new BrowserWindow({ show: false, webPreferences: { partition: 'persist:web-search', contextIsolation: true, nodeIntegration: false, sandbox: true, javascript: true } });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  try {
+    await win.loadURL(url, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36' }).catch(() => undefined);
+    let html = '';
+    for (let i = 0; i < 16; i++) {
+      if (win.isDestroyed()) break;
+      html = await win.webContents.executeJavaScript('document.documentElement.outerHTML').catch(() => '') as string;
+      if (/b_algo|b_no/.test(html)) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return { status: 200, url: win.isDestroyed() ? url : win.webContents.getURL(), text: html };
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
 }

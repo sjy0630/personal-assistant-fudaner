@@ -108,7 +108,10 @@ export class ProactiveEngine {
     // 2. 研判（本地模型；没有模型时用规则）
     const memories = this.repo.listMemories(['goal', 'interest', 'preference', 'schedule']);
     const { assessment, model } = await assess(passed, {
-      llm: this.router.for('assess'), memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
+      // 研判优先用本地模型；只有本地模型时才能看邮件等隐私内容。学校通知和活动是公开信息，
+      // 没有本地模型时也可以交给云端模型判断（否则只能按关键词规则，动态会很少）
+      llm: this.router.for('assess') ?? (passed.every((t) => PUBLIC_KINDS.includes(t.kind)) ? this.router.for('activity_extract') : null),
+      memories, phase: budget.phase, now, describe: (t) => describeTrigger(t),
     });
 
     // 3. 决定：注意力预算 + 静默时段 + 观察模式
@@ -309,6 +312,9 @@ export class ProactiveEngine {
     if (changed) this.channels.changed('goals');
   }
 }
+
+/** 内容是公开信息的事件（学校官网通知、校园活动） */
+const PUBLIC_KINDS: Trigger['kind'][] = ['notice_new', 'activity_new'];
 
 /** 来自校内平台的事件来源 */
 const PLATFORM_SOURCES: Trigger['source'][] = ['elearning', 'mail', 'icourse', 'notice'];

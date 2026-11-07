@@ -195,7 +195,7 @@ export interface Task {
 export type VerifyCondition = { type: 'assignment_submitted'; itemId: string };
 
 // ---------- 动态 ----------
-export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'campus_notice' | 'replay' | 'insight' | 'suggest_ticket';
+export type FeedCardType = 'assignment' | 'announcement' | 'course_mail' | 'mail_action' | 'opportunity' | 'campus_notice' | 'news' | 'replay' | 'insight' | 'suggest_ticket';
 export interface FeedCard {
   id: string;
   type: FeedCardType;
@@ -345,6 +345,8 @@ export interface Settings {
   feeds?: FeedSource[];
   /** 关注的学校和院系官网通知来源 id；未设置（或 null）时由旦旦按院系、学历和兴趣自动选择 */
   noticeSources?: string[] | null;
+  /** 动态：定时联网找用户可能感兴趣的资讯（只把检索词发给搜索引擎），默认开启 */
+  webCuration?: boolean;
   /** 接入的外部 MCP 服务（社区做的复旦校园服务等），见 src/main/mcp/external.ts */
   externalMcp?: ExternalMcpConfig[];
 }

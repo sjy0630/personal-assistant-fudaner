@@ -27,6 +27,9 @@ import { readCardBalance, readLibrary, type LibraryStatus } from './sources/camp
 import { demoCardBalance, demoExams, demoLibrary, demoElectricity, demoTreehole, demoLiterature } from './demo/demo-campus';
 import type { LibrarySearch, LiteratureQuery } from './sources/library-search';
 import type { TreeholeApi, TreeholeClient } from './sources/treehole';
+import type { WebResult } from './sources/web-search';
+import { FeedCurator } from './engine/curator';
+import { demoSearch } from './demo/demo-campus';
 import { readElectricity, type DormElectricity } from './sources/dorm';
 
 /**
@@ -52,6 +55,8 @@ export interface AppDeps {
   postPublic?: (url: string) => Promise<{ status: number; text: string }>;
   /** 图书馆文献检索（公开接口） */
   library?: LibrarySearch;
+  /** 联网搜索（「动态」找资讯用） */
+  webSearch?: (query: string) => Promise<WebResult[]>;
   /** 树洞与旦克（树洞账号令牌 + 直连 / WebVPN） */
   treehole?: () => TreeholeClient | null;
 }
@@ -64,6 +69,8 @@ export class AppContext {
   readonly engine: ProactiveEngine;
   readonly agent: ChatAgent;
   readonly executor: TicketExecutor;
+  /** 动态策展：定时按用户的情况整理校园动态和联网资讯 */
+  readonly curator: FeedCurator;
   private syncing = false;
   /** 外部 MCP 服务的连接状态（设置页展示） */
   private external = new Map<string, ExternalMcpStatus>();
@@ -76,6 +83,10 @@ export class AppContext {
     this.engine = new ProactiveEngine(this.repo, this.router, deps.channels);
     this.agent = new ChatAgent(this.repo, this.router, this.hub, deps.channels, () => this.platformStatus(false));
     this.executor = new TicketExecutor(this.repo, this.router, this.executorHub, deps.channels);
+    this.curator = new FeedCurator({
+      repo: this.repo, router: this.router, channels: deps.channels,
+      search: (q) => (this.repo.getSettings().demoMode ? demoSearch(q) : this.deps.webSearch ? this.deps.webSearch(q) : Promise.resolve([])),
+    });
   }
 
   /** 启动 MCP 服务（进程内）。智能体用完整工具集，执行器用受限工具集。 */

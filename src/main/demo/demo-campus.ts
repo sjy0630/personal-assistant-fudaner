@@ -1,5 +1,6 @@
 import type { LiteratureRecord } from '../sources/library-search';
 import type { DormElectricity } from '../sources/dorm';
+import type { WebResult } from '../sources/web-search';
 import type { Repo } from '../db/repo';
 import type { LibraryStatus } from '../sources/campus-life';
 
@@ -81,4 +82,12 @@ export function demoTreehole() {
       ],
     }),
   };
+}
+
+/** 演示用的联网搜索结果（虚构） */
+export async function demoSearch(query: string): Promise<WebResult[]> {
+  return [
+    { title: `${query}：本周值得关注的三件事（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/1`, snippet: `虚构资讯：和「${query}」有关的最新进展汇总。`, date: '1 天前', site: '演示资讯' },
+    { title: `${query} 入门指南（演示）`, url: `https://example.com/demo-news/${encodeURIComponent(query)}/2`, snippet: `虚构内容：适合本科生了解「${query}」的入门资料。`, date: '3 天前', site: '演示博客' },
+  ];
 }

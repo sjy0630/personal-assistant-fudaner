@@ -14,7 +14,7 @@ import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
 import { OpenAiCompatClient } from './ai/llm';
-import { resolveChatReference } from './chat/references';
+import { resolveChatReference, safeExternalUrl } from './chat/references';
 
 /**
  * 把 FudanerApi（src/shared/ipc.ts）逐个映射到主进程实现。
@@ -128,10 +128,23 @@ export function registerIpc(ctx: AppContext, opts: {
     }
     if (reason) repo.addMemory({ type: 'interest', content: `不关心：${reason}`, source: 'feedback' });
   });
+  // 现在整理一次动态（校园 + 联网资讯）
+  handle<[], unknown>('feed.refresh', async () => {
+    const r = await ctx.curator.run(new Date(), { force: true });
+    opts.onChanged?.('feed');
+    return r;
+  });
   handle<[string, string], void>('feed.act', async (id, action) => {
     const card = repo.getFeedCard(id);
     if (!card || card.status === 'dismissed') throw new Error('这条动态已不存在或已忽略。');
     const a = card.actions.find((x) => x.action === action);
+    // 资讯卡片：打开原文（只允许 http / https 链接）
+    if (action === 'open_url' && typeof a?.payload?.url === 'string') {
+      const url = safeExternalUrl(a.payload.url);
+      if (!url || !opts.openExternal) throw new Error('这个链接打不开。');
+      await opts.openExternal(url);
+      return;
+    }
     if (action === 'accept_ticket' && typeof a?.payload?.ticketId === 'string') {
       decideTicket(a.payload.ticketId, true, id);
     }
