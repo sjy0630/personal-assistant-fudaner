@@ -5,6 +5,8 @@ import type { Channels } from '../engine/channels';
 import { buildToday } from '../today';
 import type { Item } from '../../shared/types';
 import type { ImportResult } from '../activities/sync';
+import type { LiteratureQuery, LiteratureRecord } from '../sources/library-search';
+import type { TreeholeApi } from '../sources/treehole';
 import { noticeView } from '../notices/sync';
 import { describeRepeat, nextOccurrence, validateRepeat } from '../engine/reminders';
 import type { ReminderRepeat } from '../../shared/types';
@@ -46,6 +48,9 @@ export function createLocalServer(
     importArticle?: (url: string) => Promise<ImportResult>;
     library?: () => Promise<unknown>;
     cardBalance?: () => Promise<{ balance: number; at: string }>;
+    literature?: { search(q: LiteratureQuery): Promise<{ total: number; records: LiteratureRecord[]; searchUrl: string }>; get(id: string): LiteratureRecord | undefined };
+    treehole?: () => TreeholeApi;
+    electricity?: () => Promise<unknown>;
   } = {},
 ): McpServer {
   const server = new McpServer({ name: 'fudaner-local', version: '0.1.0' });
@@ -306,6 +311,75 @@ export function createLocalServer(
       description: '查询本人校园卡余额（只读，复用复旦账号登录状态）。用户问「卡里还有多少钱」时使用',
       inputSchema: {}, annotations: ro,
     }, async () => json(await cardBalance()));
+  }
+
+  // ---------- 图书馆文献检索 ----------
+  if (extras.literature) {
+    const lit = extras.literature;
+    const brief = (r: LiteratureRecord) => ({ ...r, abstract: r.abstract?.slice(0, 600), abstract_truncated: (r.abstract?.length ?? 0) > 600 || undefined });
+    server.registerTool('search_literature', {
+      description: '在复旦图书馆资源发现系统里检索文献（期刊论文、图书等），返回题名、作者、年份、期刊、DOI、摘要和图书馆详情页。找论文、做文献综述、查某个方向的研究时使用。只依据返回的摘要回答，不声称读过全文',
+      inputSchema: {
+        query: z.string().describe('检索词，中英文都可以'),
+        scope: z.enum(['articles', 'all', 'books']).optional().describe('articles 文章（默认）、all 全部、books 图书期刊'),
+        field: z.enum(['all', 'title', 'author', 'subject', 'fulltext']).optional().describe('检索字段，fulltext 为全文索引检索'),
+        year_from: z.number().int().optional(), year_to: z.number().int().optional(),
+        newest_first: z.boolean().optional(), peer_reviewed_only: z.boolean().optional(), full_text_only: z.boolean().optional(),
+        limit: z.number().int().min(1).max(20).optional(),
+      },
+      annotations: ro,
+    }, async (a) => {
+      const r = await lit.search({ query: a.query, scope: a.scope, field: a.field, yearFrom: a.year_from, yearTo: a.year_to, sort: a.newest_first ? 'newest' : 'relevance', peerReviewedOnly: a.peer_reviewed_only, fullTextOnly: a.full_text_only, limit: a.limit });
+      return json({ total: r.total, records: r.records.map(brief), search_page: r.searchUrl });
+    });
+    server.registerTool('get_literature', {
+      description: '读取 search_literature 结果里某篇文献的完整信息（较长的摘要）',
+      inputSchema: { record_id: z.string() }, annotations: ro,
+    }, async ({ record_id }) => {
+      const r = lit.get(record_id);
+      if (!r) throw new Error('没有这条文献的记录，请先用 search_literature 检索。');
+      return json(r);
+    });
+  }
+
+  // ---------- 树洞与旦克 ----------
+  if (extras.treehole) {
+    const hole = extras.treehole;
+    server.registerTool('search_treehole', {
+      description: '搜索复旦树洞（匿名社区）的帖子和回复：选课经验、食堂、宿舍、实习、转专业、二手等真实经验。结果是匿名同学的个人看法，引用时说明来自树洞并给出洞号，不当作事实',
+      inputSchema: {
+        keyword: z.string(), limit: z.number().int().min(1).max(30).optional(),
+        accurate: z.boolean().optional().describe('精确匹配，适合课程代码、专有名词'),
+        within_days: z.number().int().min(1).max(365).optional().describe('只看最近多少天'),
+      },
+      annotations: ro,
+    }, async (a) => json(await hole().searchFloors(a.keyword, { limit: a.limit, accurate: a.accurate, withinDays: a.within_days })));
+    server.registerTool('read_treehole', {
+      description: '读一个树洞帖子的楼层（经验往往在回复里）。hole_id 来自 search_treehole 或 latest_treehole',
+      inputSchema: { hole_id: z.number().int(), start: z.number().int().min(0).optional(), length: z.number().int().min(1).max(50).optional() },
+      annotations: ro,
+    }, async (a) => json(await hole().hole(a.hole_id, { start: a.start, length: a.length })));
+    server.registerTool('latest_treehole', {
+      description: '树洞最新的帖子（可按标签筛选），了解最近大家在讨论什么',
+      inputSchema: { tag: z.string().optional(), length: z.number().int().min(1).max(20).optional() },
+      annotations: ro,
+    }, async (a) => json(await hole().latest({ tag: a.tag, length: a.length })));
+    server.registerTool('search_course_reviews', {
+      description: '在旦克（复旦课程评价）里搜课程：返回课程组 id、院系、学分、评价数。问「这门课怎么样」「哪个老师的好」时先用它找到课程',
+      inputSchema: { keyword: z.string().describe('课程名或课程代码') }, annotations: ro,
+    }, async (a) => json(await hole().searchCourses(a.keyword)));
+    server.registerTool('get_course_reviews', {
+      description: '读取旦克上某门课的评价：各老师、学期的评分（综合、内容、工作量、考核）和文字评价。course_group_id 来自 search_course_reviews',
+      inputSchema: { course_group_id: z.number().int(), max_reviews: z.number().int().min(1).max(30).optional() }, annotations: ro,
+    }, async (a) => json(await hole().courseReviews(a.course_group_id, a.max_reviews)));
+  }
+
+  if (extras.electricity) {
+    const electricity = extras.electricity;
+    server.registerTool('get_dorm_electricity', {
+      description: '查询本人宿舍的剩余电量（度）和用电情况（复用复旦账号登录状态，只读）。问「宿舍还剩多少电」时使用',
+      inputSchema: {}, annotations: ro,
+    }, async () => json(await electricity()));
   }
 
   // ---------- 学校和院系官网通知 ----------

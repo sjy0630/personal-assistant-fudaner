@@ -1,3 +1,5 @@
+import type { LiteratureRecord } from '../sources/library-search';
+import type { DormElectricity } from '../sources/dorm';
 import type { Repo } from '../db/repo';
 import type { LibraryStatus } from '../sources/campus-life';
 
@@ -42,4 +44,41 @@ export function demoLibrary(): LibraryStatus[] {
 
 export function demoCardBalance(): number {
   return 23.5;
+}
+
+// ---------- 演示：宿舍电量、图书馆文献、树洞与旦克（全部虚构） ----------
+
+export function demoElectricity(): DormElectricity {
+  return { room: '邯郸 本部 演示楼 101', remainingKwh: 8.6, usedKwh: 1532.4, totalKwh: 1541, updatedAt: new Date().toISOString().slice(0, 10) };
+}
+
+const DEMO_PAPERS: LiteratureRecord[] = [
+  { recordId: 'DEMO_1', context: 'PC', title: '图神经网络在分子性质预测中的应用综述（演示）', authors: ['张三（虚构）', '李四（虚构）'], year: 2025, journal: '演示期刊', type: 'article', abstract: '这是一篇虚构的综述摘要，介绍图神经网络如何把分子表示成图并预测其性质。', peerReviewed: true, fullTextAvailable: true, url: 'https://example.com/demo-paper-1' },
+  { recordId: 'DEMO_2', context: 'PC', title: '大语言模型辅助科学发现：方法与挑战（演示）', authors: ['王五（虚构）'], year: 2026, journal: '演示学报', type: 'article', abstract: '虚构摘要：讨论大语言模型在提出假设、设计实验和分析数据中的作用与局限。', peerReviewed: true, fullTextAvailable: false, url: 'https://example.com/demo-paper-2' },
+];
+
+export function demoLiterature(query: string): { total: number; records: LiteratureRecord[]; searchUrl: string } {
+  return { total: DEMO_PAPERS.length, records: DEMO_PAPERS, searchUrl: `https://example.com/demo-search?q=${encodeURIComponent(query)}` };
+}
+
+/** 演示树洞：虚构的帖子和课程评价，接口形状与真实客户端一致 */
+export function demoTreehole() {
+  const floors = [
+    { hole_id: 10001, floor_id: 1, floor: 0, who: 'Alice（演示）', time: '2026-11-01 21:03', likes: 12, content: '数据结构这门课作业量大吗？期中难不难？（虚构帖子）' },
+    { hole_id: 10001, floor_id: 2, floor: 1, who: 'Bob（演示）', time: '2026-11-01 21:20', likes: 30, content: 'Lab 每周一个，按时写不会太累；期中考链表和树，往年题很有参考价值。（虚构回复）' },
+    { hole_id: 10001, floor_id: 3, floor: 2, who: 'Carol（演示）', time: '2026-11-02 09:12', likes: 8, content: '老师讲得清楚，答疑很及时，给分不错。（虚构回复）' },
+  ];
+  return {
+    searchFloors: async () => floors.slice(1),
+    hole: async (holeId: number) => ({ hole_id: holeId, division_id: 1, tags: ['课程（演示）'], replies: 2, views: 320, time: '2026-11-01 21:03', first_floor: floors[0].content, floors }),
+    latest: async () => [{ hole_id: 10001, division_id: 1, tags: ['课程（演示）'], replies: 2, views: 320, time: '2026-11-01 21:03', first_floor: floors[0].content }],
+    searchCourses: async () => [{ course_group_id: 501, name: '数据结构（演示）', code: 'COMP130004', department: '演示学院', credits: 3, campus: '邯郸', review_count: 2, course_count: 2 }],
+    courseReviews: async () => ({
+      name: '数据结构（演示）', code: 'COMP130004', department: '演示学院', credits: 3, review_count: 2, teachers: ['张老师（虚构）'],
+      reviews: [
+        { teachers: '张老师（虚构）', term: '2025 学年第 1 学期', title: '收获很大', content: '作业量适中，Lab 设计得好，期末考题不偏。（虚构评价）', time: '2026-01-20', rating: { overall: 5, content: 5, workload: 3, assessment: 4 }, votes: 20, remark: 18 },
+        { teachers: '张老师（虚构）', term: '2025 学年第 1 学期', title: '要花时间', content: '每周要留出一晚上写 Lab，提前开始就不难。（虚构评价）', time: '2026-01-22', rating: { overall: 4, content: 4, workload: 2, assessment: 4 }, votes: 9, remark: 7 },
+      ],
+    }),
+  };
 }

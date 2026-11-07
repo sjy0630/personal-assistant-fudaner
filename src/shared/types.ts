@@ -237,7 +237,8 @@ export type TriggerKind =
   | 'activity_new'
   | 'notice_new'
   | 'exam_soon'
-  | 'card_low';
+  | 'card_low'
+  | 'power_low';
 
 export interface Trigger {
   id: string;
@@ -350,7 +351,7 @@ export interface Settings {
 
 export interface FeedSource { url: string; name?: string }
 
-export type ExternalMcpPreset = 'fudan-library' | 'danta' | 'ehall' | 'custom';
+export type ExternalMcpPreset = 'ehall' | 'custom';
 export interface ExternalMcpConfig {
   /** 唯一 id，小写字母数字和短横线 */
   id: string;

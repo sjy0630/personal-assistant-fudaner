@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { DEFAULT_FUDAN_STUDENT_IMAP, ImapMailClient } from '@fudaner/mcp-fudan-mail';
 import { CanvasClient } from '@fudaner/mcp-fudan-elearning';
 import { AppContext } from './app-context';
+import { LibrarySearch } from './sources/library-search';
+import { TreeholeClient, type HoleTokens } from './sources/treehole';
 import { AuthManager } from './auth/auth-manager';
 import { DemoElearningClient, DemoMailClient, seedDemoProfile } from './demo/demo';
 import type { Channels } from './engine/channels';
@@ -54,6 +56,17 @@ function secrets(ctx: AppContext) {
       return enc ? safeStorage.decryptString(Buffer.from(enc, 'base64')) : null;
     },
     hasMailPassword(): boolean { return !!ctx.repo.getKv<string | null>(secretsKey, null); },
+    /** 树洞令牌：用系统钥匙串加密保存；不保存树洞密码 */
+    getHoleTokens(): HoleTokens | null {
+      const enc = ctx.repo.getKv<string | null>('treehole_tokens', null);
+      if (!enc) return null;
+      try { return JSON.parse(safeStorage.decryptString(Buffer.from(enc, 'base64'))) as HoleTokens; } catch { return null; }
+    },
+    setHoleTokens(t: HoleTokens | null) {
+      if (!t) { ctx.repo.setKv('treehole_tokens', null); return; }
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('请先解锁系统钥匙串，再登录树洞账号。');
+      ctx.repo.setKv('treehole_tokens', safeStorage.encryptString(JSON.stringify(t)).toString('base64'));
+    },
   };
 }
 
@@ -112,11 +125,22 @@ app.whenReady().then(async () => {
   let ctx!: AppContext;
   const auth = new AuthManager(() => send('platforms:changed'));
   const sec = () => secrets(ctx);
+  // 树洞与旦克：同一个复旦登录会话（WebVPN 用），令牌加密保存
+  const treehole = new TreeholeClient({
+    fetch: (url, init) => auth.rawFetch(url, init),
+    ensureWebvpn: () => auth.ensureWebvpn(),
+    tokens: { get: () => sec().getHoleTokens(), set: (t) => sec().setHoleTokens(t) },
+  });
 
   ctx = new AppContext({
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
     fetchText: readPublicPage,
+    library: new LibrarySearch(async (url, headers) => {
+      const res = await net.fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+      return { status: res.status, text: await res.text() };
+    }),
+    treehole: () => treehole,
     // 教务系统、校园卡：复用统一身份认证会话；eLearning 登录有效时才去读，避免没登录时反复碰壁
     campusReader: () => (ctx.repo.getSettings().demoMode || auth.cachedStatus('elearning') !== 'ok' ? null : {
       getText: (url) => auth.getText('jwfw', url),
@@ -172,7 +196,7 @@ app.whenReady().then(async () => {
     scheduleSync();
   };
 
-  registerIpc(ctx, { auth, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
+  registerIpc(ctx, { auth, treehole, window: () => win, demo: { elearning: demoElearning, mail: demoMail }, secrets: sec(), restartScheduler,
     openExternal: (url) => shell.openExternal(url), onMessageUpdated: (msg) => send('chat:updated', msg),
     copyText: (text) => clipboard.writeText(text), onChatCleared: () => send('chat:cleared'), onChanged: channels.changed,
   });

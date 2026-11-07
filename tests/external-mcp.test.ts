@@ -43,21 +43,17 @@ describe('外部 MCP 服务：连接与权限', () => {
 });
 
 describe('预设', () => {
-  it('旦挞按系统拼出虚拟环境里的 Python；没填文件夹时提示', () => {
-    const danta: ExternalMcpConfig = { id: 'danta', preset: 'danta', name: '旦挞', enabled: true, dir: '/Users/me/danta-mcp' };
-    expect(launchOf(danta, 'darwin')).toEqual({ command: '/Users/me/danta-mcp/.venv/bin/python', args: ['-E', '/Users/me/danta-mcp/run_server.py'], cwd: '/Users/me/danta-mcp' });
-    expect(launchOf({ ...danta, dir: 'C:\\danta-mcp' }, 'win32').command).toContain('Scripts');
-    expect(() => launchOf({ ...danta, dir: '' })).toThrow('文件夹路径');
+  it('ehall 没填文件夹时提示', () => {
+    expect(() => launchOf({ id: 'ehall', preset: 'ehall', name: 'ehall', enabled: true, dir: '' })).toThrow('文件夹路径');
+    expect(launchOf({ id: 'ehall', preset: 'ehall', name: 'ehall', enabled: true, dir: '/Users/me/ehall' })).toMatchObject({ command: 'uv', cwd: '/Users/me/ehall' });
   });
 
-  it('ehall 只开放查询，预约和取消不开放；图书馆用 uvx 启动', () => {
+  it('ehall 只开放查询，预约和取消不开放', () => {
     const ehall: ExternalMcpConfig = { id: 'ehall', preset: 'ehall', name: 'ehall', enabled: true, dir: '/x' };
     expect(toolAllowed(ehall, { name: 'electricity_get_remaining' })).toBe(true);
     expect(toolAllowed(ehall, { name: 'sports_book' })).toBe(false);
     expect(toolAllowed(ehall, { name: 'billiards_cancel' })).toBe(false);
     expect(toolAllowed(ehall, { name: 'schedule_book', annotations: { readOnlyHint: true } })).toBe(false);
-    const lib: ExternalMcpConfig = { id: 'fudan-library', preset: 'fudan-library', name: '图书馆', enabled: true };
-    expect(launchOf(lib).command).toBe('uvx');
     expect(EXTERNAL_PRESETS.every((p) => p.repo.startsWith('https://github.com/'))).toBe(true);
   });
 
@@ -72,12 +68,13 @@ describe('预设', () => {
 
   it('设置页传来的配置只保留认识的字段', () => {
     const r = sanitizeExternal([
-      { id: 'Fudan Library!', preset: 'fudan-library', name: '图书馆', enabled: true, command: 'rm', args: ['-rf', '/'] },
+      { id: 'Ehall!', preset: 'ehall', name: 'ehall', enabled: true, command: 'rm', args: ['-rf', '/'] },
+      { id: 'old', preset: 'danta', name: '已内置的旧预设', enabled: true },
       { id: 'x', preset: 'evil', name: 'x', enabled: true },
       { id: 'c1', preset: 'custom', name: '自定义', enabled: true, command: 'node', args: ['a.js', 3], allowAllTools: true },
     ]);
     expect(r).toEqual([
-      { id: 'fudan-library-', preset: 'fudan-library', name: '图书馆', enabled: true, dir: undefined, command: undefined, args: undefined, cwd: undefined, allowAllTools: undefined },
+      { id: 'ehall-', preset: 'ehall', name: 'ehall', enabled: true, dir: undefined, command: undefined, args: undefined, cwd: undefined, allowAllTools: undefined },
       { id: 'c1', preset: 'custom', name: '自定义', enabled: true, dir: undefined, command: 'node', args: ['a.js'], cwd: undefined, allowAllTools: true },
     ]);
   });
@@ -88,10 +85,10 @@ describe('应用里接入', () => {
     const ctx = new AppContext({ dbPath: ':memory:', channels: nullChannels, elearning: () => null, mail: () => null });
     cleanups.push(() => ctx.close());
     await ctx.start();
-    ctx.repo.setSettings({ externalMcp: [custom(), { id: 'danta', preset: 'danta', name: '旦挞', enabled: true }] });
+    ctx.repo.setSettings({ externalMcp: [custom(), { id: 'ehall', preset: 'ehall', name: 'ehall', enabled: true }] });
     const status = await ctx.reloadExternal();
     expect(status.find((s) => s.id === 'fake')).toMatchObject({ state: 'ok', tools: ['search_holes'], blocked: ['sports_book'] });
-    expect(status.find((s) => s.id === 'danta')).toMatchObject({ state: 'error' });
+    expect(status.find((s) => s.id === 'ehall')).toMatchObject({ state: 'error' });
     expect(ctx.hub.llmTools().some((t) => t.function.name === 'ext_fake__search_holes')).toBe(true);
     expect(ctx.executorHub.llmTools().some((t) => t.function.name.startsWith('ext_'))).toBe(false);
     ctx.repo.setSettings({ externalMcp: [custom({ enabled: false })] });
