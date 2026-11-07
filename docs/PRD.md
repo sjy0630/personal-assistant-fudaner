@@ -178,7 +178,8 @@
 
 | 项目 | 形态 | 能做什么 | 和本产品的关系 |
 |---|---|---|---|
-| **旦旦活动簿** | 微信小程序 | 校园通知/活动聚合 | 通知聚合已经有人做，本产品不在这个方向上竞争 |
+| **旦旦活动簿** | 微信小程序 | 跟踪复旦相关公众号，聚合讲座、招聘、文体活动 | 证明「活动信息差」是真需求；本产品不做大规模公众号抓取，而是把用户关心的活动按兴趣和空闲时间推荐、加入计划（§5.8.1），后续可谈数据合作 |
+| [FduNav-Desktop](https://github.com/CPJiNan/FduNav-Desktop)（AGPL-3.0） | Electron 桌面端 | 约 40 个学校和院系官网的通知聚合与 AI 摘要；课表、考试、日历与提醒；eLearning 待办；校园卡、图书馆；带工具调用的聊天（写入需审批，有执行轨迹） | 和本产品最接近。它是「查询型」：用户打开应用去看、去问；本产品是「主动型」：主动引擎决定什么值得打扰、何时打扰，并有邮件分拣、目标闭环和长期记忆。它的协议是 AGPL，本产品不使用其代码 |
 | [Fudan_iCourse_Subscriber](https://github.com/LeafCreeper/Fudan_iCourse_Subscriber)（约 195 star） | GitHub Actions 定时任务 | iCourse 回放语音转写 + PPT OCR + AI 摘要，发送到邮箱 | 证明回放摘要需求很强；可参考其 WebVPN 接入和本地 ASR 方案 |
 | [fudan-elearning-reminder](https://github.com/michaellu2007/fudan-elearning-reminder) | 本地 Python 脚本 | eLearning 作业未提交提醒 | 证明 DDL 提醒需求；**提供了关键实测经验：Canvas Token 约 1 小时失效，需要用 UIS 会话** |
 | [fudan-elearning-dashboard](https://github.com/btr2309887446-code/fudan-elearning-dashboard) | Electron / iOS / Flutter | eLearning 课程、作业、成绩看板，可选 AI 摘要 | 同样采用桌面端 + UIS 直连 + 自带模型的路线，验证了技术可行性 |
