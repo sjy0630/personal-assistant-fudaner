@@ -71,10 +71,40 @@ export function ownSchoolSources(school?: string): NoticeSource[] {
   return NOTICE_SOURCES.filter((s) => s.group === '院系' && aliases(s.name).some((a) => text.includes(a) || a.includes(text)));
 }
 
-/** 没有设置过时，默认关注：教务处、研究生院（研究生）、本人院系 */
-export function defaultNoticeSources(profile: { school?: string; degree?: string }): string[] {
-  const ids = ['jwc'];
-  if (profile.degree && /硕士|博士|研究生/.test(profile.degree)) ids.push('gs');
-  for (const s of ownSchoolSources(profile.school)) if (!ids.includes(s.id)) ids.push(s.id);
-  return ids;
+/** 兴趣和目标里出现这些词时，自动关注对应的部门 */
+const INTEREST_SOURCES: { pattern: RegExp; id: string; why: string }[] = [
+  { pattern: /交换|留学|出国|海外|访学|暑校|国际项目/, id: 'fao', why: '交换、留学' },
+  { pattern: /保研|推免|考研|读研|研究生|硕士|博士/, id: 'gs', why: '读研、推免' },
+  { pattern: /英语|雅思|托福|四六级|口语/, id: 'cec', why: '英语' },
+  { pattern: /体育|健身|跑步|游泳|球|体测/, id: 'fdty', why: '体育' },
+  { pattern: /相辉|荣誉项目|拔尖/, id: 'xianghui', why: '荣誉项目' },
+];
+
+/**
+ * 用户没有手动选择时，按画像和记忆自动关注：教务处、本人院系、研究生院（研究生），
+ * 以及兴趣和目标里提到的方向（交换 → 国际合作与交流处 等）。返回 id 和理由。
+ */
+export function suggestNoticeSources(profile: { school?: string; degree?: string }, memories: { type: string; content: string }[] = []): { id: string; why: string }[] {
+  const out: { id: string; why: string }[] = [{ id: 'jwc', why: '选课、考试、学籍等全校通知' }];
+  const add = (id: string, why: string) => { if (!out.some((x) => x.id === id)) out.push({ id, why }); };
+  for (const s of ownSchoolSources(profile.school)) add(s.id, '你所在的院系');
+  if (profile.degree && /硕士|博士|研究生/.test(profile.degree)) add('gs', '你是研究生');
+  const text = memories.filter((m) => m.type === 'interest' || m.type === 'goal').map((m) => m.content).filter((c) => !c.startsWith('不关心')).join(' ');
+  for (const rule of INTEREST_SOURCES) if (rule.pattern.test(text)) add(rule.id, `你关心${rule.why}`);
+  return out;
+}
+
+/** 没有设置过时，默认关注的来源 id */
+export function defaultNoticeSources(profile: { school?: string; degree?: string }, memories: { type: string; content: string }[] = []): string[] {
+  return suggestNoticeSources(profile, memories).map((s) => s.id);
+}
+
+/** 按 id 或名称（可以是简称，如「国交处」「经院」）找来源 */
+export function findNoticeSource(query: string): NoticeSource | undefined {
+  const q = query.trim();
+  if (!q) return undefined;
+  const alias: Record<string, string> = { 国交处: 'fao', 国际交流处: 'fao', 研院: 'gs', 经院: 'econ', 计院: 'ai', 计算机: 'ai', 大数据: 'sds', 数院: 'math', 物理: 'phys', 化学: 'chemistry', 新院: 'xwxy', 外院: 'dfll', 中文系: 'chinese', 法院: 'law', 历史: 'history', 哲院: 'philosophy', 国务: 'sirpa', 体育部: 'fdty', 英语部: 'cec', 公卫: 'sph', 药学: 'spfdu', 护理: 'nursing', 基医: 'basicmed', 生科: 'life', 环境: 'environment', 微电子: 'icmne', 集成电路: 'icmne' };
+  const id = alias[q] ?? q;
+  return NOTICE_SOURCES.find((s) => s.id === id) ?? NOTICE_SOURCES.find((s) => s.name === q)
+    ?? ownSchoolSources(q)[0] ?? NOTICE_SOURCES.find((s) => s.name.includes(q) || q.includes(s.name));
 }

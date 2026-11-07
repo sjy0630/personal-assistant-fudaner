@@ -4,7 +4,7 @@ import type { ModelRouter } from '../ai/llm';
 import { isWechatArticle, parseArticle, shanghai } from '../activities/article';
 import { extractActivities } from '../activities/extract';
 import { saveActivities, type FetchText } from '../activities/sync';
-import { defaultNoticeSources, NOTICE_SOURCES, ownSchoolSources, type NoticeSource } from './sources';
+import { defaultNoticeSources, findNoticeSource, NOTICE_SOURCES, ownSchoolSources, suggestNoticeSources, type NoticeSource } from './sources';
 import { parseNoticeDetail, parseNoticeList, type NoticeLink } from './parse';
 
 const DAY = 86_400_000;
@@ -12,7 +12,7 @@ const DAY = 86_400_000;
 const ACTIVITY_TITLE = /讲座|报告会|学术报告|宣讲会|论坛|沙龙|工作坊|workshop|seminar|lecture|比赛|大赛|竞赛|音乐会|演出|展览|招聘会|分享会|开放日/i;
 
 export function enabledNoticeSources(repo: Repo): NoticeSource[] {
-  const ids = repo.getSettings().noticeSources ?? defaultNoticeSources(repo.getProfile());
+  const ids = repo.getSettings().noticeSources ?? defaultNoticeSources(repo.getProfile(), repo.listMemories());
   return NOTICE_SOURCES.filter((s) => ids.includes(s.id));
 }
 
@@ -104,4 +104,34 @@ async function readDetail(fetchText: FetchText, link: NoticeLink): Promise<{ url
 /** 对话工具用：通知的精简视图 */
 export function noticeView(i: Item) {
   return { item_id: i.id, title: i.title, source: i.notice?.sourceName, date: new Date(Date.parse(i.publishedAt) + 8 * 3_600_000).toISOString().slice(0, 10), url: i.url, attachments: i.notice?.attachments?.map((f) => f.name), title_only: i.notice?.titleOnly || undefined };
+}
+
+/** 当前关注的来源，以及是自动选的还是用户 / 助理手动定的 */
+export function noticeFollowState(repo: Repo): { mode: 'auto' | 'manual'; following: { id: string; name: string; why?: string }[] } {
+  const manual = repo.getSettings().noticeSources;
+  if (manual) {
+    return { mode: 'manual', following: NOTICE_SOURCES.filter((s) => manual.includes(s.id)).map((s) => ({ id: s.id, name: s.name })) };
+  }
+  const auto = suggestNoticeSources(repo.getProfile(), repo.listMemories());
+  return { mode: 'auto', following: auto.flatMap((a) => { const s = NOTICE_SOURCES.find((x) => x.id === a.id); return s ? [{ id: s.id, name: s.name, why: a.why }] : []; }) };
+}
+
+/** 关注 / 取消关注（按 id 或名称）。之后变成手动列表，不再自动调整 */
+export function changeNoticeFollows(repo: Repo, follow: string[] = [], unfollow: string[] = []): { following: string[]; added: string[]; removed: string[]; unknown: string[] } {
+  const ids = new Set(noticeFollowState(repo).following.map((s) => s.id));
+  const added: string[] = [];
+  const removed: string[] = [];
+  const unknown: string[] = [];
+  for (const q of follow) {
+    const s = findNoticeSource(q);
+    if (!s) unknown.push(q);
+    else if (!ids.has(s.id)) { ids.add(s.id); added.push(s.name); }
+  }
+  for (const q of unfollow) {
+    const s = findNoticeSource(q);
+    if (!s) unknown.push(q);
+    else if (ids.delete(s.id)) removed.push(s.name);
+  }
+  repo.setSettings({ noticeSources: [...ids] });
+  return { following: NOTICE_SOURCES.filter((s) => ids.has(s.id)).map((s) => s.name), added, removed, unknown };
 }

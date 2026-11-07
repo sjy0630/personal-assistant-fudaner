@@ -20,7 +20,8 @@ import { syncElearning } from './sources/elearning-sync';
 import { syncMail } from './sources/mail-sync';
 import { importArticle, syncFeeds, type FetchText } from './activities/sync';
 import { demoFeeds, demoFetchText, demoNoticeSources } from './demo/demo-activities';
-import { enabledNoticeSources, syncNotices } from './notices/sync';
+import { enabledNoticeSources, noticeFollowState, syncNotices } from './notices/sync';
+import { NOTICE_SOURCES } from './notices/sources';
 import { importExams, importTimetable, type CampusReader } from './sources/timetable-sync';
 import { readCardBalance, readLibrary, type LibraryStatus } from './sources/campus-life';
 import { demoCardBalance, demoExams, demoLibrary, demoElectricity, demoTreehole, demoLiterature } from './demo/demo-campus';
@@ -201,6 +202,33 @@ export class AppContext {
       this.remindersRunning = false;
     }
     return ran;
+  }
+
+  /**
+   * 首次使用后主动说一次：已经按院系和兴趣自动关注了哪些官网通知，再给几个一点就能加的建议。
+   * 只说一次；用户点建议等于在对话里说了这句话，由助理去关注。
+   */
+  introduceNoticeSources(): void {
+    const s = this.repo.getSettings();
+    if (s.demoMode || !s.onboardingCompleted || this.repo.getKv<boolean>('notice_intro_sent', false)) return;
+    this.repo.setKv('notice_intro_sent', true);
+    const state = noticeFollowState(this.repo);
+    const followed = state.following.map((f) => `${f.name}${f.why ? `（${f.why}）` : ''}`).join('、');
+    const on = new Set(state.following.map((f) => f.id));
+    const ideas = [
+      ['fao', '也关注国际合作与交流处（交换、留学）'], ['gs', '也关注研究生院'], ['xianghui', '也关注相辉学堂'], ['cec', '也关注英语教学部'],
+    ].filter(([id]) => !on.has(id) && NOTICE_SOURCES.some((x) => x.id === id)).slice(0, 2);
+    const school = this.repo.getProfile().school;
+    const content = [
+      `我先帮你关注了这些官网通知：${followed}。和你相关的会放进「动态」，讲座和宣讲会会整理成活动。`,
+      school ? '' : '告诉我你在哪个院系，我把你们院系的通知也加上。',
+      '想加别的部门或学院，直接跟我说就行，比如「也关注一下经院的通知」。',
+    ].filter(Boolean).join('\n');
+    const msg = this.repo.addMessage({
+      role: 'assistant', content, proactive: true, trigger: 'notice-intro',
+      actions: [...ideas.map(([, text]) => ({ label: text, action: 'say', payload: { text } })), ...(school ? [] : [{ label: '我来说一下院系', action: 'say', payload: { text: '我想告诉你我的院系' } }])],
+    });
+    this.deps.channels.messagePosted(msg);
   }
 
   /** 读取网页：演示模式下只读虚构文章 */

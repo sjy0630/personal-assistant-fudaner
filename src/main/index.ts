@@ -178,6 +178,8 @@ app.whenReady().then(async () => {
   await ctx.start();
   // 外部 MCP 服务在后台连接，不拖慢启动
   void ctx.reloadExternal().catch(() => undefined);
+  // 老用户第一次用上这个版本时，也介绍一次自动关注的官网通知
+  setTimeout(() => ctx.introduceNoticeSources(), 5000);
   // 启动时就检查一次复旦账号登录状态，旦旦从第一句话起就知道连没连上
   if (!ctx.repo.getSettings().demoMode) void auth.status('elearning').catch(() => undefined);
 

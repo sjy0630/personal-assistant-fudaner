@@ -76,7 +76,7 @@ describe('来源', () => {
     expect(ownSchoolSources('计算与智能创新学院').map((s) => s.id)).toEqual(['ai']);
     expect(ownSchoolSources('经济学院').map((s) => s.id)).toEqual(['econ']);
     expect(ownSchoolSources('历史系').map((s) => s.id)).toEqual(['history']);
-    expect(defaultNoticeSources({ school: '历史学系', degree: '硕士' })).toEqual(['jwc', 'gs', 'history']);
+    expect(defaultNoticeSources({ school: '历史学系', degree: '硕士' })).toEqual(['jwc', 'history', 'gs']);
     expect(defaultNoticeSources({})).toEqual(['jwc']);
     expect(new Set(NOTICE_SOURCES.map((s) => s.id)).size).toBe(NOTICE_SOURCES.length);
   });

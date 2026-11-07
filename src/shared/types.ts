@@ -343,8 +343,8 @@ export interface Settings {
   mail?: { host: string; port: number; user: string };
   /** 活动订阅源（RSS / Atom）：公众号转成的 RSS 等 */
   feeds?: FeedSource[];
-  /** 关注的学校和院系官网通知来源 id；未设置时默认教务处 + 本人院系 */
-  noticeSources?: string[];
+  /** 关注的学校和院系官网通知来源 id；未设置（或 null）时由旦旦按院系、学历和兴趣自动选择 */
+  noticeSources?: string[] | null;
   /** 接入的外部 MCP 服务（社区做的复旦校园服务等），见 src/main/mcp/external.ts */
   externalMcp?: ExternalMcpConfig[];
 }

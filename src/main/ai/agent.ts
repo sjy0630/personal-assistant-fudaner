@@ -11,6 +11,7 @@ import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
 import { createToolPolicy } from './tool-policy';
+import { changeNoticeFollows } from '../notices/sync';
 
 const MAX_STEPS = 8;
 
@@ -304,6 +305,15 @@ export class ChatAgent {
         role: 'assistant', content: mails.length ? `有 ${mails.length} 封邮件等你回复：\n${mails.map((m) => `· ${m.sender?.replace(/<.*>/, '')}：${m.title}`).join('\n')}` : '目前没有需要回复的邮件。',
         cards: mails.map((m) => ({ type: 'item', id: m.id, title: m.title, subtitle: m.sender })),
         toolCalls: [{ server: 'fudan-mail', name: 'list_action_required', args: {}, ok: true }],
+      });
+    }
+    // 没接模型时也能用一句话关注官网通知（例如点了「也关注国际合作与交流处」）
+    const follow = text.match(/^(?:也|帮我)?关注(?:一下)?(.+?)(?:的通知)?[。！!]?$/);
+    if (follow) {
+      const r = changeNoticeFollows(this.repo, [follow[1].replace(/（.*?）|\(.*?\)/g, '').trim()]);
+      return this.repo.addMessage({
+        role: 'assistant',
+        content: r.added.length ? `好，已关注${r.added.join('、')}的通知。现在关注：${r.following.join('、')}。` : r.unknown.length ? `没找到「${r.unknown[0]}」，可以到「设置 → 通知与活动」看看可选的来源。` : `已经在关注了。现在关注：${r.following.join('、')}。`,
       });
     }
     if (/登录|登陆|授权|认证/.test(text)) {

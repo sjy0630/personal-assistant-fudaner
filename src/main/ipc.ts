@@ -9,7 +9,7 @@ import { demoLateMail, seedDemoProfile } from './demo/demo';
 import { NOTICE_SOURCES } from './notices/sources';
 import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
 import { nextOccurrence, validateRepeat } from './engine/reminders';
-import { enabledNoticeSources } from './notices/sync';
+import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
@@ -199,12 +199,14 @@ export function registerIpc(ctx: AppContext, opts: {
     const cur = repo.getSettings();
     // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
     delete patch.externalMcp;
+    const finishingOnboarding = patch.onboardingCompleted === true && !cur.onboardingCompleted;
     for (const k of ['cloud', 'local'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
     }
     repo.setSettings(patch);
     opts.restartScheduler();
+    if (finishingOnboarding) setTimeout(() => ctx.introduceNoticeSources(), 1500);
   });
   handle<[string], void>('settings.setMailPassword', async (p) => opts.secrets.setMailPassword(p));
   handle<['cloud' | 'local'], { ok: boolean; message: string }>('settings.testModel', async (which) => {
@@ -283,9 +285,12 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
   handle<[], unknown>('notices.sources', async () => {
-    const enabled = new Set(enabledNoticeSources(repo).map((s) => s.id));
+    const state = noticeFollowState(repo);
     const errors = repo.getKv<string[]>('notice_errors', []);
-    return NOTICE_SOURCES.map((s) => ({ ...s, enabled: enabled.has(s.id), error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) }));
+    return NOTICE_SOURCES.map((s) => {
+      const f = state.following.find((x) => x.id === s.id);
+      return { ...s, enabled: !!f, why: f?.why, auto: state.mode === 'auto', error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) };
+    });
   });
   handle<[string?], unknown>('notices.list', async (query) => repo.listNotices({ query, limit: 50 }));
 
