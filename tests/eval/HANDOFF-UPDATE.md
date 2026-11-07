@@ -1,6 +1,6 @@
 # 交接更新：AI开发（2026-11-06）
 
-> 2026-11-07 补充：旧 AI PR #10 已合入 main，F1/F2 冲突已由 #11 解决；下文是原交付快照。本地重复查询、记忆来源、时间与范围修复见 [LOCAL-MODEL-FIX.md](LOCAL-MODEL-FIX.md)，对应分支 `ai/local-loop-memory-fix`。
+> 2026-11-07 补充：旧 AI PR #10 已合入 main，F1/F2 冲突已由 #11 解决；下文是原交付快照。本地重复查询、记忆来源、时间与范围修复见 [LOCAL-MODEL-FIX.md](LOCAL-MODEL-FIX.md)，分支 `ai/local-loop-memory-fix`，源码提交 `cd43023`，[草稿 PR #16](https://github.com/sjy0630/personal-assistant-fudaner/pull/16) 已推送，419 项测试与两条本机复测通过，待界面确认后正式审核，未合并。
 
 分支：ai/competition-ready。基线：origin/f1/main-chat 的 ceb7f9b。代码提交：f28eefd94be2038bdaf2e75f629e10ed6782dc78。
 

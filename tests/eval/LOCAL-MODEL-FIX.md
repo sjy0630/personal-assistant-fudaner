@@ -35,4 +35,6 @@ npx vitest run --config tests/eval/vitest.config.ts tests/eval/local-guards.eval
 
 ## 交接更新
 
-本地代码与修复前后证据已就绪。提交、推送与 PR 状态以本次交付回复和 GitHub 为准。L 已合并旧 AI PR #10；F1/F2 冲突已由 #11 解决，旧交付文档中对应待办已经过时。本次后续重点：用户界面复测、M 正式数据与剩余真实模型验收。
+源码与验证提交 `cd43023` 已推送至 `ai/local-loop-memory-fix`；[草稿 PR #16](https://github.com/sjy0630/personal-assistant-fudaner/pull/16) 已创建，尚待用户界面复测后转为正式审核，未合并 main。完整补丁另存为 `D:/agent开发/ai-delivery/local-loop-memory-fix.patch`。
+
+L 已合并旧 AI PR #10；F1/F2 冲突已由 #11 解决，旧交付文档中对应待办已经过时。本次后续重点：用户界面复测、M 正式数据与剩余真实模型验收。
