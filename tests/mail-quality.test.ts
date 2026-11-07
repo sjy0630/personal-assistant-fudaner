@@ -76,7 +76,7 @@ describe('敏感输出的运行时校验',()=>{
   it('记忆拒绝不支持的操作、敏感内容、无限过期时间和过量记录',()=>{
     const m={op:'add',type:'preference',content:'周二晚上有社团',expires_days:null};
     expect(memoryOutput.safeParse({memories:[m]}).success).toBe(true);
-    expect(memoryOutput.parse({memories:[{...m,expires_days:7}]}).memories[0].expires_days).toBeNull();
+    expect((memoryOutput.parse({memories:[{...m,expires_days:7}]}).memories[0] as { expires_days?: number | null }).expires_days).toBeNull();
     expect(memoryOutput.safeParse({memories:[{...m,op:'delete'}]}).success).toBe(false);
     expect(memoryOutput.safeParse({memories:[{...m,content:'保存password内容'}]}).success).toBe(false);
     expect(memoryOutput.safeParse({memories:[{...m,expires_days:Infinity}]}).success).toBe(false);

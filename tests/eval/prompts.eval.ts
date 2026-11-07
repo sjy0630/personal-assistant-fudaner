@@ -94,7 +94,7 @@ it.runIf(enabled)('真实本地模型提示词smoke：早安、低价值研判�
         input = stable ? stableDialog : casualDialog;
         const response = await client.chat([{ role: 'user', content: memoryExtractPrompt({ dialog: input, existing: '（暂无）' }) }], { json: true, temperature: 0, maxTokens: 600 });
         const parsed = memoryOutput.safeParse(parseJsonLoose<unknown>(response.content));
-        const memories = parsed.success ? parsed.data.memories : [];
+        const memories = (parsed.success ? parsed.data.memories : []).map((memory) => ({ type: 'type' in memory ? memory.type : undefined, content: memory.content }));
         checks = stable ? {
           validProductionSchema: parsed.success,
           userScheduleRetained: memories.some((memory) => memory.type === 'schedule' && /周二|星期二/.test(memory.content) && /社团/.test(memory.content) && /晚上|晚间|19|七点/.test(memory.content)),

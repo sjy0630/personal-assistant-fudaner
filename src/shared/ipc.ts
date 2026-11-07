@@ -53,6 +53,7 @@ export interface FudanerApi {
     set(s: Partial<Settings>): Promise<void>;
     setMailPassword(password: string): Promise<void>;
     testModel(which: 'cloud' | 'local'): Promise<{ ok: boolean; message: string }>;
+    testEmbedding(): Promise<{ ok: boolean; message: string }>;
   };
   platforms: {
     status(): Promise<PlatformState[]>;

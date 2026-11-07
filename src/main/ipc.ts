@@ -13,7 +13,7 @@ import { noticeFollowState } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
-import { OpenAiCompatClient } from './ai/llm';
+import { isLocalUrl, OpenAiCompatClient, OpenAiEmbedder } from './ai/llm';
 import { resolveChatReference, safeExternalUrl } from './chat/references';
 
 /**
@@ -101,6 +101,8 @@ export function registerIpc(ctx: AppContext, opts: {
           if (action === 'forget_memory' && typeof data?.id === 'string') {
             const memory = repo.listMemories().find((entry) => entry.id === data.id);
             if (memory?.source === 'chat') repo.removeMemory(data.id);
+          } else if (action === 'restore_memory' && typeof data?.id === 'string' && typeof data?.content === 'string') {
+            if (repo.listMemories().some((entry) => entry.id === data.id)) repo.updateMemory(data.id, data.content.slice(0, 300));
           } else throw new Error('此快捷操作暂不可用。');
           markUsed();
         });
@@ -206,14 +208,14 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('settings.get', async () => {
     const s = repo.getSettings();
     const mask = (m?: { apiKey: string }) => (m ? { ...m, apiKey: m.apiKey ? '••••••' + m.apiKey.slice(-4) : '' } : m);
-    return { ...s, cloud: mask(s.cloud), local: mask(s.local) };
+    return { ...s, cloud: mask(s.cloud), local: mask(s.local), embedding: mask(s.embedding) };
   });
   handle<[Record<string, unknown>], void>('settings.set', async (patch) => {
     const cur = repo.getSettings();
     // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
     delete patch.externalMcp;
     const finishingOnboarding = patch.onboardingCompleted === true && !cur.onboardingCompleted;
-    for (const k of ['cloud', 'local'] as const) {
+    for (const k of ['cloud', 'local', 'embedding'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
     }
@@ -228,6 +230,20 @@ export function registerIpc(ctx: AppContext, opts: {
     try {
       const r = await new OpenAiCompatClient(cfg, which).chat([{ role: 'user', content: '只回复两个字：你好' }], { maxTokens: 10 });
       return { ok: true, message: `连通，模型回复：${r.content.trim().slice(0, 20)}` };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  });
+
+  // 向量模型：试着算一条向量；地址不在本机且没允许隐私任务用云端时，不会被使用，这里直接说明
+  handle<[], { ok: boolean; message: string }>('settings.testEmbedding', async () => {
+    const s = repo.getSettings();
+    const cfg = s.embedding;
+    if (!cfg?.baseURL || !cfg.model) return { ok: false, message: '还没有配置' };
+    if (!isLocalUrl(cfg.baseURL) && !s.allowSensitiveToCloud) return { ok: false, message: '这个地址不在本机：记忆和聊天记录属于隐私内容，需要先在下方允许隐私任务使用云端服务，才会用它。' };
+    try {
+      const [v] = await new OpenAiEmbedder(cfg).embed(['测试']);
+      return v?.length ? { ok: true, message: `连通，向量长度 ${v.length}` } : { ok: false, message: '服务没有返回向量' };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
     }

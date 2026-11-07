@@ -337,6 +337,8 @@ export interface Settings {
   onboardingCompleted?: boolean;
   cloud?: ModelConfig;
   local?: ModelConfig;
+  /** 向量模型（可选，OpenAI 兼容 /v1/embeddings，如本地 Ollama 的 bge-m3）：用来按意思找回记忆和早先对话 */
+  embedding?: ModelConfig;
   demoMode: boolean;
   /** 本地模型不可用时，是否允许把邮件正文等敏感任务交给云端模型（PRD §6.2，默认否） */
   allowSensitiveToCloud?: boolean;

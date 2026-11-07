@@ -6,10 +6,11 @@ import { fmt } from '../engine/engine';
 import type { McpHub } from '../mcp/hub';
 import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
-import { describeModelError, parseJsonLoose } from './llm';
+import { describeModelError, embedderFor, parseJsonLoose } from './llm';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
+import { recallForTurn, recallQuery } from './context-recall';
 import { createToolPolicy, SENSITIVE_TOOLS } from './tool-policy';
 import { changeNoticeFollows } from '../notices/sync';
 
@@ -288,17 +289,22 @@ export class ChatAgent {
     const today = buildToday(this.repo);
     const policy = createToolPolicy(this.repo, llm);
     const platforms = await this.platformStatus().catch(() => []);
-    // 顺序：不常变的在前（规则、画像、记忆），常变的在后（状态、时间、摘要、最近查过的数据），
+    // 多取一些，主动消息被过滤后仍有足够的对话
+    const history = this.repo.recentMessages(30).filter((m) => m.role !== 'tool');
+    // 按这句话找回相关的记忆和更早的对话（最近 30 条本来就在上下文里，不重复找）
+    const previousUser = [...(scheduled ? history : history.slice(0, -1))].reverse().find((m) => m.role === 'user')?.content;
+    const recall = await recallForTurn(this.repo, recallQuery(text, previousUser), { embedder: embedderFor(this.repo.getSettings()), skipRecent: 30 })
+      .catch(() => ({ memories: this.repo.recallMemories(text), earlier: '' }));
+    // 顺序：不常变的在前（规则、画像、记忆），常变的在后（状态、时间、摘要、找回的旧对话、最近查过的数据），
     // 前缀不变时模型服务可以复用缓存，更快也更省钱
     const system = [
       policy.mailInstructions(),
-      personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString(), platforms }),
+      personaPrompt({ profile, memories: recall.memories, today, nowIso: new Date().toISOString(), platforms }),
       this.summarizer.context(),
+      recall.earlier,
       recentFactsText(this.repo.getKv<ToolFact[]>('recent_tool_facts', [])),
     ].filter(Boolean).join('\n\n');
     const facts: ToolFact[] = [];
-    // 多取一些，主动消息被过滤后仍有足够的对话
-    const history = this.repo.recentMessages(30).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
@@ -429,23 +435,41 @@ export class ChatAgent {
       const epochKey = 'ai_memory_epoch';
       let epoch = this.repo.getKv<string | null>(epochKey, null);
       if (!epoch) { epoch = randomUUID(); this.repo.setKv(epochKey, epoch); }
-      const existing = this.repo.listMemories().map((m) => `- ${m.content}`).join('\n');
+      const known = this.repo.listMemories().slice(0, 80);
+      const existing = known.map((m, i) => `[${i + 1}] (${m.type}) ${m.content}`).join('\n');
       const r = await llm.chat([{ role: 'user', content: memoryExtractPrompt({ dialog: `用户：${userMsg.content}\n助理：${reply.content}`, existing }) }], { json: true, temperature: 0 });
       const parsed = memoryOutput.safeParse(parseJsonLoose<unknown>(r.content));
       if (!parsed.success || r.toolCalls.length) return;
       const current = this.repo.getMessage(userMsg.id);
       if (this.repo.getKv<string | null>(epochKey, null) !== epoch || !current || current.createdAt !== userMsg.createdAt || current.content !== userMsg.content) return;
       const j = parsed.data;
-      const added = (j?.memories ?? []).filter((m) => m.op === 'add' && m.content).map((m) => this.repo.addMemory({
+      const added = (j?.memories ?? []).flatMap((m) => m.op === 'add' ? [this.repo.addMemory({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         type: m.type as any, content: m.content, source: 'chat', sourceMsgId: userMsg.id,
         expiresAt: m.expires_days ? new Date(Date.now() + m.expires_days * 86_400_000).toISOString() : undefined,
-      }));
+      })] : []);
       const created = added.filter((memory) => memory.sourceMsgId === userMsg.id);
-      if (created.length) {
+      // 改写已有记忆：只改仍然存在、内容确实变了的那条；手动记的也可以改，但会告诉用户、可以撤销
+      const updated: { id: string; before: string; after: string }[] = [];
+      for (const m of j?.memories ?? []) {
+        if (m.op !== 'update') continue;
+        const target = known[m.target - 1];
+        const current = target && this.repo.listMemories().find((x) => x.id === target.id);
+        if (!current || current.content === m.content || updated.some((u) => u.id === current.id)) continue;
+        this.repo.updateMemory(current.id, m.content);
+        updated.push({ id: current.id, before: current.content, after: m.content });
+      }
+      if (created.length || updated.length) {
+        const lines = [
+          ...(created.length ? [`📌 已记住：${created.map((m) => m.content).join('；')}`] : []),
+          ...updated.map((u) => `📌 已更新：「${u.before}」→「${u.after}」`),
+        ];
         const note = this.repo.addMessage({
-          role: 'assistant', content: `📌 已记住：${created.map((m) => m.content).join('；')}`,
-          actions: created.map((m) => ({ label: `撤销「${m.content.slice(0, 8)}…」`, action: 'forget_memory', payload: { id: m.id } })),
+          role: 'assistant', content: lines.join('\n'),
+          actions: [
+            ...created.map((m) => ({ label: `撤销「${m.content.slice(0, 8)}…」`, action: 'forget_memory', payload: { id: m.id } })),
+            ...updated.map((u) => ({ label: `改回「${u.before.slice(0, 8)}…」`, action: 'restore_memory', payload: { id: u.id, content: u.before } })),
+          ],
         });
         this.channels.messagePosted(note);
       }

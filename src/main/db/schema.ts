@@ -33,6 +33,16 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   proactive INTEGER NOT NULL DEFAULT 0, trigger TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS conversation_summaries (id TEXT PRIMARY KEY, until_msg_id TEXT NOT NULL, summary TEXT NOT NULL);
+-- 早先对话的分段记录：每次压缩时按话题记下聊过什么、结论是什么，之后按相关度找回
+CREATE TABLE IF NOT EXISTS episodes (
+  id TEXT PRIMARY KEY, until_msg_id TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT NOT NULL,
+  title TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL
+);
+-- 语义检索用的向量缓存（可选功能，配置了向量模型才有）
+CREATE TABLE IF NOT EXISTS embeddings (
+  kind TEXT NOT NULL, id TEXT NOT NULL, model TEXT NOT NULL, hash TEXT NOT NULL, vector TEXT NOT NULL,
+  PRIMARY KEY (kind, id, model)
+);
 
 CREATE TABLE IF NOT EXISTS memories (
   id TEXT PRIMARY KEY, type TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, source_msg_id TEXT,

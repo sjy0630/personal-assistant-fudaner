@@ -183,6 +183,23 @@ export function ModelSettings({ onDirty, onBusy }: PanelProps) {
       <fieldset className={styles.form} disabled={!!task.busy}>
         {section('cloud')}
         {section('local')}
+        <EmbeddingSection
+          draft={draft}
+          saved={saved}
+          busy={task.busy}
+          onDraft={(embedding) => { setDraft({ ...draft, embedding }); task.clear(); }}
+          onSave={() => void task.run('embedding', async () => {
+            const cfg = draft.embedding;
+            const value = cfg?.baseURL.trim() && cfg.model.trim() ? { baseURL: cfg.baseURL.trim(), model: cfg.model.trim(), apiKey: cfg.apiKey } : undefined;
+            await api.settings.set({ embedding: value });
+            const current = await api.settings.get();
+            setSaved((s) => s && { ...s, embedding: current.embedding });
+            setDraft((s) => s && { ...s, embedding: current.embedding });
+            if (!value) return;
+            const r = await api.settings.testEmbedding();
+            if (!r.ok) throw new Error(`已保存，但测试没有通过：${r.message}`);
+          }, draft.embedding?.baseURL ? '向量模型已保存并测试通过，之后会按意思找回记忆和早先对话。' : '已关闭语义检索，改用关键词和同义说法检索。')}
+        />
         <section className={styles.section}>
           <h2>隐私任务的云端授权</h2>
           <p className={styles.hint}>
@@ -216,5 +233,33 @@ export function ModelSettings({ onDirty, onBusy }: PanelProps) {
       </fieldset>
       <Feedback {...task} />
     </>
+  );
+}
+
+/** 语义检索（可选）：配置向量模型后，按意思找回记忆和早先的对话 */
+function EmbeddingSection({ draft, busy, onDraft, onSave }: {
+  draft: Settings; saved: Settings; busy: string | null | undefined;
+  onDraft: (cfg: ModelConfig | undefined) => void; onSave: () => void;
+}) {
+  const cfg = draft.embedding ?? EMPTY;
+  const edit = (patch: Partial<ModelConfig>) => onDraft({ ...cfg, ...(patch.baseURL !== undefined && patch.baseURL !== cfg.baseURL ? { apiKey: '' } : {}), ...patch });
+  return (
+    <section className={styles.section}>
+      <h2>语义记忆检索（可选）</h2>
+      <p className={styles.hint}>
+        旦旦只有一个主对话，较早的聊天会被压缩。默认按关键词和同义说法（出国↔交换、保研↔推免）找回相关的记忆和早先对话；配置向量模型后还能按意思找回，比如问「压力好大」能想起你说过的考试焦虑。
+        记忆和聊天记录属于隐私内容：建议用本机的 Ollama（先运行 <code>ollama pull bge-m3</code>）；填云端地址时，只有在下方允许隐私任务使用云端才会生效。留空即关闭。
+      </p>
+      <div className={styles.presets}>
+        <button type="button" onClick={() => edit({ baseURL: 'http://127.0.0.1:11434/v1', model: 'bge-m3' })}>填入 Ollama bge-m3</button>
+      </div>
+      <label>服务地址（向量）<input type="url" value={cfg.baseURL} onChange={(e) => edit({ baseURL: e.target.value })} spellCheck={false} autoComplete="off" /></label>
+      <label>模型名（向量）<input value={cfg.model} onChange={(e) => edit({ model: e.target.value })} spellCheck={false} autoComplete="off" /></label>
+      <label>API Key（向量，本地可不填）<input type="password" value={cfg.apiKey} onChange={(e) => edit({ apiKey: e.target.value })} autoComplete="off" spellCheck={false} /></label>
+      <div className={styles.actions}>
+        <button type="button" className="primary" onClick={onSave}>{busy === 'embedding' ? '正在处理…' : '保存并测试向量模型'}</button>
+        {draft.embedding && <button type="button" className="ghost" onClick={() => onDraft(undefined)}>清空</button>}
+      </div>
+    </section>
   );
 }

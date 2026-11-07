@@ -28,7 +28,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   searchDetail: call('search.detail') as FudanerApi['searchDetail'],
   memory: { list: call('memory.list'), add: call('memory.add'), update: call('memory.update'), remove: call('memory.remove') } as FudanerApi['memory'],
   profile: { get: call('profile.get'), set: call('profile.set') } as FudanerApi['profile'],
-  settings: { get: call('settings.get'), set: call('settings.set'), setMailPassword: call('settings.setMailPassword'), testModel: call('settings.testModel') } as FudanerApi['settings'],
+  settings: { get: call('settings.get'), set: call('settings.set'), setMailPassword: call('settings.setMailPassword'), testModel: call('settings.testModel'), testEmbedding: call('settings.testEmbedding') } as FudanerApi['settings'],
   platforms: { status: call('platforms.status'), login: call('platforms.login'), syncNow: call('platforms.syncNow') } as FudanerApi['platforms'],
   activities: { list: call('activities.list'), import: call('activities.import'), syncFeeds: call('activities.syncFeeds') } as FudanerApi['activities'],
   notices: { sources: call('notices.sources'), list: call('notices.list') } as FudanerApi['notices'],
