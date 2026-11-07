@@ -13,6 +13,7 @@ import { memoryOutput } from './validation';
 import { createToolPolicy } from './tool-policy';
 import { memoryWriteProblem } from './memory-policy';
 import { queryArguments, queryRange, queryResultContext, shanghaiTime } from './query-context';
+import { goalReceipt, needsGoalReceipt } from './goal-receipt';
 
 const MAX_STEPS = 8;
 
@@ -150,7 +151,7 @@ function cardsFromTool(tool: string, text: string): CardRef[] {
   const title = typeof j.title === 'string' ? j.title : undefined;
   if (tool === 'save_resource') return [{ type: 'resource', id: j.id, title: title ?? '资源', subtitle: '已存入资源库' }];
   if (tool === 'create_goal') return [{ type: 'goal', id: j.id, title: title ?? '目标', subtitle: '新目标' }];
-  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: typeof j.dueAt === 'string' && Number.isFinite(Date.parse(j.dueAt)) ? `截止 ${fmt(j.dueAt)}` : '新任务' }];
+  if (tool === 'add_task') return [{ type: 'task', id: j.id, title: title ?? '任务', subtitle: [typeof j.goalTitle === 'string' && j.goalTitle ? `所属：${j.goalTitle}` : '', typeof j.dueAt === 'string' && Number.isFinite(Date.parse(j.dueAt)) ? `截止 ${fmt(j.dueAt)}` : ''].filter(Boolean).join(' · ') || '新任务' }];
   return [];
 }
 
@@ -216,6 +217,7 @@ export class ChatAgent {
   }
 
   private async withModel(llm: LlmClient, text: string, refs: CardRef[]): Promise<ChatMessage> {
+    const receiptMode = needsGoalReceipt(llm.label, text);
     const profile = this.repo.getProfile();
     const today = buildToday(this.repo);
     const nowIso = new Date().toISOString();
@@ -264,14 +266,16 @@ export class ChatAgent {
       onToolResult: (result) => {
         for (const card of readItemCards(this.repo, result)) if (run.itemCards.size < 5) run.itemCards.set(card.id, card);
       },
-      onDelta: (text) => { run.view.content += text; run.view.version++; this.publish(); },
+      onDelta: (text) => { if (!receiptMode) { run.view.content += text; run.view.version++; this.publish(); } },
       onTool: (call) => {
         const index = run.view.toolCalls.findIndex((t) => t.id === call.id);
         if (index < 0) run.view.toolCalls.push(structuredClone(call)); else run.view.toolCalls[index] = structuredClone(call);
         run.view.version++; this.publish(); this.channels.toolProgress(run.view.id, call);
       },
     });
-    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content: result.content || '模型没有返回正文，请重试。', toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
+    const content = receiptMode ? goalReceipt(this.repo, result.cards, text, result.finishReason === 'answer') : result.content || '模型没有返回正文，请重试。';
+    if (receiptMode) { run.view.content = content; run.view.version++; this.publish(); }
+    return this.repo.addMessage({ id: run.view.id, role: 'assistant', content, toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
   }
 
   /** 被引用对象的完整内容（PRD §5.0「引用到对话」） */

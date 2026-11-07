@@ -96,7 +96,7 @@ export function createLocalServer(repo: Repo, channels: Channels, scope: 'chat' 
     }
     const t = repo.addTask({ goalId, title: a.title, dueAt, source: 'assistant' });
     channels.changed('goals');
-    return json(t);
+    return json({ ...t, goalTitle: t.goalId ? repo.getGoal(t.goalId)?.title : undefined });
   });
 
   if (chatOnly) {
