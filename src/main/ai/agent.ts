@@ -6,7 +6,7 @@ import { fmt } from '../engine/engine';
 import type { McpHub } from '../mcp/hub';
 import { buildToday } from '../today';
 import type { LlmClient, LlmMessage, LlmTool, ModelRouter } from './llm';
-import { parseJsonLoose } from './llm';
+import { describeModelError, parseJsonLoose } from './llm';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
@@ -79,6 +79,7 @@ export async function runAgentLoop(opts: {
       opts.onTool?.(view);
       opts.signal?.throwIfAborted();
       messages.push({ role: 'tool', tool_call_id: tc.id, content: externalData(`${res.server}/${res.tool}`, res.text.slice(0, 12000)) });
+      shrinkOldToolResults(messages);
     }
   }
   const end = '这件事步骤有点多，我先停在这里。要我继续吗？';
@@ -126,6 +127,44 @@ export function loginActions(platforms: PlatformState[], dialog: string): { labe
   return /登录|登陆|授权|认证|同步|elearning|连不上|没连上/i.test(dialog) ? [{ label: '登录复旦账号', action: 'login' }] : [];
 }
 
+/**
+ * 一轮里调用了很多工具时，总长度会超过模型能读的上限：只保留最近几个工具结果的全文，
+ * 更早的结果截短（模型已经读过并据此行动了）。
+ */
+const TOOL_BUDGET = 60_000;
+export function shrinkOldToolResults(messages: LlmMessage[]): void {
+  const tools = messages.filter((m) => m.role === 'tool');
+  let total = tools.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  for (const m of tools.slice(0, -3)) {
+    if (total <= TOOL_BUDGET) break;
+    const len = m.content?.length ?? 0;
+    if (len > 1500) {
+      m.content = `${m.content!.slice(0, 1200)}\n…（较早的工具结果已截短）`;
+      total -= len - m.content.length;
+    }
+  }
+}
+
+/**
+ * 发给模型的对话历史：跳过空消息和失败提示，每条截短，总长度有上限（越新的越优先）。
+ * 历史里一条很长的回复不会让之后的每次请求都超长。
+ */
+export function historyForModel(history: { role: string; content: string }[], opts: { perMessage?: number; total?: number; maxMessages?: number } = {}): { role: 'user' | 'assistant'; content: string }[] {
+  const per = opts.perMessage ?? 2000;
+  let budget = opts.total ?? 16_000;
+  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+  for (const m of [...history].reverse().slice(0, opts.maxMessages ?? 20)) {
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    const text = m.content.replace(/\n*> (回复未完成|已停止生成)[^\n]*$/, '').trim();
+    if (!text) continue;
+    const clipped = text.length > per ? `${text.slice(0, per)}…（较长，已截短）` : text;
+    if (clipped.length > budget) break;
+    budget -= clipped.length;
+    out.unshift({ role: m.role, content: clipped });
+  }
+  return out;
+}
+
 export class ChatAgent {
   private readonly summarizer: ConversationSummarizer;
   private active: { view: ChatRun; controller: AbortController; cards: CardRef[]; itemCards: Map<string, CardRef> } | null = null;
@@ -155,8 +194,26 @@ export class ChatAgent {
       this.channels.messagePosted(reply);
       if (llm) void this.extractMemories(userMsg, reply);
       return reply;
-    } catch {
-      const note = run.controller.signal.aborted ? '已停止生成。' : '回复未完成：连接中断或模型未能正常返回，请检查网络和模型配置后重试。';
+    } catch (error) {
+      // 超出上下文长度：只带最近几条消息自动重试一次
+      if (!run.controller.signal.aborted && describeModelError(error).contextTooLong && !this.shortHistory) {
+        console.warn('[Fudaner 对话] 超出上下文长度，缩短历史后重试');
+        this.shortHistory = true;
+        try {
+          const llm = this.router.for('chat');
+          if (llm && !run.view.content) {
+            const reply = await this.withModel(llm, text, refs);
+            this.channels.messagePosted(reply);
+            return reply;
+          }
+        } catch (retryError) {
+          error = retryError;
+        } finally {
+          this.shortHistory = false;
+        }
+      }
+      if (!run.controller.signal.aborted) console.error('[Fudaner 对话] 模型调用失败：', error);
+      const note = run.controller.signal.aborted ? '已停止生成。' : `回复未完成：${describeModelError(error).text}。`;
       const toolCalls = run.view.toolCalls.map((t) => t.ok === undefined ? { ...t, ok: false, summary: '调用已中断，未收到完成结果。' } : t);
       const msg = this.repo.addMessage({ id: run.view.id, role: 'assistant', content: `${run.view.content}${run.view.content ? '\n\n' : ''}> ${note}`, toolCalls, cards: [...run.cards, ...run.itemCards.values()] });
       this.channels.messagePosted(msg);
@@ -174,6 +231,9 @@ export class ChatAgent {
     if (!recent.length) return [];
     return [{ label: recent.length > 1 ? `在文件夹中显示（${recent.length} 个文件）` : '在文件夹中显示', action: 'reveal_file', payload: { path: recent[0].path } }];
   }
+
+  /** 超长重试时只带最近几条历史 */
+  private shortHistory = false;
 
   /** 正在生成回复 */
   busy(): boolean { return this.active !== null; }
@@ -215,7 +275,7 @@ export class ChatAgent {
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
-      ...(scheduled ? history : history.slice(0, -1)).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      ...historyForModel(scheduled ? history : history.slice(0, -1), { maxMessages: this.shortHistory ? 6 : 20, total: this.shortHistory ? 6000 : 16_000 }),
       { role: 'user', content: refs.length ? `${text}\n\n${this.refContext(refs, llm.label.startsWith('local:'))}` : text },
     ];
     const run = this.active!;
