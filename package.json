@@ -16,7 +16,8 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
     "dist": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --dir"
+    "dist:dir": "npm run build && electron-builder --dir",
+    "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

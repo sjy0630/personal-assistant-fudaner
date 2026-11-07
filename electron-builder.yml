@@ -19,6 +19,9 @@ nsis:
 mac:
   target: dmg
   icon: resources/icon.png
+  # 没有苹果开发者证书：用本地（ad-hoc）签名，Apple 芯片的 Mac 才能运行
+  identity: "-"
+  hardenedRuntime: false
 linux:
   target: dir
   icon: resources/icon.png

@@ -44,6 +44,26 @@ npm install
 
 如果启动时报找不到 Electron，执行 `node node_modules/electron/install.js` 后重试；下载慢可以先设置环境变量 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
 
+### 打包成应用（不想每次 `npm run dev`）
+
+`npm run dev` 每次都要启动开发服务器，比较慢。只是试用、不改代码的话，可以打包成普通应用，之后双击打开：
+
+- **Mac**：
+
+  ```bash
+  npm run dist:dir
+  ```
+
+  完成后在 `release/mac-arm64/`（Intel 芯片的 Mac 是 `release/mac/`）里找到 `Fudaner.app`，拖进「应用程序」文件夹。想要 dmg 安装包就用 `npm run dist:mac`，dmg 在 `release/` 下。
+- **Windows**：`npm run dist`，安装包在 `release/` 下。
+
+注意：
+
+- 应用没有苹果开发者证书。自己电脑上打包的可以直接打开；从别人那里拿到的安装包，第一次要右键 →「打开」，或在「系统设置 → 隐私与安全性」里点「仍要打开」。
+- 打包的应用和 `npm run dev` 用**同一份本地数据**（登录状态、同步的数据、设置都通用），但两者不能同时运行：开一个之前先从托盘退出另一个。
+- 打包的应用不会随代码更新。`git pull` 拉了新代码后，要重新执行一次打包命令。
+- 调试、看报错还是用 `npm run dev`。
+
 **之前跑过演示模式的**：先到「设置 → 开发者」关掉演示模式，再点「清除所有数据」（演示数据和真实数据存在同一个本地数据库里，不清会混在一起）。
 
 ## 3. 首次使用引导
