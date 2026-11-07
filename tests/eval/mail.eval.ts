@@ -10,10 +10,12 @@ import { DemoElearningClient, DemoMailClient } from '../../src/main/demo/demo';
 import { nullChannels } from '../../src/main/engine/channels';
 import { score, validateSamples, type MailSample, type Metric, type Prediction } from './metrics';
 
-const fixtureUrl = new URL('../fixtures/mails.json', import.meta.url);
-const metadataUrl = new URL('../fixtures/mails.meta.json', import.meta.url);
-const resultUrl = new URL('./results.json', import.meta.url);
-const materialUrl = new URL('./MATERIALS-REPORT.md', import.meta.url);
+// EVAL_DATASET=human 使用人工标注集（mails.human.json），结果另存，不覆盖演示集结果。
+const human = process.env.EVAL_DATASET === 'human';
+const fixtureUrl = new URL(human ? '../fixtures/mails.human.json' : '../fixtures/mails.json', import.meta.url);
+const metadataUrl = new URL(human ? '../fixtures/mails.human.meta.json' : '../fixtures/mails.meta.json', import.meta.url);
+const resultUrl = new URL(human ? './results-human.json' : './results.json', import.meta.url);
+const materialUrl = new URL(human ? './MATERIALS-REPORT-HUMAN.md' : './MATERIALS-REPORT.md', import.meta.url);
 type Kind = 'cloud' | 'local';
 type DatasetMetadata = {
   datasetId: string; provenance: string; independentHumanLabels: boolean; formalCompetitionDataset: boolean;
@@ -178,7 +180,7 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
     '评测方法：读取虚构邮件及标注，使用相同课程总表分别评估规则和明确配置的模型分类；分类按单标签比较。规则行与模型行的截止字段均由生产代码共用的确定性 extractDeadline 从邮件原文提取，按上海时区精确到分钟，双方为空也计对，不代表独立的模型日期抽取准确率。关联使用现有 linkMail 规则，对课程与作业成对比对，并单列关联正负例；没有实现模型版作业关联。', '',
     '耗时是每批8封、含首次加载与失败重试的流水线墙钟时间；不是 token/s，也不能据此证明模型全部驻留GPU。规则回退会单独计数；回退结果不能当作模型准确率。', '',
     `机器实测：${result.machine.cpu}，物理内存 ${result.machine.memoryGiB} GiB，${result.machine.platform}，${result.machine.node}；显卡和GPU驻留须另行验证。`, '',
-    '本次未做正式样本泛化验证、跨模型统计显著性检验、真实账号数据测试；不得在说明书中填成正式达标。完整错例与调用耗时见 results.json。', '',
+    `本次未做正式样本泛化验证、跨模型统计显著性检验、真实账号数据测试；不得在说明书中填成正式达标。完整错例与调用耗时见 ${human ? 'results-human.json' : 'results.json'}。`, '',
   ].join('\n');
   await writeFile(materialUrl, report, 'utf8');
   console.log(warning);

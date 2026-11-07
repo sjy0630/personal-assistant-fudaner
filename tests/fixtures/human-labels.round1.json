@@ -1,0 +1,407 @@
+{
+  "labeledAt": "2026-11-07T11:45:08.269Z",
+  "labeler": "human",
+  "count": 40,
+  "labels": [
+    {
+      "id": "H001",
+      "label": {
+        "category": "reply",
+        "deadline": null,
+        "course": "数据结构",
+        "assignment": null
+      },
+      "note": "这封邮件需要综合其他小组的回复，回复无明确截止时间，应该是需要尽快。"
+    },
+    {
+      "id": "H002",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-17T23:59:00+08:00",
+        "course": "数据结构",
+        "assignment": "Lab 6：二叉树"
+      },
+      "note": ""
+    },
+    {
+      "id": "H003",
+      "label": {
+        "category": "action",
+        "deadline": "2026-11-12T17:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H004",
+      "label": {
+        "category": "notice",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H005",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-12T11:59:00+08:00",
+        "course": "学术英语写作",
+        "assignment": "Essay Draft 2"
+      },
+      "note": ""
+    },
+    {
+      "id": "H006",
+      "label": {
+        "category": "notice",
+        "deadline": "2026-11-09T23:59:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H007",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H008",
+      "label": {
+        "category": "reply",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": "无明确截止时间，但应在周五晚上前回复"
+    },
+    {
+      "id": "H009",
+      "label": {
+        "category": "action",
+        "deadline": null,
+        "course": "数学分析 III",
+        "assignment": "数分作业 6"
+      },
+      "note": ""
+    },
+    {
+      "id": "H010",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H011",
+      "label": {
+        "category": "notice",
+        "deadline": "2026-11-20T23:59:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H012",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-17T19:33:00+08:00",
+        "course": "大学物理 B",
+        "assignment": "大学物理 习题 9"
+      },
+      "note": ""
+    },
+    {
+      "id": "H013",
+      "label": {
+        "category": "reply",
+        "deadline": "2026-11-08T20:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H014",
+      "label": {
+        "category": "other",
+        "deadline": "2026-11-25T17:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H015",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-13T10:00:00+08:00",
+        "course": "线性代数",
+        "assignment": "线代 HW 7"
+      },
+      "note": ""
+    },
+    {
+      "id": "H016",
+      "label": {
+        "category": "action",
+        "deadline": "2026-11-08T23:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H017",
+      "label": {
+        "category": "notice",
+        "deadline": "2026-11-07T22:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H018",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-20T23:59:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H019",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-10T15:30:00+08:00",
+        "course": "学术英语写作",
+        "assignment": "Essay Draft 2"
+      },
+      "note": ""
+    },
+    {
+      "id": "H020",
+      "label": {
+        "category": "other",
+        "deadline": "2026-11-30T23:59:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H021",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-09T23:59:00+08:00",
+        "course": "数据结构",
+        "assignment": "Lab 5：链表与栈"
+      },
+      "note": ""
+    },
+    {
+      "id": "H022",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H023",
+      "label": {
+        "category": "notice",
+        "deadline": "2026-11-05T17:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H024",
+      "label": {
+        "category": "course",
+        "deadline": null,
+        "course": "数据结构",
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H025",
+      "label": {
+        "category": "reply",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": "无明确截止时间，但应在周六晚上前回复"
+    },
+    {
+      "id": "H026",
+      "label": {
+        "category": "notice",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H027",
+      "label": {
+        "category": "course",
+        "deadline": null,
+        "course": "数学分析 III",
+        "assignment": "数分作业 5"
+      },
+      "note": ""
+    },
+    {
+      "id": "H028",
+      "label": {
+        "category": "action",
+        "deadline": "2026-11-15T17:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H029",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H030",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-10T23:41:00+08:00",
+        "course": "学术英语写作",
+        "assignment": "Reading Response 4"
+      },
+      "note": ""
+    },
+    {
+      "id": "H031",
+      "label": {
+        "category": "reply",
+        "deadline": "2026-11-06T17:00:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H032",
+      "label": {
+        "category": "notice",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H033",
+      "label": {
+        "category": "action",
+        "deadline": "2026-11-14T23:59:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H034",
+      "label": {
+        "category": "course",
+        "deadline": null,
+        "course": "大学物理 B",
+        "assignment": "大学物理 习题 8"
+      },
+      "note": ""
+    },
+    {
+      "id": "H035",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H036",
+      "label": {
+        "category": "other",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H037",
+      "label": {
+        "category": "course",
+        "deadline": null,
+        "course": "数据结构",
+        "assignment": "Lab 6：二叉树"
+      },
+      "note": ""
+    },
+    {
+      "id": "H038",
+      "label": {
+        "category": "course",
+        "deadline": "2026-11-10T17:43:00+08:00",
+        "course": null,
+        "assignment": null
+      },
+      "note": ""
+    },
+    {
+      "id": "H039",
+      "label": {
+        "category": "reply",
+        "deadline": null,
+        "course": null,
+        "assignment": null
+      },
+      "note": "无明确截止时间，但应尽早回复"
+    },
+    {
+      "id": "H040",
+      "label": {
+        "category": "course",
+        "deadline": null,
+        "course": "线性代数",
+        "assignment": "线代 HW 6"
+      },
+      "note": ""
+    }
+  ]
+}
