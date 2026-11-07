@@ -1,6 +1,9 @@
 import type { Repo } from '../db/repo';
 import type { LlmClient } from './llm';
 
+/** 可能返回敏感内容的工具（邮件正文、全文搜索、成绩、绩点、培养方案）：受隐私授权控制，结果也不跨轮次缓存 */
+export const SENSITIVE_TOOLS = ['get_mail', 'search_all', 'get_grades', 'get_gpa', 'get_program_completion'];
+
 /** 工具可见性与执行前检查共用策略；隐藏工具也必须防止模型直接请求。 */
 export function createToolPolicy(repo: Repo, llm: Pick<LlmClient, 'label'>): {
   mailInstructions(): string;
@@ -9,7 +12,7 @@ export function createToolPolicy(repo: Repo, llm: Pick<LlmClient, 'label'>): {
 } {
   const mailBodyAllowed = () => llm.label.startsWith('local:') || repo.getSettings().allowSensitiveToCloud === true;
   const protectedTool = (server: string, tool: string) =>
-    (server === 'fudan-mail' && tool === 'get_mail') || (server === 'fudaner-local' && ['search_all', 'get_grades', 'get_gpa', 'get_program_completion'].includes(tool));
+    (server === 'fudan-mail' && tool === 'get_mail') || (server === 'fudaner-local' && SENSITIVE_TOOLS.includes(tool) && tool !== 'get_mail');
   return {
     mailInstructions: () => mailBodyAllowed()
       ? '邮件正文和成绩读取已获允许（成绩用 get_grades、绩点和排名用 get_gpa、培养方案完成情况用 get_program_completion）。search_mail 和 list_action_required 只返回列表摘要；用户询问邮件具体内容、细节或原文时，先搜索定位邮件，再用返回的真实 id 调用 get_mail 读取 body。不能把搜索列表缺少正文说成邮箱接口不支持正文。'

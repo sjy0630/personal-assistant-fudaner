@@ -444,14 +444,33 @@ export class Repo {
     const rows = this.db.all<Row>('SELECT * FROM memories WHERE expires_at IS NULL OR expires_at > ? ORDER BY pinned DESC, updated_at DESC', now);
     return rows.map(mapMemory).filter((m) => !types || types.includes(m.type));
   }
-  /** 初赛：关键词 + 类型匹配；P1 换成向量检索 */
-  recallMemories(query: string, limit = 10): Memory[] {
+  /**
+   * 挑出和这句话相关的记忆。
+   * - 记忆不多（≤30 条）时全部带上：几百字，比漏掉要紧的事划算；
+   * - 多了才按相关度挑：中文按两字片段、英文按单词算重合，再加上置顶、类型（目标/偏好/固定安排）和最近更新的权重。
+   *   （原来按空格切词，中文整句当一个词，几乎匹配不上。）
+   */
+  recallMemories(query: string, limit = 15): Memory[] {
     const all = this.listMemories();
-    const words = query.split(/[\s，。,.!?？！]+/).filter((w) => w.length >= 2);
-    const scored = all.map((m) => ({
-      m,
-      s: (m.pinned ? 2 : 0) + (m.type === 'schedule' || m.type === 'preference' ? 1 : 0) + words.filter((w) => m.content.includes(w)).length * 3,
-    }));
+    if (all.length <= 30) return all;
+    const grams = (s: string) => {
+      const out = new Set<string>();
+      for (const w of s.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []) out.add(w);
+      for (const run of s.match(/[\u4e00-\u9fff]+/g) ?? []) {
+        if (run.length === 1) continue;
+        for (let i = 0; i < run.length - 1; i++) out.add(run.slice(i, i + 2));
+      }
+      return out;
+    };
+    const q = grams(query);
+    const week = Date.now() - 7 * 86_400_000;
+    const scored = all.map((m) => {
+      const g = grams(m.content);
+      let overlap = 0;
+      for (const x of q) if (g.has(x)) overlap++;
+      const typeBoost = ['goal', 'preference', 'schedule'].includes(m.type) ? 1 : 0;
+      return { m, s: (m.pinned ? 4 : 0) + overlap * 2 + typeBoost + (Date.parse(m.updatedAt) > week ? 0.5 : 0) };
+    });
     return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.m);
   }
 

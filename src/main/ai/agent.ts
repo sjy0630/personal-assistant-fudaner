@@ -10,7 +10,7 @@ import { describeModelError, parseJsonLoose } from './llm';
 import { externalData, memoryExtractPrompt, personaPrompt } from './prompts';
 import { ConversationSummarizer } from './summary';
 import { memoryOutput } from './validation';
-import { createToolPolicy } from './tool-policy';
+import { createToolPolicy, SENSITIVE_TOOLS } from './tool-policy';
 import { changeNoticeFollows } from '../notices/sync';
 
 const MAX_STEPS = 8;
@@ -145,16 +145,34 @@ export function shrinkOldToolResults(messages: LlmMessage[]): void {
   }
 }
 
+/** 跨轮次记住的工具结果摘录（6 小时内、最多 8 条） */
+export interface ToolFact { tool: string; text: string; at: string }
+export function recentFactsText(facts: ToolFact[], now = Date.now()): string {
+  const fresh = facts.filter((f) => now - Date.parse(f.at) < 6 * 3_600_000);
+  if (!fresh.length) return '';
+  return [
+    '最近几轮查过的数据（来自工具的摘录，可能已经过时或不完整；需要准确、完整或最新的数据时重新调用工具）：',
+    externalData('recent-tool-results', fresh.map((f) => `[${f.tool} · ${new Date(f.at).toLocaleString('zh-CN', { hour12: false })}] ${f.text}`).join('\n')),
+  ].join('\n');
+}
+
 /**
  * 发给模型的对话历史：跳过空消息和失败提示，每条截短，总长度有上限（越新的越优先）。
  * 历史里一条很长的回复不会让之后的每次请求都超长。
  */
-export function historyForModel(history: { role: string; content: string }[], opts: { perMessage?: number; total?: number; maxMessages?: number } = {}): { role: 'user' | 'assistant'; content: string }[] {
+export function historyForModel(history: { role: string; content: string; proactive?: boolean; createdAt?: string }[], opts: { perMessage?: number; total?: number; maxMessages?: number; now?: number } = {}): { role: 'user' | 'assistant'; content: string }[] {
   const per = opts.perMessage ?? 2000;
   let budget = opts.total ?? 16_000;
   const out: { role: 'user' | 'assistant'; content: string }[] = [];
+  // 提醒、早安这类主动消息只带最近 12 小时内的最多 4 条，不挤掉你们真正聊过的内容
+  const now = opts.now ?? Date.now();
+  let proactive = 0;
   for (const m of [...history].reverse().slice(0, opts.maxMessages ?? 20)) {
     if (m.role !== 'user' && m.role !== 'assistant') continue;
+    if (m.proactive) {
+      if (proactive >= 4 || (m.createdAt && now - Date.parse(m.createdAt) > 12 * 3_600_000)) continue;
+      proactive++;
+    }
     const text = m.content.replace(/\n*> (回复未完成|已停止生成)[^\n]*$/, '').trim();
     if (!text) continue;
     const clipped = text.length > per ? `${text.slice(0, per)}…（较长，已截短）` : text;
@@ -270,8 +288,17 @@ export class ChatAgent {
     const today = buildToday(this.repo);
     const policy = createToolPolicy(this.repo, llm);
     const platforms = await this.platformStatus().catch(() => []);
-    const system = [policy.mailInstructions(), personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString(), platforms }), this.summarizer.context()].filter(Boolean).join('\n\n');
-    const history = this.repo.recentMessages(20).filter((m) => m.role !== 'tool');
+    // 顺序：不常变的在前（规则、画像、记忆），常变的在后（状态、时间、摘要、最近查过的数据），
+    // 前缀不变时模型服务可以复用缓存，更快也更省钱
+    const system = [
+      policy.mailInstructions(),
+      personaPrompt({ profile, memories: this.repo.recallMemories(text), today, nowIso: new Date().toISOString(), platforms }),
+      this.summarizer.context(),
+      recentFactsText(this.repo.getKv<ToolFact[]>('recent_tool_facts', [])),
+    ].filter(Boolean).join('\n\n');
+    const facts: ToolFact[] = [];
+    // 多取一些，主动消息被过滤后仍有足够的对话
+    const history = this.repo.recentMessages(30).filter((m) => m.role !== 'tool');
     const messages: LlmMessage[] = [
       { role: 'system', content: system },
       // 普通对话：最后一条是刚保存的用户消息，单独放在末尾；定时任务没有保存用户消息
@@ -286,6 +313,10 @@ export class ChatAgent {
       onCards: (cards) => { run.cards = this.repo.prepareUndoCards(cards, run.cards); },
       onToolResult: (result) => {
         for (const card of readItemCards(this.repo, result)) if (run.itemCards.size < 5) run.itemCards.set(card.id, card);
+        // 记下这轮查到的数据，下一轮还能用（敏感工具的结果不记）
+        if (!SENSITIVE_TOOLS.includes(result.tool) && !/^(remember|forget|create_|add_|update_|follow_|cancel_|mark_|schedule_|save_|push_|start_|import_|download_)/.test(result.tool)) {
+          facts.push({ tool: `${result.server}/${result.tool}`, text: result.text.replace(/\s+/g, ' ').slice(0, 700), at: new Date().toISOString() });
+        }
       },
       onDelta: (text) => { run.view.content += text; run.view.version++; this.publish(); },
       onTool: (call) => {
@@ -295,6 +326,10 @@ export class ChatAgent {
       },
     });
     const content = result.content || '模型没有返回正文，请重试。';
+    if (facts.length) {
+      const previous = this.repo.getKv<ToolFact[]>('recent_tool_facts', []);
+      this.repo.setKv('recent_tool_facts', [...previous, ...facts].slice(-8));
+    }
     return this.repo.addMessage({
       id: run.view.id, role: 'assistant', content: scheduled ? `⏰ ${scheduled.title}\n\n${content}` : content, proactive: !!scheduled,
       toolCalls: result.toolCalls, cards: [...run.cards, ...run.itemCards.values()],
