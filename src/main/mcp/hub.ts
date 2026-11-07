@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { LlmTool } from '../ai/llm';
 
-interface Connected { name: string; client: Client; tools: { name: string; description?: string; inputSchema: Record<string, unknown> }[] }
+interface Connected { name: string; client: Client; tools: { name: string; description?: string; inputSchema: Record<string, unknown>; readOnly: boolean }[] }
 
 /**
  * MCP 客户端集线器（PRD §7.5）。
@@ -19,7 +19,7 @@ export class McpHub {
     const client = new Client({ name: `fudaner-agent→${name}`, version: '0.1.0' });
     await client.connect(clientT);
     const { tools } = await client.listTools();
-    this.servers.push({ name, client, tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown> })) });
+    this.servers.push({ name, client, tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown>, readOnly: t.annotations?.readOnlyHint === true })) });
   }
 
   /** 转换成模型的 function calling 定义。工具名格式：<服务名>__<工具名> */
@@ -32,6 +32,12 @@ export class McpHub {
           function: { name: `${s.name.replace(/-/g, '_')}__${t.name}`, description: `[${s.name}] ${t.description ?? ''}`, parameters: t.inputSchema },
         })),
     );
+  }
+
+  /** 只信任服务注册的只读标记；未知工具和写工具都不能复用执行结果。 */
+  isReadOnly(qualified: string): boolean {
+    const [srv, tool] = qualified.split('__');
+    return this.servers.find(s => s.name.replace(/-/g, '_') === srv)?.tools.find(t => t.name === tool)?.readOnly === true;
   }
 
   /** 调用工具，返回文本结果 */

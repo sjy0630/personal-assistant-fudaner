@@ -1,0 +1,106 @@
+{
+  "generatedAt": "2026-11-07T08:53:52.349Z",
+  "phase": "after",
+  "model": "local:qwen2.5:7b",
+  "referenceNow": "2026-11-07T08:21:00.000Z",
+  "results": [
+    {
+      "prompt": "这周有哪些 DDL？",
+      "content": "这周内有以下几个截止日期需要注意：\n\n1. **Lab 4：顺序表**（数据结构），截止于 2026-11-01 23:59:00（上海时间）。\n2. **数分作业 5**（数学分析 III），截止于 2026-11-03 18:00:00（上海时间）。\n3. **线代 HW 6**（线性代数），截止于 2026-11-05 23:59:00（上海时间）。\n4. **Lab 5：链表与栈**（数据结构），目前还未提交，截止于 2026-11-07 23:59:00（上海时间）。\n\n记得按时提交 Lab 5 哦！",
+      "tools": [
+        {
+          "id": "query-7f9e30d7-14dc-48a7-9e53-f4f4c0965e74",
+          "name": "list_deadlines",
+          "server": "fudaner-local",
+          "args": {
+            "from": "2026-10-31T16:00:00.000Z",
+            "to": "2026-11-07T15:59:59.999Z"
+          },
+          "ok": true,
+          "summary": "[\n  {\n    \"id\": \"a9799d4d-35b1-4a00-9a55-961ea84c1a65\",\n    \"title\": \"Lab 4：顺序表\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"20"
+        }
+      ],
+      "checks": {
+        "finishedAnswer": true,
+        "structuredReply": true,
+        "queried": true,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": true
+      },
+      "elapsedMs": 6946
+    },
+    {
+      "prompt": "请先调用工具查询：\n1. 今天有哪些课程，分别几点开始、几点结束？\n2. 从今天起未来7天，有哪些未完成作业及截止时间？\n只根据查询结果回答。已经结束的课程请注明，不要补充没有查到的安排。",
+      "content": "今天（2026-11-07）的课程已经结束了：\n- 数学分析 III：08:00–09:40（H3109）\n- 数据结构：13:30–15:10（H2215）\n\n未来7天（2026-11-07至2026-11-14）你有以下未完成的作业，记得按时提交哦：\n- Lab 5：链表与栈（数据结构），截止 2026-11-07 23:59（上海时间）\n- 大学物理 习题 8（大学物理 B），截止 2026-11-09 12:00（上海时间）\n- Reading Response 4（学术英语写作），截止 2026-11-09 23:59（上海时间）\n- 数分作业 6（数学分析 III），截止 2026-11-10 18:00（上海时间）\n- Essay Draft 2（学术英语写作），截止 2026-11-11 23:59（上海时间）\n- 线代 HW 7（线性代数），截止 2026-11-12 23:59（上海时间）\n\n记得合理安排时间，祝你学业顺利！",
+      "tools": [
+        {
+          "id": "query-4c19c1a7-2c67-42cd-9c06-5d4f6760bfe9",
+          "name": "get_today",
+          "server": "fudaner-local",
+          "args": {
+            "date": "2026-11-07"
+          },
+          "ok": true,
+          "summary": "{\n  \"date\": \"2026-11-07\",\n  \"weekNo\": 9,\n  \"phase\": \"midterm\",\n  \"courses\": [\n    {\n      \"name\": \"数学分析 III\",\n      \"tim"
+        },
+        {
+          "id": "query-9d382cb4-d52e-492b-b6e3-f6c70423a317",
+          "name": "list_deadlines",
+          "server": "fudaner-local",
+          "args": {
+            "from": "2026-11-07T08:21:00.000Z",
+            "to": "2026-11-14T08:21:00.000Z",
+            "pending_only": true
+          },
+          "ok": true,
+          "summary": "[\n  {\n    \"id\": \"766bd8cb-e428-403d-9611-d86a0ef3174e\",\n    \"title\": \"Lab 5：链表与栈\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"2"
+        }
+      ],
+      "checks": {
+        "finishedAnswer": true,
+        "structuredReply": true,
+        "queried": true,
+        "noNewMemories": true,
+        "noEveningMath": true,
+        "noUnrequestedWrites": true,
+        "deadlineFact": true,
+        "queriedCourses": true,
+        "courseTimes": true,
+        "endedCourses": true
+      },
+      "elapsedMs": 11181
+    }
+  ],
+  "actualMcpCalls": [
+    {
+      "name": "fudaner_local__list_deadlines",
+      "args": {
+        "from": "2026-10-31T16:00:00.000Z",
+        "to": "2026-11-07T15:59:59.999Z"
+      },
+      "ok": true
+    },
+    {
+      "name": "fudaner_local__get_today",
+      "args": {
+        "date": "2026-11-07"
+      },
+      "ok": true
+    },
+    {
+      "name": "fudaner_local__list_deadlines",
+      "args": {
+        "from": "2026-11-07T08:21:00.000Z",
+        "to": "2026-11-14T08:21:00.000Z",
+        "pending_only": true
+      },
+      "ok": true
+    }
+  ],
+  "limitations": [
+    "Two fixed fictitious screenshot scenarios only; not formal mail accuracy, full tool/work-order acceptance or a rendered Electron UI check.",
+    "Memory extraction enabled; summary model disabled to isolate the reported symptoms. API calls capped at 40s and 1500 tokens."
+  ]
+}
