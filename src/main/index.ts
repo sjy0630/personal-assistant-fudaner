@@ -148,6 +148,8 @@ app.whenReady().then(async () => {
   if (process.env.FUDANER_DEMO === '1' && !ctx.repo.getSettings().demoMode) ctx.repo.setSettings({ demoMode: true });
   if (ctx.repo.getSettings().demoMode) seedDemoProfile(ctx.repo);
   await ctx.start();
+  // 外部 MCP 服务在后台连接，不拖慢启动
+  void ctx.reloadExternal().catch(() => undefined);
 
   // 调度：引擎每 10 秒处理一次事件；平台每 30 分钟同步一次（加随机抖动，PRD §9）
   let paused = 0;

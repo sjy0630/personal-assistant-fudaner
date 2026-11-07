@@ -324,9 +324,38 @@ export interface Settings {
   feeds?: FeedSource[];
   /** 关注的学校和院系官网通知来源 id；未设置时默认教务处 + 本人院系 */
   noticeSources?: string[];
+  /** 接入的外部 MCP 服务（社区做的复旦校园服务等），见 src/main/mcp/external.ts */
+  externalMcp?: ExternalMcpConfig[];
 }
 
 export interface FeedSource { url: string; name?: string }
+
+export type ExternalMcpPreset = 'fudan-library' | 'danta' | 'ehall' | 'custom';
+export interface ExternalMcpConfig {
+  /** 唯一 id，小写字母数字和短横线 */
+  id: string;
+  preset: ExternalMcpPreset;
+  name: string;
+  enabled: boolean;
+  /** 预设里需要本地目录的服务（旦挞、ehall）：用户克隆到的文件夹 */
+  dir?: string;
+  /** 自定义服务：启动命令、参数、工作目录 */
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  /** 自定义服务：默认只开放标了只读的工具；勾选后开放全部工具 */
+  allowAllTools?: boolean;
+}
+
+export interface ExternalMcpStatus {
+  id: string;
+  name: string;
+  state: 'off' | 'connecting' | 'ok' | 'error';
+  tools: string[];
+  /** 因为可能修改数据而没有开放的工具 */
+  blocked: string[];
+  error?: string;
+}
 
 export type PlatformName = 'elearning' | 'icourse' | 'mail';
 export interface PlatformState { platform: PlatformName; status: 'ok' | 'need_login' | 'unavailable' | 'not_configured' | 'demo'; message?: string; checkedAt?: string }

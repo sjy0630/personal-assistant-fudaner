@@ -9,7 +9,8 @@ import { courseRegistryData } from './courses/registry';
 import { buildCalendar, localDate } from './engine/calendar';
 import { applyDemoCourseExtras } from './demo/demo';
 import type { Channels } from './engine/channels';
-import type { PlatformState } from '../shared/types';
+import type { ExternalMcpStatus, PlatformState } from '../shared/types';
+import { childEnv, externalServerName, launchOf, toolAllowed } from './mcp/external';
 import { ProactiveEngine } from './engine/engine';
 import { TicketExecutor } from './engine/executor';
 import { createLocalServer } from './local-tools/server';
@@ -51,6 +52,9 @@ export class AppContext {
   readonly agent: ChatAgent;
   readonly executor: TicketExecutor;
   private syncing = false;
+  /** 外部 MCP 服务的连接状态（设置页展示） */
+  private external = new Map<string, ExternalMcpStatus>();
+  private externalVersion = 0;
 
   constructor(private readonly deps: AppDeps) {
     this.repo = new Repo(new Db(deps.dbPath));
@@ -110,6 +114,37 @@ export class AppContext {
 
   async platformStatus(probe = true): Promise<PlatformState[]> {
     return this.deps.platformStatus ? this.deps.platformStatus(probe) : [];
+  }
+
+  /**
+   * 按设置连接外部 MCP 服务（社区做的复旦校园服务）。在后台进行，不阻塞启动：
+   * 第一次启动 uvx 之类的服务要下载依赖，可能要一两分钟。
+   */
+  async reloadExternal(): Promise<ExternalMcpStatus[]> {
+    const version = ++this.externalVersion;
+    const configs = this.repo.getSettings().externalMcp ?? [];
+    for (const name of this.hub.list().map((s) => s.server).filter((n) => n.startsWith('ext-'))) await this.hub.disconnect(name);
+    this.external = new Map(configs.map((c) => [c.id, { id: c.id, name: c.name, state: c.enabled ? 'connecting' : 'off', tools: [], blocked: [] } satisfies ExternalMcpStatus]));
+    this.deps.channels.changed('platforms');
+    await Promise.all(configs.filter((c) => c.enabled).map(async (c) => {
+      let status: ExternalMcpStatus;
+      try {
+        const launch = launchOf(c);
+        const r = await this.hub.connectStdio(externalServerName(c), { ...launch, env: childEnv() }, (t) => toolAllowed(c, t));
+        status = { id: c.id, name: c.name, state: 'ok', tools: r.tools, blocked: r.blocked };
+      } catch (e) {
+        status = { id: c.id, name: c.name, state: 'error', tools: [], blocked: [], error: (e as Error).message };
+      }
+      // 期间设置又变了：丢弃这次结果
+      if (version !== this.externalVersion) { await this.hub.disconnect(externalServerName(c)); return; }
+      this.external.set(c.id, status);
+      this.deps.channels.changed('platforms');
+    }));
+    return this.externalStatus();
+  }
+
+  externalStatus(): ExternalMcpStatus[] {
+    return [...this.external.values()];
   }
 
   /** 读取网页：演示模式下只读虚构文章 */
@@ -257,6 +292,7 @@ export class AppContext {
   }
 
   async close(): Promise<void> {
+    this.externalVersion++;
     await this.hub.close();
     await this.executorHub.close();
     this.repo.db.close();

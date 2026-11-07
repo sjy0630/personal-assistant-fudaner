@@ -1,12 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 import { ipcMain, type BrowserWindow } from 'electron';
 import type { FudanerApi } from '../shared/ipc';
-import type { ChatMessage, PlatformState } from '../shared/types';
+import type { ChatMessage, ExternalMcpConfig, PlatformState } from '../shared/types';
 import type { AppContext } from './app-context';
 import type { AuthManager } from './auth/auth-manager';
 import type { DemoElearningClient, DemoMailClient } from './demo/demo';
 import { demoLateMail, seedDemoProfile } from './demo/demo';
 import { NOTICE_SOURCES } from './notices/sources';
+import { EXTERNAL_PRESETS, sanitizeExternal } from './mcp/external';
 import { enabledNoticeSources } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
@@ -182,6 +183,8 @@ export function registerIpc(ctx: AppContext, opts: {
   });
   handle<[Record<string, unknown>], void>('settings.set', async (patch) => {
     const cur = repo.getSettings();
+    // 外部服务会启动本机程序，只能通过 external.save（有字段校验）修改
+    delete patch.externalMcp;
     for (const k of ['cloud', 'local'] as const) {
       const m = patch[k] as { apiKey?: string } | undefined;
       if (m?.apiKey?.startsWith('••••••')) m.apiKey = cur[k]?.apiKey;
@@ -221,6 +224,15 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[], unknown>('campus.importExams', () => campusCall(async () => { const r = await ctx.importExams(); await ctx.engine.tick(); opts.onChanged?.('feed'); return r; }));
   handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
   handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
+
+  // 外部 MCP 服务
+  handle<[], unknown>('external.presets', async () => EXTERNAL_PRESETS.map(({ preset, name, summary, repo, license, setup, needsDir, dirHint }) => ({ preset, name, summary, repo, license, setup, needsDir, dirHint })));
+  handle<[], unknown>('external.status', async () => ctx.externalStatus());
+  handle<[ExternalMcpConfig[]], unknown>('external.save', async (configs) => {
+    const clean = sanitizeExternal(configs);
+    repo.setSettings({ externalMcp: clean });
+    return ctx.reloadExternal();
+  });
 
   handle<[], unknown>('notices.sources', async () => {
     const enabled = new Set(enabledNoticeSources(repo).map((s) => s.id));
@@ -299,3 +311,4 @@ export function registerIpc(ctx: AppContext, opts: {
   });
 
 }
+
