@@ -208,6 +208,9 @@ export class ProactiveEngine {
   private addCard(batch: Trigger[], a: Assessment, refs: CardRef[]): void {
     const t = batch[0];
     const type = t.kind === 'activity_new' ? 'opportunity'
+      : t.kind === 'notice_new' ? 'campus_notice'
+      : t.kind === 'exam_soon' ? 'assignment'
+      : t.kind === 'card_low' ? 'insight'
       : t.kind === 'announcement_new' ? 'announcement'
       : t.kind === 'mail_new' ? (t.payload.category === 'course' ? 'course_mail' : t.payload.category === 'notice' ? 'opportunity' : 'mail_action')
       : t.kind.startsWith('assignment') || t.kind.startsWith('deadline') ? 'assignment' : 'insight';
@@ -320,6 +323,9 @@ export function describeTrigger(t: Trigger): string {
     case 'assignment_changed': return `[作业变更] ${p.course}：${p.title}，新截止 ${p.dueText}`;
     case 'assignment_submitted': return `[已提交] ${p.title}`;
     case 'announcement_new': return `[公告] ${p.course}：${p.title}`;
+    case 'exam_soon': return `[考试] ${p.course}，${p.timeText ?? ''}，考场 ${p.location ?? '未知'}，还有 ${p.daysLeft} 天`;
+    case 'card_low': return `[校园卡] 余额 ¥${p.balance}`;
+    case 'notice_new': return `[学校通知/${p.sourceName}] ${p.title}${p.own ? '（本人院系）' : ''}${p.excerpt ? `\n正文开头：${p.excerpt}` : ''}`;
     case 'activity_new': return `[校园活动/${p.category ?? '其他'}] ${p.title}；时间 ${p.timeText ?? '未写明'}；地点 ${p.location ?? '未写明'}${p.campus ? `（${p.campus}）` : ''}；主办 ${p.organizer ?? '未写明'}。${p.summary ?? ''}${p.excerpt ? `\n原文开头：${p.excerpt}` : ''}`;
     default: return `[${t.kind}] ${p.title ?? p.topic ?? ''}`;
   }

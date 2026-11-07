@@ -117,6 +117,15 @@ app.whenReady().then(async () => {
     dbPath: join(app.getPath('userData'), 'fudaner.sqlite'),
     channels,
     fetchText: readPublicPage,
+    // 教务系统、校园卡：复用统一身份认证会话；eLearning 登录有效时才去读，避免没登录时反复碰壁
+    campusReader: () => (ctx.repo.getSettings().demoMode || auth.cachedStatus('elearning') !== 'ok' ? null : {
+      getText: (url) => auth.getText('jwfw', url),
+      render: (url, ready) => auth.renderPage('jwfw', url, ready),
+    }),
+    postPublic: async (url) => {
+      const res = await net.fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      return { status: res.status, text: await res.text() };
+    },
     platformStatus: async (probe) => {
       const s = ctx.repo.getSettings();
       if (s.demoMode) return (['elearning', 'icourse', 'mail'] as const).map((platform) => ({ platform, status: 'demo' as const }));

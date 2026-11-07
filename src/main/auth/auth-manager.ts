@@ -59,6 +59,44 @@ export class AuthManager implements FudanAuth {
     }
   }
 
+  /** 用登录会话读一个页面的文字（教务系统等）。被带到登录页时抛出 NeedLoginError */
+  async getText(platform: FudanPlatform, url: string, init?: RequestInit): Promise<{ url: string; status: number; text: string }> {
+    const res = await this.fetch(platform, url, init);
+    return { url: res.url || url, status: res.status, text: await res.text() };
+  }
+
+  /**
+   * 在隐藏窗口里打开页面，等页面脚本渲染完再取 HTML（含同源 iframe）。
+   * 用于考试安排、校园卡这类靠脚本加载内容的页面。只读页面内容，不点击、不提交。
+   */
+  async renderPage(platform: FudanPlatform, url: string, ready: (html: string) => boolean, timeoutMs = 20_000): Promise<string> {
+    const win = new BrowserWindow({ show: false, webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    try {
+      void win.loadURL(url).catch(() => {});
+      const deadline = Date.now() + timeoutMs;
+      let html = '';
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 500));
+        if (win.isDestroyed()) break;
+        if (isUisLoginUrl(win.webContents.getURL())) {
+          this.setStatus(platform, 'need_login');
+          throw new NeedLoginError(platform);
+        }
+        if (win.webContents.isLoading()) continue;
+        html = await win.webContents.executeJavaScript(`(() => {
+          const parts = [document.documentElement.outerHTML];
+          for (const f of document.querySelectorAll('iframe')) { try { if (f.contentDocument) parts.push(f.contentDocument.documentElement.outerHTML); } catch {} }
+          return parts.join('\n');
+        })()`).catch(() => '') as string;
+        if (ready(html)) return html;
+      }
+      return html;
+    } finally {
+      if (!win.isDestroyed()) win.destroy();
+    }
+  }
+
   /** 已有会话和新登录都通过身份接口核验，手动关闭窗口不视为登录成功。 */
   requestLogin(): Promise<void> {
     if (this.loginPromise) {

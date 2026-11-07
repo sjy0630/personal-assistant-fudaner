@@ -31,6 +31,8 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   settings: { get: call('settings.get'), set: call('settings.set'), setMailPassword: call('settings.setMailPassword'), testModel: call('settings.testModel') } as FudanerApi['settings'],
   platforms: { status: call('platforms.status'), login: call('platforms.login'), syncNow: call('platforms.syncNow') } as FudanerApi['platforms'],
   activities: { list: call('activities.list'), import: call('activities.import'), syncFeeds: call('activities.syncFeeds') } as FudanerApi['activities'],
+  notices: { sources: call('notices.sources'), list: call('notices.list') } as FudanerApi['notices'],
+  campus: { status: call('campus.status'), importTimetable: call('campus.importTimetable'), importExams: call('campus.importExams'), library: call('campus.library'), cardBalance: call('campus.cardBalance') } as FudanerApi['campus'],
   decisions: call('decisions') as FudanerApi['decisions'],
   tickets: call('tickets') as FudanerApi['tickets'],
   dev: {

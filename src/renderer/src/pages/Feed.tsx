@@ -8,9 +8,10 @@ const FILTERS = [
   { key: 'course_mail', label: '课程邮件' },
   { key: 'mail_action', label: '待处理邮件' },
   { key: 'opportunity', label: '活动与机会' },
+  { key: 'campus_notice', label: '学校通知' },
   { key: 'suggest_ticket', label: '建议' },
 ];
-const TYPE_ICON: Record<string, string> = { assignment: '📝', announcement: '📢', course_mail: '📧', mail_action: '📮', opportunity: '🌏', replay: '🎬', insight: '💡', suggest_ticket: '🤝' };
+const TYPE_ICON: Record<string, string> = { assignment: '📝', announcement: '📢', course_mail: '📧', mail_action: '📮', opportunity: '🌏', campus_notice: '🏫', replay: '🎬', insight: '💡', suggest_ticket: '🤝' };
 
 /** 动态（PRD §5.2）：助理推给你的卡片，每张都说明理由，可以引用到对话 */
 export function FeedPage({ quote, focus }: { quote: (r: CardRef) => void; focus?: { id: string } | null }) {

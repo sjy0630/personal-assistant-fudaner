@@ -6,6 +6,8 @@ import type { AppContext } from './app-context';
 import type { AuthManager } from './auth/auth-manager';
 import type { DemoElearningClient, DemoMailClient } from './demo/demo';
 import { demoLateMail, seedDemoProfile } from './demo/demo';
+import { NOTICE_SOURCES } from './notices/sources';
+import { enabledNoticeSources } from './notices/sync';
 import { localDate } from './engine/calendar';
 import { parseFile } from './library/parse';
 import { buildToday } from './today';
@@ -202,10 +204,30 @@ export function registerIpc(ctx: AppContext, opts: {
   handle('platforms.status', async (): Promise<PlatformState[]> => ctx.platformStatus(true));
   handle('platforms.login', async () => opts.auth.requestLogin());
   handle('platforms.syncNow', async () => {
-    const result = await ctx.syncAll();
+    const result = await ctx.syncAll(new Date(), { force: true });
     await ctx.engine.tick();
     if (result.errors.length) throw new Error(`请检查登录状态、邮箱配置和网络后重新同步。${result.errors.join('；')}`);
   });
+
+  // 课表、考试、校园卡、图书馆：错误改写成以「请」开头的说明，渲染进程原样显示
+  const campusCall = <T>(run: () => Promise<T>) => run().catch((e: Error) => {
+    if (e.name === 'NeedLoginError') throw new Error('请先在上方重新登录复旦账号（登录已过期或还没登录）。');
+    throw new Error(e.message.startsWith('请') ? e.message : `请稍后重试：${e.message}`);
+  });
+  handle<[], unknown>('campus.status', async () => ({
+    timetable: repo.getKv('timetable_meta', null), exams: repo.getKv('exam_meta', null), problems: repo.getKv('campus_problems', {}),
+  }));
+  handle<[], unknown>('campus.importTimetable', () => campusCall(async () => { const r = await ctx.importTimetable(); opts.onChanged?.('goals'); return r; }));
+  handle<[], unknown>('campus.importExams', () => campusCall(async () => { const r = await ctx.importExams(); await ctx.engine.tick(); opts.onChanged?.('feed'); return r; }));
+  handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
+  handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
+
+  handle<[], unknown>('notices.sources', async () => {
+    const enabled = new Set(enabledNoticeSources(repo).map((s) => s.id));
+    const errors = repo.getKv<string[]>('notice_errors', []);
+    return NOTICE_SOURCES.map((s) => ({ ...s, enabled: enabled.has(s.id), error: errors.find((e) => e.startsWith(`${s.name}：`))?.slice(s.name.length + 1) }));
+  });
+  handle<[string?], unknown>('notices.list', async (query) => repo.listNotices({ query, limit: 50 }));
 
   handle<[number?], unknown>('activities.list', async (days) => {
     const now = Date.now();
@@ -222,7 +244,7 @@ export function registerIpc(ctx: AppContext, opts: {
     }
   });
   handle<[], unknown>('activities.syncFeeds', async () => {
-    const r = await ctx.syncAll();
+    const r = await ctx.syncAll(new Date(), { force: true });
     await ctx.engine.tick();
     opts.onChanged?.('feed');
     return r.activities ?? { entries: 0, activities: 0, errors: r.errors.filter((e) => e.startsWith('活动订阅')) };

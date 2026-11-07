@@ -119,6 +119,37 @@ const BASE: Record<Trigger['kind'], Rule> = {
     if (interest) return { value: 0.5, urgency: 0.25, action: 'card', draft, reason: `匹配你的兴趣：${interest.content}` };
     return { value: 0.15, urgency: 0.1, action: 'record', draft, reason: '校园活动，与你的目标和兴趣关系不大' };
   },
+  // 学校和院系官网通知：和目标、兴趣相关的推荐；本人院系、教务处里涉及选课考试报名截止的放进动态；其余只记录
+  notice_new: (t, ctx) => {
+    const text = ['title', 'excerpt', 'sourceName'].map((k) => p(t, k)).join(' ');
+    const draft = `${p(t, 'sourceName')}：${p(t, 'title')}`;
+    const hit = (type: string) => ctx.memories.find((m) => m.type === type && memoryMatches(m.content, text));
+    const goal = hit('goal');
+    if (goal) {
+      return {
+        value: 0.6, urgency: 0.4, action: 'suggest_ticket', draft: `看到${p(t, 'sourceName')}的通知「${p(t, 'title')}」，和你「${goal.content}」有关。要我帮你整理一下要求和截止时间吗？`,
+        reason: `匹配你的目标：${goal.content}`, ticket: { title: `整理：${p(t, 'title')}`, request: `根据${p(t, 'sourceName')}的通知「${p(t, 'title')}」整理申请要求、截止时间和材料清单` },
+      };
+    }
+    const interest = hit('interest');
+    if (interest) return { value: 0.5, urgency: 0.25, action: 'card', draft, reason: `匹配你的兴趣：${interest.content}` };
+    const important = /选课|退课|补选|考试|报名|截止|申请|奖学金|交换|推免|毕业|学籍|缴费|放假|调课|评教|注册/.test(p(t, 'title'));
+    if (t.payload.own && important) return { value: 0.5, urgency: 0.35, action: 'card', draft, reason: '你所在院系的通知，涉及报名或截止' };
+    if (t.payload.own) return { value: 0.35, urgency: 0.2, action: 'digest', draft, reason: '你所在院系的新通知' };
+    if (t.payload.department && important) return { value: 0.45, urgency: 0.3, action: 'card', draft, reason: `${p(t, 'sourceName')}的通知，涉及报名或截止` };
+    return { value: 0.15, urgency: 0.1, action: 'record', draft, reason: '学校通知，与你关系不大' };
+  },
+  exam_soon: (t) => {
+    const where = [p(t, 'timeText'), p(t, 'location')].filter(Boolean).join('，');
+    if (t.payload.stage === '1d') {
+      return { value: 0.9, urgency: 0.9, action: 'chat_notify', draft: `明天有「${p(t, 'course')}」考试（${where}）。记得带学生证，早点休息。`, reason: '考试就在明天' };
+    }
+    return {
+      value: 0.75, urgency: 0.5, action: 'suggest_ticket', draft: `「${p(t, 'course')}」考试还有 ${p(t, 'daysLeft')} 天（${where}）。要我按剩下的时间和你的课表排一份复习计划吗？`,
+      reason: '一周内有考试', ticket: { title: `复习计划：${p(t, 'course')}`, request: `根据「${p(t, 'course')}」的考试时间（${where}）、我的课表和空闲时段，排一份到考试前的复习计划` },
+    };
+  },
+  card_low: (t) => ({ value: 0.5, urgency: 0.3, action: 'card', draft: `校园卡余额只剩 ¥${Number(t.payload.balance).toFixed(2)}，记得充值，别在食堂门口卡住。`, reason: '校园卡余额低于 30 元' }),
   auth_expired: () => ({ value: 0.8, urgency: 0.6, action: 'chat_notify', draft: '复旦账号的登录过期了，eLearning 暂时同步不了。点下面的按钮重新登录一下就好。', reason: 'UIS 登录过期，无法同步' }),
 };
 

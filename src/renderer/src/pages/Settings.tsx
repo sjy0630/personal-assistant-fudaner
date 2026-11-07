@@ -13,7 +13,7 @@ type Tab = 'model' | 'accounts' | 'activities' | 'me' | 'assistant' | 'decisions
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ['model', '模型'],
   ['accounts', '复旦账号'],
-  ['activities', '活动订阅'],
+  ['activities', '通知与活动'],
   ['me', '关于我'],
   ['assistant', '助理'],
   ['decisions', '主动决策'],

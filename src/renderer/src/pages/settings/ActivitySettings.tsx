@@ -4,9 +4,14 @@ import { api } from '../../api';
 import { Feedback, Loading, same, useLoad, useTask, type PanelProps } from './support';
 import styles from './Settings.module.css';
 
-/** 校园活动：导入公众号文章链接、管理 RSS 订阅源、查看接下来的活动 */
+type SourceRow = Awaited<ReturnType<typeof api.notices.sources>>[number];
+
+/** 通知与活动：学校和院系官网通知来源、导入公众号文章、RSS 订阅源、接下来的活动 */
 export function ActivitySettings({ onDirty, onBusy }: PanelProps) {
-  const loaded = useLoad(async () => ({ settings: await api.settings.get(), upcoming: await api.activities.list(14) }));
+  const loaded = useLoad(async () => ({ settings: await api.settings.get(), upcoming: await api.activities.list(14), sources: await api.notices.sources() }));
+  const [sources, setSources] = useState<SourceRow[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [savedPicked, setSavedPicked] = useState<string[]>([]);
   const [saved, setSaved] = useState<Settings | null>(null);
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [draft, setDraft] = useState({ url: '', name: '' });
@@ -18,9 +23,13 @@ export function ActivitySettings({ onDirty, onBusy }: PanelProps) {
       setSaved(loaded.value.settings);
       setFeeds(loaded.value.settings.feeds ?? []);
       setUpcoming(loaded.value.upcoming);
+      setSources(loaded.value.sources);
+      const on = loaded.value.sources.filter((s) => s.enabled).map((s) => s.id);
+      setPicked(on);
+      setSavedPicked(on);
     }
   }, [loaded.value]);
-  useEffect(() => onDirty(saved !== null && (!same(feeds, saved.feeds ?? []) || !!draft.url)), [feeds, saved, draft.url, onDirty]);
+  useEffect(() => onDirty(saved !== null && (!same(feeds, saved.feeds ?? []) || !!draft.url || !same([...picked].sort(), [...savedPicked].sort()))), [feeds, saved, draft.url, picked, savedPicked, onDirty]);
   if (!saved) return <Loading error={loaded.error} retry={loaded.retry} />;
   const reload = async () => setUpcoming(await api.activities.list(14));
 
@@ -31,8 +40,48 @@ export function ActivitySettings({ onDirty, onBusy }: PanelProps) {
     setDraft({ url: '', name: '' });
   };
 
+  const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
   return (
     <fieldset className={styles.form} disabled={!!task.busy}>
+      <section className={styles.section}>
+        <h2>学校和院系官网通知</h2>
+        <p className={styles.hint}>
+          勾选要关注的官网「通知公告」栏目，旦旦每 2 小时看一次。和你的目标、兴趣、院系相关的通知会放进「动态」，讲座和宣讲会会整理成活动。部分网站只允许校园网访问，校外请先连学校 VPN。
+        </p>
+        {(['学校部门', '院系'] as const).map((group) => (
+          <div key={group}>
+            <p className={styles.hint}><strong>{group}</strong></p>
+            <div className={styles.checks}>
+              {sources.filter((s) => s.group === group).map((s) => (
+                <label key={s.id} className={styles.check} title={s.error ? `上次读取失败：${s.error}` : s.url}>
+                  <input type="checkbox" checked={picked.includes(s.id)} onChange={() => toggle(s.id)} />
+                  {s.name}{s.enabled && s.error ? ' ⚠️' : ''}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+        {sources.some((s) => s.enabled && s.error) && (
+          <p className={styles.hint}>⚠️ 上次没读到：{sources.filter((s) => s.enabled && s.error).map((s) => `${s.name}（${s.error}）`).join('；')}</p>
+        )}
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className="primary"
+            disabled={same([...picked].sort(), [...savedPicked].sort())}
+            onClick={() => void task.run('notices', async () => {
+              await api.settings.set({ noticeSources: picked });
+              setSavedPicked(picked);
+              await api.activities.syncFeeds();
+              setSources(await api.notices.sources());
+              await reload();
+            }, '已保存，并读取了一次最新通知。')}
+          >
+            {task.busy === 'notices' ? '正在读取…' : '保存并读取'}
+          </button>
+        </div>
+      </section>
+
       <section className={styles.section}>
         <h2>导入文章</h2>
         <p className={styles.hint}>

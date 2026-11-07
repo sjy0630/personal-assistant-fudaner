@@ -1,5 +1,6 @@
 import type { FeedSource } from '../../shared/types';
 import type { FetchText } from '../activities/sync';
+import type { NoticeSource } from '../notices/sources';
 
 /**
  * 演示模式的校园活动：虚构的公众号文章和订阅源，内容和机构均为虚构，不对应真实活动。
@@ -73,11 +74,42 @@ ${item({
 </channel></rss>`;
 }
 
+/** 演示用的学校和院系官网通知（虚构） */
+export const demoNoticeSources: NoticeSource[] = [
+  { id: 'demo-jwc', name: '教务处（演示）', url: 'https://fudaner-demo.example/jwc/list.htm', group: '学校部门' },
+  { id: 'demo-school', name: '计算与智能创新学院（演示）', url: 'https://fudaner-demo.example/school/list.htm', group: '院系' },
+];
+
+function noticePages(now = new Date()): Record<string, string> {
+  const date = (offset: number) => new Date(now.getTime() + 8 * 3_600_000 - offset * 86_400_000).toISOString().slice(0, 10);
+  const list = (base: string, rows: [string, string, number][]) => `<html><body><div class="col_news_list"><ul class="news_list">${rows
+    .map(([id, title, d]) => `<li class="news"><span class="news_title"><a href="${base}/${id}.htm" title="${title}">${title}</a></span><span class="news_meta">${date(d)}</span></li>`).join('')}</ul></div></body></html>`;
+  const detail = (title: string, body: string[]) => `<html><body><h1 class="arti_title">${title}</h1><p class="arti_metas">发布时间：${date(0)}</p><div class="wp_articlecontent">${body.map((p) => `<p>${p}</p>`).join('')}</div></body></html>`;
+  const lecture = day(6, now);
+  return {
+    'https://fudaner-demo.example/jwc/list.htm': list('https://fudaner-demo.example/jwc', [
+      ['exam', '关于本学期本科课程期末考试安排的通知（演示）', 0],
+      ['library', '图书馆部分区域设备维护的通知（演示）', 1],
+    ]),
+    'https://fudaner-demo.example/jwc/exam.htm': detail('关于本学期本科课程期末考试安排的通知（演示）', ['各位同学：本学期期末考试安排已发布，请于第 16 周前登录教务系统查看本人考试时间和地点，如有冲突请在规定时间内申请调整。']),
+    'https://fudaner-demo.example/jwc/library.htm': detail('图书馆部分区域设备维护的通知（演示）', ['因设备维护，部分阅览区域本周末暂停开放，给大家带来不便敬请谅解。']),
+    'https://fudaner-demo.example/school/list.htm': list('https://fudaner-demo.example/school', [
+      ['talk', '学术讲座：多模态大模型的前沿进展（演示）', 0],
+      ['award', '关于开展本年度学院奖学金评选的通知（演示）', 2],
+    ]),
+    'https://fudaner-demo.example/school/talk.htm': detail('学术讲座：多模态大模型的前沿进展（演示）', [
+      '本次讲座介绍多模态大模型在视觉理解与生成方面的最新进展（主讲人为虚构人物）。',
+      `时间：${lecture.md}（${lecture.wd}）15:00-17:00`, '地点：江湾校区交叉学科楼 2001', '主讲人：周明远（虚构）', '欢迎对 AI 感兴趣的同学参加。',
+    ]),
+    'https://fudaner-demo.example/school/award.htm': detail('关于开展本年度学院奖学金评选的通知（演示）', ['请符合条件的同学于下周五前提交申请材料。']),
+  };
+}
+
 /** 演示模式下的「网络」：只返回虚构页面 */
 export const demoFetchText: FetchText = async (url) => {
   const now = new Date();
   if (url === FEED_URL) return { url, status: 200, text: feedXml(now) };
-  const page = pages(now)[url];
+  const page = pages(now)[url] ?? noticePages(now)[url];
   if (page) return { url, status: 200, text: page };
   throw new Error('演示模式下只能导入演示文章。关掉演示模式后，可以导入真实的公众号文章链接。');
 };

@@ -17,7 +17,11 @@ import { McpHub } from './mcp/hub';
 import { syncElearning } from './sources/elearning-sync';
 import { syncMail } from './sources/mail-sync';
 import { importArticle, syncFeeds, type FetchText } from './activities/sync';
-import { demoFeeds, demoFetchText } from './demo/demo-activities';
+import { demoFeeds, demoFetchText, demoNoticeSources } from './demo/demo-activities';
+import { enabledNoticeSources, syncNotices } from './notices/sync';
+import { importExams, importTimetable, type CampusReader } from './sources/timetable-sync';
+import { readCardBalance, readLibrary, type LibraryStatus } from './sources/campus-life';
+import { demoCardBalance, demoExams, demoLibrary } from './demo/demo-campus';
 
 /**
  * 应用的组装根（参考 dsh-superagent 的 Runtime）：创建并连接所有部件，不包含业务规则。
@@ -32,6 +36,10 @@ export interface AppDeps {
   platformStatus?: (probe: boolean) => Promise<PlatformState[]>;
   /** 读取网页（活动文章、订阅源）。不提供时无法导入文章和同步订阅源 */
   fetchText?: FetchText;
+  /** 用统一身份认证会话读教务系统、校园卡（只读） */
+  campusReader?: () => CampusReader | null;
+  /** 公开接口的 POST 请求（图书馆人数） */
+  postPublic?: (url: string) => Promise<{ status: number; text: string }>;
 }
 
 export class AppContext {
@@ -90,7 +98,9 @@ export class AppContext {
     await this.hub.connect('fudan-elearning', createElearningServer(elearningData));
     await this.hub.connect('fudan-mail', createMailServer(mailData));
     await this.hub.connect('fudan-courses', createCoursesServer(courses));
-    await this.hub.connect('fudaner-local', createLocalServer(repo, this.deps.channels, 'chat', { importArticle: (url) => this.importArticle(url) }));
+    await this.hub.connect('fudaner-local', createLocalServer(repo, this.deps.channels, 'chat', {
+      importArticle: (url) => this.importArticle(url), library: () => this.library(), cardBalance: () => this.cardBalance(),
+    }));
 
     await this.executorHub.connect('fudan-elearning', createElearningServer(elearningData));
     await this.executorHub.connect('fudan-mail', createMailServer(mailData));
@@ -117,12 +127,74 @@ export class AppContext {
     return result;
   }
 
+  private reader(): CampusReader {
+    const reader = this.deps.campusReader?.();
+    if (!reader) throw new Error('请先在「设置 → 复旦账号」登录复旦账号。');
+    return reader;
+  }
+
+  /** 导入真实课表（演示模式下课表是内置的） */
+  async importTimetable() {
+    if (this.repo.getSettings().demoMode) {
+      applyDemoCourseExtras(this.repo, new Date());
+      return { kind: 'undergraduate' as const, semester: '演示学期', courses: this.repo.listCourses().length, entries: 0 };
+    }
+    return importTimetable(this.repo, this.reader());
+  }
+
+  /** 导入考试安排 */
+  async importExams() {
+    if (this.repo.getSettings().demoMode) return demoExams(this.repo, new Date());
+    return importExams(this.repo, this.reader());
+  }
+
+  async library(): Promise<LibraryStatus[]> {
+    if (this.repo.getSettings().demoMode) return demoLibrary();
+    if (!this.deps.postPublic) throw new Error('当前环境不能访问网络。');
+    return readLibrary(this.deps.postPublic);
+  }
+
+  /** 校园卡余额（10 分钟内重复查询用缓存） */
+  async cardBalance(): Promise<{ balance: number; at: string }> {
+    const cached = this.repo.getKv<{ balance: number; at: string } | null>('card_balance', null);
+    if (cached && Date.now() - Date.parse(cached.at) < 10 * 60_000) return cached;
+    const balance = this.repo.getSettings().demoMode ? demoCardBalance() : await readCardBalance(this.reader());
+    const value = { balance, at: new Date().toISOString() };
+    this.repo.setKv('card_balance', value);
+    return value;
+  }
+
+  /**
+   * 每天一次：更新课表、考试安排，查一次校园卡余额（低于 30 元提醒）。
+   * 没登录或学校系统读不到时不打扰，只在设置页显示原因。
+   */
+  private async dailyCampus(now: Date, force: boolean): Promise<void> {
+    const last = this.repo.getKv<string | null>('campus_last_sync', null);
+    if (!force && last && now.getTime() - Date.parse(last) < 20 * 3_600_000) return;
+    const demo = this.repo.getSettings().demoMode;
+    if (!demo && !this.deps.campusReader?.()) return;
+    this.repo.setKv('campus_last_sync', now.toISOString());
+    const problems: Record<string, string> = {};
+    const attempt = async (key: string, run: () => Promise<unknown>) => {
+      try { await run(); } catch (e) { problems[key] = (e as Error).name === 'NeedLoginError' ? '需要重新登录复旦账号' : (e as Error).message; }
+    };
+    if (!demo) await attempt('timetable', () => this.importTimetable());
+    await attempt('exams', () => this.importExams());
+    await attempt('card', async () => {
+      const { balance } = await this.cardBalance();
+      if (balance < 30) {
+        this.repo.addTrigger({ source: 'clock', kind: 'card_low', sourceRef: localDate(now), threadKey: 'campus-card', payload: { balance, title: `校园卡余额 ¥${balance.toFixed(2)}` } });
+      }
+    });
+    this.repo.setKv('campus_problems', problems);
+  }
+
   /** 同步所有已连接的平台，然后做闭环验证 */
-  async syncAll(now = new Date()): Promise<{ elearning?: unknown; mail?: unknown; activities?: unknown; errors: string[] }> {
+  async syncAll(now = new Date(), opts: { force?: boolean } = {}): Promise<{ elearning?: unknown; mail?: unknown; activities?: unknown; notices?: unknown; errors: string[] }> {
     if (this.syncing) return { errors: ['正在同步'] };
     this.syncing = true;
     const errors: string[] = [];
-    const out: { elearning?: unknown; mail?: unknown; activities?: unknown; errors: string[] } = { errors };
+    const out: { elearning?: unknown; mail?: unknown; activities?: unknown; notices?: unknown; errors: string[] } = { errors };
     try {
       try {
         const el = this.deps.elearning();
@@ -147,6 +219,27 @@ export class AppContext {
         }
       } catch (error) {
         errors.push(`活动订阅：${(error as Error).message}`);
+      }
+      try {
+        // 学校和院系官网通知：每 2 小时读一次（手动同步时总是读）
+        const fetchText = this.fetchText();
+        const demo = this.repo.getSettings().demoMode;
+        const last = this.repo.getKv<string | null>('notice_last_sync', null);
+        const due = opts.force || !last || now.getTime() - Date.parse(last) > 2 * 3_600_000;
+        const sources = demo ? demoNoticeSources : enabledNoticeSources(this.repo);
+        if (fetchText && due && sources.length) {
+          const r = await syncNotices({ repo: this.repo, router: this.router, fetchText, pause: demo ? async () => {} : undefined }, sources, now);
+          out.notices = r;
+          this.repo.setKv('notice_last_sync', now.toISOString());
+          this.repo.setKv('notice_errors', r.errors);
+        }
+      } catch (error) {
+        errors.push(`学校通知：${(error as Error).message}`);
+      }
+      try {
+        await this.dailyCampus(now, !!opts.force);
+      } catch (error) {
+        errors.push(`课表与校园卡：${(error as Error).message}`);
       }
       try {
         const mail = this.deps.mail();

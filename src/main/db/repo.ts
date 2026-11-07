@@ -94,7 +94,7 @@ export class Repo {
         `INSERT INTO items (id, source, kind, source_id, title, body, url, published_at, due_at, course_id, done, sender, raw)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, i.source, i.kind, i.sourceId, i.title, i.body, i.url, i.publishedAt, i.dueAt, i.courseId, i.done ? 1 : 0, i.sender,
-        i.activity ? JSON.stringify({ activity: i.activity }) : null,
+        i.activity ? JSON.stringify({ activity: i.activity }) : i.notice ? JSON.stringify({ notice: i.notice }) : null,
       );
       this.indexForSearch('item', id, i.title, i.body);
       return { item: this.getItem(id)!, created: true, changedFields: [] };
@@ -175,6 +175,16 @@ export class Repo {
         .some((s) => s?.toLowerCase().includes(q)))
       .sort((a, b) => at(a).localeCompare(at(b)))
       .slice(0, filter.limit ?? 50);
+  }
+
+  /** 学校和院系官网通知，按发布时间倒序 */
+  listNotices(filter: { query?: string; since?: string; source?: string; limit?: number } = {}): Item[] {
+    const q = filter.query?.trim().toLowerCase();
+    const words = q ? q.split(/\s+/).filter(Boolean) : [];
+    return this.db.all<Row>("SELECT * FROM items WHERE kind = 'notice' AND (? IS NULL OR published_at >= ?) ORDER BY published_at DESC LIMIT 2000", filter.since ?? null, filter.since ?? null).map(mapItem)
+      .filter((i) => !filter.source || i.notice?.source === filter.source || i.notice?.sourceName === filter.source)
+      .filter((i) => words.every((w) => `${i.title} ${i.notice?.sourceName ?? ''} ${i.body}`.toLowerCase().includes(w)))
+      .slice(0, filter.limit ?? 30);
   }
 
   /** 把活动加入计划：放进「校园活动」目标，任务时间为活动开始时间 */
@@ -761,6 +771,7 @@ function mapItem(r: Row): Item {
     publishedAt: r.published_at, dueAt: opt(r.due_at), courseId: opt(r.course_id), done: !!r.done, sender: opt(r.sender),
     aiCategory: opt(r.ai_category), aiSummary: opt(r.ai_summary), aiAction: opt(r.ai_action), aiModelUsed: opt(r.ai_model_used),
     ...(r.kind === 'activity' ? { activity: fromJson<{ activity?: Item['activity'] }>(r.raw, {}).activity ?? {} } : {}),
+    ...(r.kind === 'notice' && r.raw ? { notice: fromJson<{ notice?: Item['notice'] }>(r.raw, {}).notice } : {}),
   };
 }
 function mapMessage(r: Row): ChatMessage {
