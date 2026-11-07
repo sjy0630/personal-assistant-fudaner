@@ -40,6 +40,16 @@ function modelConfig(): { kind: Kind; client: LlmClient } | null {
   return { kind, client: new OpenAiCompatClient({ baseURL, model, apiKey: apiKey ?? '' }, kind) };
 }
 
+/** EVAL_KIND=cloud 时可再用 EVAL_LOCAL_BASE_URL / EVAL_LOCAL_MODEL 同时评估本机模型，一次输出完整三行表。 */
+function modelConfigs(): { kind: Kind; client: LlmClient }[] {
+  const primary = modelConfig();
+  const baseURL = process.env.EVAL_LOCAL_BASE_URL, model = process.env.EVAL_LOCAL_MODEL;
+  if (primary?.kind !== 'cloud' || !baseURL || !model) return primary ? [primary] : [];
+  const url = new URL(baseURL);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.username || url.password) throw new Error('EVAL_LOCAL_BASE_URL 仅允许无凭据的本机回环地址');
+  return [primary, { kind: 'local', client: new OpenAiCompatClient({ baseURL, model, apiKey: '' }, 'local') }];
+}
+
 function timedClient(client: LlmClient, calls: CallTiming[]): LlmClient {
   return {
     label: client.label,
@@ -119,11 +129,13 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
   expect(metadata.timeZone).toBe('Asia/Shanghai');
   const now = new Date(metadata.referenceNow);
   expect(Number.isFinite(now.getTime())).toBe(true);
-  const configured = modelConfig();
+  const configs = modelConfigs();
+  const configured = configs.length > 0;
   const rules = await evaluate(samples, now, 'rules', null);
-  const model = configured ? await evaluate(samples, now, configured.kind, configured.client) : null;
-  const runs = [rules, ...(model ? [model] : [])];
-  const table = [rules, ...(['cloud', 'local'] as const).map((kind) => model?.kind === kind ? model : null)].map((run, index) => ({
+  const models: Awaited<ReturnType<typeof evaluate>>[] = [];
+  for (const config of configs) models.push(await evaluate(samples, now, config.kind, config.client));
+  const runs = [rules, ...models];
+  const table = [rules, ...(['cloud', 'local'] as const).map((kind) => models.find((run) => run.kind === kind) ?? null)].map((run, index) => ({
     '模式': run?.requestedModel ?? (index === 1 ? '云端模型：未运行' : '本地模型：未运行'),
     '实际来源': run ? `${run.actualModel}; model=${run.metrics.sourceCounts.model ?? 0}, rules=${run.metrics.sourceCounts.rules ?? 0}` : '未选择该模式',
     '分类': run ? format(run.metrics.category) : '—',
@@ -149,7 +161,7 @@ it('评测虚构邮件并输出规则/模型来源、分项指标和错例', asy
       targets: { category: 0.85, deadline: 0.9, association: 0.8, formalValidation: false },
     },
     machine: { cpu: cpus()[0]?.model ?? 'unknown', memoryGiB: round(totalmem() / 1024 ** 3), node: process.version, platform: process.platform, gpu: 'Not auto-detected; verify separately before reporting GPU inference.' },
-    skipped: (['cloud', 'local'] as const).filter((kind) => model?.kind !== kind).map((kind) => ({ kind, reason: 'not explicitly configured for this invocation' })),
+    skipped: (['cloud', 'local'] as const).filter((kind) => !models.some((run) => run.kind === kind)).map((kind) => ({ kind, reason: 'not explicitly configured for this invocation' })),
     runs,
   };
   await writeFile(resultUrl, `${JSON.stringify(result, null, 2)}\n`, 'utf8');

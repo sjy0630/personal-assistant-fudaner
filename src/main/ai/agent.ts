@@ -50,6 +50,10 @@ export async function runAgentLoop(opts: {
   normalizeToolArgs?: (name: string, args: Record<string, unknown>) => Record<string, unknown>;
   toolContext?: (text: string) => string;
   initialReads?: { name: string; args: Record<string, unknown> }[];
+  /** 最多模型轮数，默认 MAX_STEPS。 */
+  maxSteps?: number;
+  /** 只剩最后两轮时追加一次的收尾提示（例如后台工单要求立即保存成果）。 */
+  finishNotice?: string;
   signal?: AbortSignal;
 }): Promise<LoopResult> {
   const { llm, hub, tools, messages } = opts;
@@ -57,8 +61,14 @@ export async function runAgentLoop(opts: {
   const cards: CardRef[] = [];
   let streamedContent = '';
   const readResults = new Map<string, Awaited<ReturnType<McpHub['call']>>>();
-  for (let step = opts.initialReads?.length ? -1 : 0; step < MAX_STEPS; step++) {
+  const maxSteps = opts.maxSteps ?? MAX_STEPS;
+  let noticed = false;
+  for (let step = opts.initialReads?.length ? -1 : 0; step < maxSteps; step++) {
     opts.signal?.throwIfAborted();
+    if (opts.finishNotice && !noticed && step >= maxSteps - 2) {
+      noticed = true;
+      messages.push({ role: 'system', content: opts.finishNotice });
+    }
     let round = '';
     const emit = (text: string) => {
       if (!text) return;

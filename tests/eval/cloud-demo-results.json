@@ -1,0 +1,545 @@
+{
+  "generatedAt": "2026-11-07T11:02:50.814Z",
+  "model": "cloud:deepseek-chat",
+  "demoNow": "2026-11-08T02:00:00.000Z",
+  "allowSensitiveToCloud": false,
+  "localModel": false,
+  "passed": 9,
+  "total": 9,
+  "shots": [
+    {
+      "id": "镜头3-早安",
+      "passed": true,
+      "elapsedMs": 2436,
+      "checks": {
+        "synced": true,
+        "morningMessage": true
+      },
+      "tools": [],
+      "posted": [
+        {
+          "content": "早上好呀 ☀️ 今天第 10 周，节奏还行，先给你划下重点：8:00 数学分析 III 在 H3109，下午 13:30 数据结构在 H2215，中间 9:40 到 13:30 是空的，可以安排点自己的事。最要紧的是 Lab 5（链表与栈）今天 15:59 截止，别拖到最后一刻；另外大学物理习题 8 和学术英语的 Reading Response 4 都是 11 月 10 日截止，这两天得排上。邮件里王老师那边在说下周组会时间调整，小李也来问 Lab 5 分工，顺手回一下呗。",
+          "cards": [
+            "item:Lab 5：链表与栈",
+            "item:大学物理 习题 8",
+            "item:Reading Response 4",
+            "item:关于下周组会时间调整",
+            "item:Lab 5 我们分工一下？"
+          ],
+          "actions": []
+        },
+        {
+          "content": "小李 来信「Lab 5 我们分工一下？」，需要你回复。",
+          "cards": [
+            "item:Lab 5 我们分工一下？"
+          ],
+          "actions": []
+        },
+        {
+          "content": "「Lab 5：链表与栈」还剩约 14 小时截止，还没交。",
+          "cards": [
+            "item:Lab 5：链表与栈"
+          ],
+          "actions": []
+        }
+      ],
+      "note": "录制时刻 2026-11-08T02:00:00.000Z；早安消息只在 07:30–14:00 发送"
+    },
+    {
+      "id": "镜头3-就差报告",
+      "passed": true,
+      "elapsedMs": 1570,
+      "checks": {
+        "answered": true,
+        "groundedFreeSlot": true
+      },
+      "tools": [],
+      "posted": [
+        {
+          "content": "昨晚写了一半，就差报告了",
+          "cards": [],
+          "actions": []
+        },
+        {
+          "content": "好，那就差报告了。今天下午 15:10 数据结构下课之后，15:10–17:00 这段正好把报告收尾，写完还能留出时间检查提交，不用赶 23:59 的尾巴。\n\n要不要我今晚 20:00 跟进一下报告进度？",
+          "cards": [],
+          "actions": []
+        }
+      ],
+      "reply": "好，那就差报告了。今天下午 15:10 数据结构下课之后，15:10–17:00 这段正好把报告收尾，写完还能留出时间检查提交，不用赶 23:59 的尾巴。\n\n要不要我今晚 20:00 跟进一下报告进度？",
+      "note": "未调用工具，依据系统提示中的今日安排回答"
+    },
+    {
+      "id": "镜头3-4点提醒",
+      "passed": true,
+      "elapsedMs": 2488,
+      "checks": {
+        "answered": true,
+        "scheduled": true,
+        "at1600": true
+      },
+      "tools": [
+        {
+          "name": "fudaner_local__schedule_followup",
+          "ok": true,
+          "args": {
+            "topic": "Lab 5 报告写完了吗（今天 23:59 截止）",
+            "at": "2026-11-08T16:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"4ca45a4a-1c1d-4ad6-b3dd-021b9b368490\",\n  \"topic\": \"Lab 5 报告写完了吗（今天 23:59 截止）\",\n  \"dueAt\": \"2026-11-08T16:00:00+08:00\",\n  \"status\": \"pending\"\n}"
+        }
+      ],
+      "posted": [
+        {
+          "content": "好，4 点提醒我",
+          "cards": [],
+          "actions": []
+        },
+        {
+          "content": "搞定，今天 16:00 会来问你 Lab 5 报告的进度 👌 到时候别装没看见哈。",
+          "cards": [],
+          "actions": []
+        }
+      ],
+      "reply": "搞定，今天 16:00 会来问你 Lab 5 报告的进度 👌 到时候别装没看见哈。",
+      "note": "待跟进时间（上海）：16:00"
+    },
+    {
+      "id": "镜头4-补充邮件",
+      "passed": true,
+      "elapsedMs": 20,
+      "checks": {
+        "lab5Message": true
+      },
+      "tools": [],
+      "posted": [
+        {
+          "content": "关于「Lab 5：链表与栈」：各位同学：Lab 5 除了源码外，还需要提交一份 PDF 实验报告（含测试截图）",
+          "cards": [
+            "item:关于 Lab 5 提交要求的补充说明",
+            "item:Lab 5：链表与栈"
+          ],
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "镜头4-交换目标",
+      "passed": true,
+      "elapsedMs": 9775,
+      "checks": {
+        "exchangeCard": true,
+        "answered": true,
+        "createdGoal": true,
+        "addedTasks": true,
+        "avoidsTuesdayEvening": true,
+        "avoidsAfter23": true,
+        "tasksUnderGoal": true
+      },
+      "tools": [
+        {
+          "name": "fudaner_local__list_goals",
+          "ok": true,
+          "args": {
+            "level": "long_term"
+          },
+          "result": "[]"
+        },
+        {
+          "name": "fudan_mail__search_mail",
+          "ok": true,
+          "args": {
+            "query": "新加坡国立大学 交换"
+          },
+          "result": "[\n  {\n    \"id\": \"401e24be-54b2-41eb-8654-72e56caf35a8\",\n    \"from\": \"国际合作与交流处 <fao@fudan.edu.cn>\",\n    \"subject\": \"2027 春季学期赴新加坡国立大学交换项目报名通知\",\n    \"date\": \"2026-11-06T22:00:00.000Z\",\n    \"category\": \"notice\",\n    \"summary\": \"面向 2024、2025 级本科生，报名截止 11 月 15 日，需提交成绩单、\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__create_goal",
+          "ok": true,
+          "args": {
+            "title": "申请 2027 春季赴新加坡国立大学交换项目",
+            "level": "long_term",
+            "due_at": "2026-11-15T23:59:00+08:00",
+            "description": "报名截止 2026-11-15，面向 2024、2025 级本科生，需提交成绩单等材料"
+          },
+          "result": "{\n  \"id\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"level\": \"long_term\",\n  \"title\": \"申请 2027 春季赴新加坡国立大学交换项目\",\n  \"description\": \"报名截止 2026-11-15，面向 2024、2025 级本科生，需提交成绩单等材料\",\n  \"dueAt\": \"2026-11-15T15:59:00.000Z\",\n  \"status\": \"active\",\n  \"createdBy\": \"assistant\",\n  \"createdAt\": \"2026-11-08T02:00:07.260Z\"\n}"
+        },
+        {
+          "name": "fudaner_local__add_task",
+          "ok": true,
+          "args": {
+            "goal_id": "28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f",
+            "title": "读通知原文，确认申请条件、名额和材料清单",
+            "due_at": "2026-11-09T22:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"6cf97c59-904e-446d-8f3e-326321222650\",\n  \"goalId\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"title\": \"读通知原文，确认申请条件、名额和材料清单\",\n  \"dueAt\": \"2026-11-09T14:00:00.000Z\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"申请 2027 春季赴新加坡国立大学交换项目\"\n}"
+        },
+        {
+          "name": "fudaner_local__add_task",
+          "ok": true,
+          "args": {
+            "goal_id": "28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f",
+            "title": "开具中英文成绩单",
+            "due_at": "2026-11-11T22:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"d69918c2-f639-4f47-9335-150720f04ad7\",\n  \"goalId\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"title\": \"开具中英文成绩单\",\n  \"dueAt\": \"2026-11-11T14:00:00.000Z\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"申请 2027 春季赴新加坡国立大学交换项目\"\n}"
+        },
+        {
+          "name": "fudaner_local__add_task",
+          "ok": true,
+          "args": {
+            "goal_id": "28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f",
+            "title": "准备语言成绩证明（确认是否需要雅思/托福）",
+            "due_at": "2026-11-12T22:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"0bdf626d-fcfa-42e6-8d14-cb42a1326b11\",\n  \"goalId\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"title\": \"准备语言成绩证明（确认是否需要雅思/托福）\",\n  \"dueAt\": \"2026-11-12T14:00:00.000Z\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"申请 2027 春季赴新加坡国立大学交换项目\"\n}"
+        },
+        {
+          "name": "fudaner_local__add_task",
+          "ok": true,
+          "args": {
+            "goal_id": "28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f",
+            "title": "写个人陈述，说明选 NUS 和 AI 方向的学习计划",
+            "due_at": "2026-11-13T22:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"395fbe17-72a7-4109-8a42-79c52fd5e063\",\n  \"goalId\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"title\": \"写个人陈述，说明选 NUS 和 AI 方向的学习计划\",\n  \"dueAt\": \"2026-11-13T14:00:00.000Z\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"申请 2027 春季赴新加坡国立大学交换项目\"\n}"
+        },
+        {
+          "name": "fudaner_local__add_task",
+          "ok": true,
+          "args": {
+            "goal_id": "28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f",
+            "title": "汇总材料并提交报名（截止 11-15）",
+            "due_at": "2026-11-15T20:00:00+08:00"
+          },
+          "result": "{\n  \"id\": \"084466ea-0e7f-42f9-b78f-731f5322c527\",\n  \"goalId\": \"28b6f2a5-c2ee-43fd-90b0-24c6c1d5b42f\",\n  \"title\": \"汇总材料并提交报名（截止 11-15）\",\n  \"dueAt\": \"2026-11-15T12:00:00.000Z\",\n  \"status\": \"todo\",\n  \"source\": \"assistant\",\n  \"localDone\": false,\n  \"goalTitle\": \"申请 2027 春季赴新加坡国立大学交换项目\"\n}"
+        }
+      ],
+      "posted": [
+        {
+          "content": "我适合报吗？如果合适帮我建个目标，排一下准备计划",
+          "cards": [],
+          "actions": []
+        },
+        {
+          "content": "先确认一下：你问的是「新加坡国立大学交换项目」这个要不要报，对吧？我按这个来理解。\n\n先说结论：值得报。你本来就有 2027 春季交换的目标，NUS 又是 AI 方向很强的学校，和你对 AI 的兴趣也对得上。不过具体门槛（GPA、语言成绩、名额）我这边还没看到通知原文，得先查一下。\n\n我先帮你把目标和起步任务建起来：\n\n目标建好了 ✅「申请 2027 春季赴新加坡国立大学交换项目」，报名截止 11 月 15 日，面向 2024、2025 级本科生——你是 2024 级，符合。\n\n排了 5 步：\n1. 11/9 前：读通知原文，确认申请条件、名额和材料清单\n2. 11/11 前：开中英文成绩单\n3. 11/12 前：确认语言成绩要求并备好\n4. 11/13 前：写个人陈述（可以往 AI 方向靠）\n5. 11/15 前：汇总提交\n\n提醒一句：这周你还有 Lab 5、大物习题 8、Reading Response 4 等一堆 DDL，所以第 1 步我建议今天上午 9:40–13:30 那段空档就顺手把通知读完，材料清单先摸清，后面才好排。\n\n要我现在把通知原文的完整要求读出来给你整理成清单吗？",
+          "cards": [
+            "goal:申请 2027 春季赴新加坡国立大学交换项目",
+            "task:读通知原文，确认申请条件、名额和材料清单",
+            "task:开具中英文成绩单",
+            "task:准备语言成绩证明（确认是否需要雅思/托福）",
+            "task:写个人陈述，说明选 NUS 和 AI 方向的学习计划",
+            "task:汇总材料并提交报名（截止 11-15）",
+            "item:2027 春季学期赴新加坡国立大学交换项目报名通知"
+          ],
+          "actions": []
+        }
+      ],
+      "reply": "先确认一下：你问的是「新加坡国立大学交换项目」这个要不要报，对吧？我按这个来理解。\n\n先说结论：值得报。你本来就有 2027 春季交换的目标，NUS 又是 AI 方向很强的学校，和你对 AI 的兴趣也对得上。不过具体门槛（GPA、语言成绩、名额）我这边还没看到通知原文，得先查一下。\n\n我先帮你把目标和起步任务建起来：\n\n目标建好了 ✅「申请 2027 春季赴新加坡国立大学交换项目」，报名截止 11 月 15 日，面向 2024、2025 级本科生——你是 2024 级，符合。\n\n排了 5 步：\n1. 11/9 前：读通知原文，确认申请条件、名额和材料清单\n2. 11/11 前：开中英文成绩单\n3. 11/12 前：确认语言成绩要求并备好\n4. 11/13 前：写个人陈述（可以往 AI 方向靠）\n5. 11/15 前：汇总提交\n\n提醒一句：这周你还有 Lab 5、大物习题 8、Reading Response 4 等一堆 DDL，所以第 1 步我建议今天上午 9:40–13:30 那段空档就顺手把通知读完，材料清单先摸清，后面才好排。\n\n要我现在把通知原文的完整要求读出来给你整理成清单吗？",
+      "note": "读通知原文，确认申请条件、名额和材料清单 @2026-11-09T22:00；开具中英文成绩单 @2026-11-11T22:00；准备语言成绩证明（确认是否需要雅思/托福） @2026-11-12T22:00；写个人陈述，说明选 NUS 和 AI 方向的学习计划 @2026-11-13T22:00；汇总材料并提交报名（截止 11-15） @2026-11-15T20:00"
+    },
+    {
+      "id": "镜头5-建议工单",
+      "passed": true,
+      "elapsedMs": 10898,
+      "checks": {
+        "suggestionCard": true,
+        "done": true,
+        "saved": true,
+        "resultMessage": true
+      },
+      "tools": [
+        {
+          "name": "fudan_mail__search_mail",
+          "ok": true,
+          "args": {
+            "query": "交换",
+            "limit": 30
+          },
+          "result": "[\n  {\n    \"id\": \"401e24be-54b2-41eb-8654-72e56caf35a8\",\n    \"from\": \"国际合作与交流处 <fao@fudan.edu.cn>\",\n    \"subject\": \"2027 春季学期赴新加坡国立大学交换项目报名通知\",\n    \"date\": \"2026-11-06T22:00:00.000Z\",\n    \"category\": \"notice\",\n    \"summary\": \"面向 2024、2025 级本科生，报名截止 11 月 15 日，需提交成绩单、\"\n  }\n]"
+        },
+        {
+          "name": "fudan_mail__search_mail",
+          "ok": true,
+          "args": {
+            "query": "新加坡国立大学",
+            "limit": 20
+          },
+          "result": "[\n  {\n    \"id\": \"401e24be-54b2-41eb-8654-72e56caf35a8\",\n    \"from\": \"国际合作与交流处 <fao@fudan.edu.cn>\",\n    \"subject\": \"2027 春季学期赴新加坡国立大学交换项目报名通知\",\n    \"date\": \"2026-11-06T22:00:00.000Z\",\n    \"category\": \"notice\",\n    \"summary\": \"面向 2024、2025 级本科生，报名截止 11 月 15 日，需提交成绩单、\"\n  }\n]"
+        },
+        {
+          "name": "fudan_mail__search_mail",
+          "ok": true,
+          "args": {
+            "query": "新加坡国立大学 交换 报名 材料",
+            "limit": 10
+          },
+          "result": "[]"
+        },
+        {
+          "name": "fudaner_local__search_resources",
+          "ok": true,
+          "args": {
+            "query": "新加坡国立大学 交换"
+          },
+          "result": "[]"
+        },
+        {
+          "name": "fudan_elearning__list_announcements",
+          "ok": true,
+          "args": {},
+          "result": "[\n  {\n    \"id\": \"40c9094d-61ed-4c14-8234-c3de4ba89e1b\",\n    \"title\": \"期中考试范围说明\",\n    \"at\": \"2026-11-07T06:00:00.000Z\",\n    \"body\": \"期中考试范围为第 1–6 章，考试时间 11 月 24 日 14:00。\"\n  },\n  {\n    \"id\": \"4f0bf67d-b7e7-43e0-943f-877871192cf2\",\n    \"title\": \"本周四习题课改到 H3208\",\n    \"at\": \"2026-11-06T20:00:00.000Z\",\n    \"body\": \"本周四习题课教室调整为 H3208。\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__recall",
+          "ok": true,
+          "args": {
+            "query": "交换 申请 新加坡"
+          },
+          "result": "[\n  {\n    \"id\": \"e542c400-7320-4cba-ade9-dd0487dc0218\",\n    \"type\": \"goal\",\n    \"content\": \"想申请 2027 春季交换\",\n    \"source\": \"manual\",\n    \"pinned\": false,\n    \"createdAt\": \"2026-11-08T02:00:00.000Z\",\n    \"updatedAt\": \"2026-11-08T02:00:00.000Z\"\n  },\n  {\n    \"id\": \"d938ba1c-d76f-490f-ae81-0e619f0daea0\",\n    \"type\": \"schedule\",\n    \"content\": \"周二晚上有社团活动\",\n    \"source\": \"manual\",\n    \"pinned\": false,\n    \"createdAt\": \"2026-11-08T02:00:00.000Z\",\n    \"updatedAt\": \"2026-11-08T02:00:00.000Z\"\n  },\n  {\n    \"id\": \"c187c2a1-d6a9-4d3b-a589-a08798749218\",\n    \"type\": \"preference\",\n    \"content\": \"晚上 11 点后不想安排任务\",\n    \"source\": \"manual\",\n    \"pinned\": false,\n    \"createdAt\": \"2026-11-08T02:00:00.000Z\",\n    \"updatedAt\": \"2026-11-08T02:00:00.000Z\"\n  },\n  {\n    \"id\": \"679105ee-733d-4fcc-9cb3-ffb80be39252\",\n    \"type\": \"interest\",\n    \"content\": \"对 AI 方向的讲座感兴趣\",\n    \"source\": \"manual\",\n    \"pinned\": false,\n    \"createdAt\": \"2026-11-08T02:00:00.000Z\",\n    \"updatedAt\": \"2026-11-08T02:00:00.000Z\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__save_resource",
+          "ok": true,
+          "args": {
+            "title": "2027 春季学期赴新加坡国立大学交换项目报名通知（整理·部分信息待补）",
+            "content": "# 2027 春季学期赴新加坡国立大学交换项目报名通知\n\n> ⚠️ **说明：本整理不完整。** 当前会话使用云端模型，而「邮件正文读取」的云端授权未开启，因此只能看到邮件列表摘要，无法读取通知全文。以下内容仅来自摘要，**申请条件、材料清单的完整条目、报名方式等均未能核实**，请勿据此直接提交申请。\n\n## 已确认的信息（来自邮件摘要）\n\n| 项目 | 内容 |\n|---|---|\n| 邮件主题 | 2027 春季学期赴新加坡国立大学交换项目报名通知 |\n| 发件人 | 国际合作与交流处 &lt;fao@fudan.edu.cn&gt; |\n| 发件时间 | 2026-11-06 22:00（UTC，即北京时间 11-07 06:00） |\n| 面向对象 | 2024、2025 级本科生 |\n| 报名截止 | 11 月 15 日（摘要未注明年份与具体时刻，按发信时间推断应为 2026-11-15，**需核实**） |\n| 材料（摘要中可见部分） | 成绩单、……（摘要在此处被截断） |\n\n## 尚缺、需要从邮件正文确认的内容\n\n1. **申请条件**：GPA / 成绩排名要求、语言成绩（雅思/托福）要求、专业与年级限制、是否有名额分配或院系推荐环节。\n2. **材料清单完整版**：摘要只显示「成绩单」及后续被截断的内容，可能还包括个人陈述、推荐信、语言成绩证明、报名表、护照信息页等。\n3. **截止时间细节**：11 月 15 日的具体时刻（是否 17:00 前）、提交渠道（系统/邮箱/纸质交至办公室）。\n4. **后续流程**：选拔方式（面试/材料评审）、结果公布时间、派出时间与学分认定说明。\n5. **咨询方式**：项目负责老师与联系方式。\n\n## 如何补齐（二选一）\n\n- **方式 A（推荐）**：在客户端「设置 → 模型 → 隐私任务的云端授权」中勾选邮件正文读取授权并保存，然后重新发起本工单，即可读取全文并生成完整清单。\n- **方式 B**：切换到本地模型进行对话，本地模型可直接读取邮件正文。\n\n## 依据的资料\n\n- 复旦学生邮箱邮件列表检索结果：主题「2027 春季学期赴新加坡国立大学交换项目报名通知」，发件人 fao@fudan.edu.cn，2026-11-06，分类 notice（仅摘要，正文未读取）。\n- 检索关键词「交换」「新加坡国立大学」均命中同一封邮件；资源库中无相关文件；eLearning 公告中无此项目信息。\n"
+          },
+          "result": "{\n  \"id\": \"253b47d0-ff2c-4c8d-9524-d0c181d2b135\",\n  \"title\": \"2027 春季学期赴新加坡国立大学交换项目报名通知（整理·部分信息待补）\"\n}"
+        }
+      ],
+      "posted": [
+        {
+          "content": "「整理：2027 春季学期赴新加坡国立大学交换项目报名通知」整理好了，放在资源库里了。",
+          "cards": [
+            "resource:2027 春季学期赴新加坡国立大学交换项目报名通知（整理·部分信息待补）"
+          ],
+          "actions": []
+        }
+      ],
+      "note": "建议卡片：整理：2027 届校园招聘宣讲会、整理：2027 春季学期赴新加坡国立大学交换项目报名通知",
+      "resource": {
+        "title": "2027 春季学期赴新加坡国立大学交换项目报名通知（整理·部分信息待补）",
+        "text": "# 2027 春季学期赴新加坡国立大学交换项目报名通知\n\n> ⚠️ **说明：本整理不完整。** 当前会话使用云端模型，而「邮件正文读取」的云端授权未开启，因此只能看到邮件列表摘要，无法读取通知全文。以下内容仅来自摘要，**申请条件、材料清单的完整条目、报名方式等均未能核实**，请勿据此直接提交申请。\n\n## 已确认的信息（来自邮件摘要）\n\n| 项目 | 内容 |\n|---|---|\n| 邮件主题 | 2027 春季学期赴新加坡国立大学交换项目报名通知 |\n| 发件人 | 国际合作与交流处 &lt;fao@fudan.edu.cn&gt; |\n| 发件时间 | 2026-11-06 22:00（UTC，即北京时间 11-07 06:00） |\n| 面向对象 | 2024、2025 级本科生 |\n| 报名截止 | 11 月 15 日（摘要未注明年份与具体时刻，按发信时间推断应为 2026-11-15，**需核实**） |\n| 材料（摘要中可见部分） | 成绩单、……（摘要在此处被截断） |\n\n## 尚缺、需要从邮件正文确认的内容\n\n1. **申请条件**：GPA / 成绩排名要求、语言成绩（雅思/托福）要求、专业与年级限制、是否有名额分配或院系推荐环节。\n2. **材料清单完整版**：摘要只显示「成绩单」及后续被截断的内容，可能还包括个人陈述、推荐信、语言成绩证明、报名表、护照信息页等。\n3. **截止时间细节**：11 月 15 日的具体时刻（是否 17:00 前）、提交渠道（系统/邮箱/纸质交至办公室）。\n4. **后续流程**：选拔方式（面试/材料评审）、结果公布时间、派出时间与学分认定说明。\n5. **咨询方式**：项目负责老师与联系方式。\n\n## 如何补齐（二选一）\n\n- **方式 A（推荐）**：在客户端「设置 → 模型 → 隐私任务的云端授权」中勾选邮件正文读取授权并保存，然后重新发起本工单，即可读取全文并生成完整清单。\n- **方式 B**：切换到本地模型进行对话，本地模型可直接读取邮件正文。\n\n## 依据的资料\n\n- 复旦学生邮箱邮件列表检索结果：主题「2027 春季学期赴新加坡国立大学交换项目报名通知」，发件人 fao@fudan.edu.cn，2026-11-06，分类 notice（仅摘要，正文未读取）。\n- 检索关键词「交换」「新加坡国立大学」均命中同一封邮件；资源库中无相关文件；eLearning 公告中无此项目信息。\n"
+      }
+    },
+    {
+      "id": "镜头6-交作业闭环",
+      "passed": true,
+      "elapsedMs": 4,
+      "checks": {
+        "hasAssignment": true,
+        "closedLoop": true
+      },
+      "tools": [],
+      "posted": [
+        {
+          "content": "看到「Lab 5：链表与栈」已经交了 👍 相关提醒都取消了。",
+          "cards": [
+            "item:Lab 5：链表与栈"
+          ],
+          "actions": []
+        }
+      ],
+      "note": "交掉的作业：Lab 5：链表与栈"
+    },
+    {
+      "id": "镜头7-讲义出题",
+      "passed": true,
+      "elapsedMs": 9207,
+      "checks": {
+        "answered": true,
+        "saved": true,
+        "tenQuestions": true,
+        "searchable": true
+      },
+      "tools": [
+        {
+          "name": "fudaner_local__save_resource",
+          "ok": true,
+          "args": {
+            "title": "数据结构期中复习题（10 道，第 1–6 章）",
+            "content": "# 数据结构 期中复习题（10 道）\n\n范围：第 1–6 章（绪论、线性表、栈与队列、串、数组与广义表、树与二叉树）\n\n## 一、复杂度分析\n\n**1.** 将下列复杂度按从低到高排序：O(n log n)、O(2ⁿ)、O(1)、O(n²)、O(log n)、O(n)。\n\n**2.** 分析下面代码的时间复杂度：\n```\nfor (int i = 1; i <= n; i *= 2)\n    for (int j = 0; j < n; j++)\n        sum++;\n```\n\n## 二、线性表\n\n**3.** 顺序表长度为 n，在第 i 个位置（1 ≤ i ≤ n+1）插入一个元素，平均需要移动多少个元素？时间复杂度是多少？\n\n**4.** 已知单链表结点 p 的前驱结点为 pre，写出在 p 之后插入新结点 s 的指针操作（顺序不能错），并说明为什么不能先改 p->next。\n\n## 三、栈与队列\n\n**5.** 顺序栈的判满条件是什么？链栈为什么一般不需要判满？\n\n**6.** 循环队列容量为 MaxSize，写出判空和判满条件，并说明为什么判满要浪费一个存储单元。\n\n**7.** 元素 1、2、3 依次进栈，中途可以出栈，列出所有可能的出栈序列，并验证个数是否等于卡特兰数 C(6,3)/4。\n\n## 四、串\n\n**8.** 朴素模式匹配与 KMP 算法的最坏时间复杂度分别是多少？KMP 的 next 数组解决了什么问题？\n\n## 五、数组\n\n**9.** 二维数组 a[m][n] 按行优先存储，每个元素占 s 字节，基址为 base。写出 a[i][j]（下标从 0 开始）的地址公式，并计算 a[3][4] 在 m=5、n=6、s=4、base=1000 时的地址。\n\n## 六、树与二叉树\n\n**10.** 已知一棵二叉树的先序序列为 ABDECFG，中序序列为 DBEAFCG。\n(1) 画出这棵二叉树；\n(2) 写出后序序列和层序序列；\n(3) 说明为什么「先序 + 后序」不能唯一确定一棵二叉树。\n\n---\n\n## 参考答案要点\n\n1. O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2ⁿ)\n2. 外层执行 ⌊log₂n⌋+1 次，内层 n 次 → O(n log n)\n3. 平均移动 n/2 个元素，O(n)\n4. `s->next = p->next; p->next = s;` 若先改 p->next，就丢失了原后继的地址\n5. `top == MaxSize - 1`；链栈按需申请结点，理论上只受内存限制\n6. 空：`front == rear`；满：`(rear + 1) % MaxSize == front`。用「队尾指针的下一个位置是队头」区分满和空，否则满和空状态相同\n7. 5 种：123、132、213、231、321（312 不可能）。C(6,3)/(3+1) = 20/4 = 5 ✓\n8. 朴素 O(mn)，KMP O(m+n)；next 数组让主串指针不回溯，失配时模式串跳到合适位置继续比较\n9. `addr = base + (i × n + j) × s`；a[3][4] = 1000 + (3×6+4)×4 = 1000 + 88 = 1088\n10. (1) 根为 A，左子树 B(D,E)，右子树 C(F,G)，其中 B 的左孩子 D、右孩子 E；C 的左孩子 F、右孩子 G\n    (2) 后序：DEBFGCA；层序：ABCDEFG\n    (3) 先序和后序都无法确定左右子树的边界，同一对序列可能对应多棵树（如只有左孩子或只有右孩子时无法区分）\n",
+            "course_code": "COMP130004.01"
+          },
+          "result": "{\n  \"id\": \"51231e64-0acf-4771-9350-f2d646ea26e2\",\n  \"title\": \"数据结构期中复习题（10 道，第 1–6 章）\"\n}"
+        }
+      ],
+      "posted": [
+        {
+          "content": "根据这份讲义出 10 道复习题，存到资源库",
+          "cards": [],
+          "actions": []
+        },
+        {
+          "content": "10 道题已经出好，存进资源库了 ✅ 覆盖讲义里的重点题型：复杂度分析、顺序表/链表指针操作、栈与队列判空判满、卡特兰数、KMP、二维数组地址计算、二叉树序列还原。\n\n每题后面附了参考答案要点，方便你自测完对答案。要不要我把它拆成「先做题、后看答案」的两份文件？",
+          "cards": [
+            "resource:数据结构期中复习题（10 道，第 1–6 章）"
+          ],
+          "actions": []
+        }
+      ],
+      "reply": "10 道题已经出好，存进资源库了 ✅ 覆盖讲义里的重点题型：复杂度分析、顺序表/链表指针操作、栈与队列判空判满、卡特兰数、KMP、二维数组地址计算、二叉树序列还原。\n\n每题后面附了参考答案要点，方便你自测完对答案。要不要我把它拆成「先做题、后看答案」的两份文件？",
+      "resource": {
+        "title": "数据结构期中复习题（10 道，第 1–6 章）",
+        "text": "# 数据结构 期中复习题（10 道）\n\n范围：第 1–6 章（绪论、线性表、栈与队列、串、数组与广义表、树与二叉树）\n\n## 一、复杂度分析\n\n**1.** 将下列复杂度按从低到高排序：O(n log n)、O(2ⁿ)、O(1)、O(n²)、O(log n)、O(n)。\n\n**2.** 分析下面代码的时间复杂度：\n```\nfor (int i = 1; i <= n; i *= 2)\n    for (int j = 0; j < n; j++)\n        sum++;\n```\n\n## 二、线性表\n\n**3.** 顺序表长度为 n，在第 i 个位置（1 ≤ i ≤ n+1）插入一个元素，平均需要移动多少个元素？时间复杂度是多少？\n\n**4.** 已知单链表结点 p 的前驱结点为 pre，写出在 p 之后插入新结点 s 的指针操作（顺序不能错），并说明为什么不能先改 p->next。\n\n## 三、栈与队列\n\n**5.** 顺序栈的判满条件是什么？链栈为什么一般不需要判满？\n\n**6.** 循环队列容量为 MaxSize，写出判空和判满条件，并说明为什么判满要浪费一个存储单元。\n\n**7.** 元素 1、2、3 依次进栈，中途可以出栈，列出所有可能的出栈序列，并验证个数是否等于卡特兰数 C(6,3)/4。\n\n## 四、串\n\n**8.** 朴素模式匹配与 KMP 算法的最坏时间复杂度分别是多少？KMP 的 next 数组解决了什么问题？\n\n## 五、数组\n\n**9.** 二维数组 a[m][n] 按行优先存储，每个元素占 s 字节，基址为 base。写出 a[i][j]（下标从 0 开始）的地址公式，并计算 a[3][4] 在 m=5、n=6、s=4、base=1000 时的地址。\n\n## 六、树与二叉树\n\n**10.** 已知一棵二叉树的先序序列为 ABDECFG，中序序列为 DBEAFCG。\n(1) 画出这棵二叉树；\n(2) 写出后序序列和层序序列；\n(3) 说明为什么「先序 + 后序」不能唯一确定一棵二叉树。\n\n---\n\n## 参考答案要点\n\n1. O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2ⁿ)\n2. 外层执行 ⌊log₂n⌋+1 次，内层 n 次 → O(n log n)\n3. 平均移动 n/2 个元素，O(n)\n4. `s->next = p->next; p->next = s;` 若先改 p->next，就丢失了原后继的地址\n5. `top == MaxSize - 1`；链栈按需申请结点，理论上只受内存限制\n6. 空：`front == rear`；满：`(rear + 1) % MaxSize == front`。用「队尾指针的下一个位置是队头」区分满和空，否则满和空状态相同\n7. 5 种：123、132、213、231、321（312 不可能）。C(6,3)/(3+1) = 20/4 = 5 ✓\n8. 朴素 O(mn)，KMP O(m+n)；next 数组让主串指针不回溯，失配时模式串跳到合适位置继续比较\n9. `addr = base + (i × n + j) × s`；a[3][4] = 1000 + (3×6+4)×4 = 1000 + 88 = 1088\n10. (1) 根为 A，左子树 B(D,E)，右子树 C(F,G)，其中 B 的左孩子 D、右孩子 E；C 的左孩子 F、右孩子 G\n    (2) 后序：DEBFGCA；层序：ABCDEFG\n    (3) 先序和后序都无法确定左右子树的边界，同一对序列可能对应多棵树（如只有左孩子或只有右孩子时无法区分）\n"
+      },
+      "note": "识别到题号 15 个"
+    },
+    {
+      "id": "镜头8-考试周复习计划",
+      "passed": true,
+      "elapsedMs": 22656,
+      "checks": {
+        "proactiveAsk": true,
+        "done": true,
+        "saved": true
+      },
+      "tools": [
+        {
+          "name": "fudan_courses__list_courses",
+          "ok": true,
+          "args": {},
+          "result": "[\n  {\n    \"code\": \"PTSS110008.12\",\n    \"name\": \"中国近现代史纲要\",\n    \"teachers\": [\n      {\n        \"name\": \"孙老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"elearningId\": \"1006\",\n    \"matchStatus\": \"auto\"\n  },\n  {\n    \"code\": \"PHYS120013.05\",\n    \"name\": \"大学物理 B\",\n    \"teachers\": [\n      {\n        \"name\": \"周老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"elearningId\": \"1003\",\n    \"matchStatus\": \"auto\"\n  },\n  {\n    \"code\": \"ENGL110025.03\",\n    \"name\": \"学术英语写作\",\n    \"teachers\": [\n      {\n        \"name\": \"Ms. Smith\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"elearningId\": \"1005\",\n    \"matchStatus\": \"auto\"\n  },\n  {\n    \"code\": \"MATH120003.02\",\n    \"name\": \"数学分析 III\",\n    \"teachers\": [\n      {\n        \"name\": \"陈老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"elearningId\": \"1002\",\n    \"matchStatus\": \"auto\"\n  },\n  {\n    \"code\": \"COMP130004.01\",\n    \"name\": \"数据结构\",\n    \"teachers\": [\n      {\n        \"name\": \"王老师\",\n        \"email\": \"wang.laoshi@fudan.edu.cn\",\n        \"role\": \"teacher\"\n      },\n      {\n        \"name\": \"李助教\",\n        \"email\": \"li.zhujiao@m.fudan.edu.cn\",\n        \"role\": \"ta\"\n      }\n    ],\n    \"elearningId\": \"1001\",\n    \"matchStatus\": \"auto\"\n  },\n  {\n    \"code\": \"MATH120044.01\",\n    \"name\": \"线性代数\",\n    \"teachers\": [\n      {\n        \"name\": \"赵老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"elearningId\": \"1004\",\n    \"matchStatus\": \"auto\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__get_today",
+          "ok": true,
+          "args": {},
+          "result": "{\n  \"date\": \"2026-11-08\",\n  \"weekNo\": 10,\n  \"phase\": \"pre_exam\",\n  \"courses\": [\n    {\n      \"name\": \"数学分析 III\",\n      \"time\": \"08:00–09:40\",\n      \"location\": \"H3109\"\n    },\n    {\n      \"name\": \"数据结构\",\n      \"time\": \"13:30–15:10\",\n      \"location\": \"H2215\"\n    }\n  ],\n  \"freeSlots\": [\n    {\n      \"start\": \"09:40\",\n      \"end\": \"13:30\"\n    },\n    {\n      \"start\": \"15:10\",\n      \"end\": \"22:00\"\n    }\n  ],\n  \"deadlines\": [\n    {\n      \"itemId\": \"e0f5d1f1-a325-4529-b662-e488eb62f815\",\n      \"title\": \"Lab 5：链表与栈\",\n      \"course\": \"数据结构\",\n      \"dueAt\": \"2026-11-08T15:59:00.000Z\",\n      \"done\": true\n    },\n    {\n      \"itemId\": \"42e62df1-0d07-4fdf-9d66-0b5167799ea4\",\n      \"title\": \"大学物理 习题 8\",\n      \"course\": \"大学物理 B\",\n      \"dueAt\": \"2026-11-10T04:00:00.000Z\",\n      \"done\": false\n    },\n    {\n      \"itemId\": \"38859c66-b036-4afa-916f-92144d1cdf4e\",\n      \"title\": \"Reading Response 4\",\n      \"course\": \"学术英语写作\",\n      \"dueAt\": \"2026-11-10T15:59:00.000Z\",\n      \"done\": false\n    },\n    {\n      \"itemId\": \"3cba7754-3050-4e76-96ce-1de386e9384c\",\n      \"title\": \"数分作业 6\",\n      \"course\": \"数学分析 III\",\n      \"dueAt\": \"2026-11-11T10:00:00.000Z\",\n      \"done\": false\n    },\n    {\n      \"itemId\": \"087cff3a-eb89-459e-8840-79fa3f087762\",\n      \"title\": \"Essay Draft 2\",\n      \"course\": \"学术英语写作\",\n      \"dueAt\": \"2026-11-12T15:59:00.000Z\",\n      \"done\": false\n    },\n    {\n      \"itemId\": \"b4d03751-cdca-4992-b20a-496eac536bc6\",\n      \"title\": \"线代 HW 7\",\n      \"course\": \"线性代数\",\n      \"dueAt\": \"2026-11-13"
+        },
+        {
+          "name": "fudan_mail__search_mail",
+          "ok": true,
+          "args": {
+            "query": "考试",
+            "limit": 30
+          },
+          "result": "[\n  {\n    \"id\": \"b8db12d5-7118-45d6-96e0-d19145c29120\",\n    \"from\": \"教务处 <jwc@fudan.edu.cn>\",\n    \"subject\": \"关于 2026 秋季学期期中考试安排的通知\",\n    \"date\": \"2026-11-07T00:00:00.000Z\",\n    \"category\": \"action\",\n    \"summary\": \"各位同学：期中考试安排已发布，请于 11 月 10 日前登录系统确认考试时间。\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__list_deadlines",
+          "ok": true,
+          "args": {
+            "to": "2026-12-31T23:59:00+08:00"
+          },
+          "result": "[\n  {\n    \"id\": \"e0f5d1f1-a325-4529-b662-e488eb62f815\",\n    \"title\": \"Lab 5：链表与栈\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"2026-11-08T15:59:00.000Z\",\n    \"submitted\": true\n  },\n  {\n    \"id\": \"42e62df1-0d07-4fdf-9d66-0b5167799ea4\",\n    \"title\": \"大学物理 习题 8\",\n    \"course\": \"大学物理 B\",\n    \"dueAt\": \"2026-11-10T04:00:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"38859c66-b036-4afa-916f-92144d1cdf4e\",\n    \"title\": \"Reading Response 4\",\n    \"course\": \"学术英语写作\",\n    \"dueAt\": \"2026-11-10T15:59:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"3cba7754-3050-4e76-96ce-1de386e9384c\",\n    \"title\": \"数分作业 6\",\n    \"course\": \"数学分析 III\",\n    \"dueAt\": \"2026-11-11T10:00:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"087cff3a-eb89-459e-8840-79fa3f087762\",\n    \"title\": \"Essay Draft 2\",\n    \"course\": \"学术英语写作\",\n    \"dueAt\": \"2026-11-12T15:59:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"b4d03751-cdca-4992-b20a-496eac536bc6\",\n    \"title\": \"线代 HW 7\",\n    \"course\": \"线性代数\",\n    \"dueAt\": \"2026-11-13T15:59:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"8395eca4-2f7d-49ea-8bdb-6b1b7d3cadfe\",\n    \"title\": \"大学物理 习题 9\",\n    \"course\": \"大学物理 B\",\n    \"dueAt\": \"2026-11-17T04:00:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"efc0223c-ab7f-4cdf-bae4-895320c88542\",\n    \"title\": \"Lab 6：二叉树\",\n    \"course\": \"数据结构\",\n    \"dueAt\": \"2026-11-17T15:59:00.000Z\",\n    \"submitted\": false\n  },\n  {\n    \"id\": \"ac3df913-96d3-4f52-a958-7a4c87d1ec3c\",\n    \"title\": \"读书报告\",\n    \"course\": \"中国近现代史纲要\",\n    \"dueA"
+        },
+        {
+          "name": "fudan_elearning__list_announcements",
+          "ok": true,
+          "args": {},
+          "result": "[\n  {\n    \"id\": \"40c9094d-61ed-4c14-8234-c3de4ba89e1b\",\n    \"title\": \"期中考试范围说明\",\n    \"at\": \"2026-11-07T06:00:00.000Z\",\n    \"body\": \"期中考试范围为第 1–6 章，考试时间 11 月 24 日 14:00。\"\n  },\n  {\n    \"id\": \"4f0bf67d-b7e7-43e0-943f-877871192cf2\",\n    \"title\": \"本周四习题课改到 H3208\",\n    \"at\": \"2026-11-06T20:00:00.000Z\",\n    \"body\": \"本周四习题课教室调整为 H3208。\"\n  }\n]"
+        },
+        {
+          "name": "fudan_mail__list_action_required",
+          "ok": true,
+          "args": {},
+          "result": "[\n  {\n    \"id\": \"f530c3e5-7565-462e-9b58-bb18000cf66f\",\n    \"from\": \"王老师 <wang.laoshi@fudan.edu.cn>\",\n    \"subject\": \"关于下周组会时间调整\",\n    \"summary\": \"同学好，下周组会想改到周四下午 3 点，请回复是否方便参加。\"\n  },\n  {\n    \"id\": \"aab304c7-8056-476b-a7a6-2efd27a3cd49\",\n    \"from\": \"小李 <xiaoli@m.fudan.edu.cn>\",\n    \"subject\": \"Lab 5 我们分工一下？\",\n    \"summary\": \"我写链表部分，你写栈？今晚能确认一下吗？\"\n  },\n  {\n    \"id\": \"b8db12d5-7118-45d6-96e0-d19145c29120\",\n    \"from\": \"教务处 <jwc@fudan.edu.cn>\",\n    \"subject\": \"关于 2026 秋季学期期中考试安排的通知\",\n    \"summary\": \"各位同学：期中考试安排已发布，请于 11 月 10 日前登录系统确认考试时间。\"\n  },\n  {\n    \"id\": \"d4da6f62-a9a0-4c67-b5ba-2c330f73d60a\",\n    \"from\": \"体育教学部 <pe@fudan.edu.cn>\",\n    \"subject\": \"冬季长跑活动开始打卡\",\n    \"summary\": \"冬季长跑活动开始，请在 App 中打卡。\"\n  }\n]"
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "MATH120003.02"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"MATH120003.02\",\n    \"name\": \"数学分析 III\",\n    \"teachers\": [\n      {\n        \"name\": \"陈老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"assessments\": [\n      {\n        \"kind\": \"final\",\n        \"date\": \"2026-12-25T00:30:00.000Z\"\n      }\n    ]\n  },\n  \"assignments\": [\n    {\n      \"id\": \"3cba7754-3050-4e76-96ce-1de386e9384c\",\n      \"title\": \"数分作业 6\",\n      \"dueAt\": \"2026-11-11T10:00:00.000Z\",\n      \"submitted\": false\n    },\n    {\n      \"id\": \"c1a3bbc4-b260-421f-a87b-0b0fe7b3d554\",\n      \"title\": \"数分作业 5\",\n      \"dueAt\": \"2026-11-04T10:00:00.000Z\",\n      \"submitted\": true\n    }\n  ],\n  \"announcements\": [],\n  \"mails\": [],\n  \"replays\": []\n}"
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "COMP130004.01"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"COMP130004.01\",\n    \"name\": \"数据结构\",\n    \"teachers\": [\n      {\n        \"name\": \"王老师\",\n        \"email\": \"wang.laoshi@fudan.edu.cn\",\n        \"role\": \"teacher\"\n      },\n      {\n        \"name\": \"李助教\",\n        \"email\": \"li.zhujiao@m.fudan.edu.cn\",\n        \"role\": \"ta\"\n      }\n    ],\n    \"assessments\": [\n      {\n        \"kind\": \"midterm\",\n        \"date\": \"2026-11-24T06:00:00.000Z\"\n      },\n      {\n        \"kind\": \"final\",\n        \"date\": \"2026-12-23T00:30:00.000Z\"\n      }\n    ]\n  },\n  \"assignments\": [\n    {\n      \"id\": \"efc0223c-ab7f-4cdf-bae4-895320c88542\",\n      \"title\": \"Lab 6：二叉树\",\n      \"dueAt\": \"2026-11-17T15:59:00.000Z\",\n      \"submitted\": false\n    },\n    {\n      \"id\": \"e0f5d1f1-a325-4529-b662-e488eb62f815\",\n      \"title\": \"Lab 5：链表与栈\",\n      \"dueAt\": \"2026-11-08T15:59:00.000Z\",\n      \"submitted\": true\n    },\n    {\n      \"id\": \"0e081e00-d2d9-4fca-91bf-1a7dcd0437f8\",\n      \"title\": \"Lab 4：顺序表\",\n      \"dueAt\": \"2026-11-02T15:59:00.000Z\",\n      \"submitted\": true\n    }\n  ],\n  \"announcements\": [\n    {\n      \"id\": \"40c9094d-61ed-4c14-8234-c3de4ba89e1b\",\n      \"title\": \"期中考试范围说明\",\n      \"at\": \"2026-11-07T06:00:00.000Z\"\n    }\n  ],\n  \"mails\": [\n    {\n      \"id\": \"381e4dfd-9639-4182-9236-4fdf97716924\",\n      \"subject\": \"关于 Lab 5 提交要求的补充说明\",\n      \"from\": \"李助教 <li.zhujiao@m.fudan.edu.cn>\",\n      \"summary\": \"各位同学：Lab 5 除了源码外，还需要提交一份 PDF 实验报告（含测试截图）\"\n    },\n    {\n      \"id\": \"f530c3e5-7565-462e-9b58-bb18000cf66f\",\n      \"subject\": \"关于下周组会时间调整\",\n      \"from\": "
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "PHYS120013.05"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"PHYS120013.05\",\n    \"name\": \"大学物理 B\",\n    \"teachers\": [\n      {\n        \"name\": \"周老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"assessments\": [\n      {\n        \"kind\": \"final\",\n        \"date\": \"2026-12-27T00:30:00.000Z\"\n      }\n    ]\n  },\n  \"assignments\": [\n    {\n      \"id\": \"8395eca4-2f7d-49ea-8bdb-6b1b7d3cadfe\",\n      \"title\": \"大学物理 习题 9\",\n      \"dueAt\": \"2026-11-17T04:00:00.000Z\",\n      \"submitted\": false\n    },\n    {\n      \"id\": \"42e62df1-0d07-4fdf-9d66-0b5167799ea4\",\n      \"title\": \"大学物理 习题 8\",\n      \"dueAt\": \"2026-11-10T04:00:00.000Z\",\n      \"submitted\": false\n    }\n  ],\n  \"announcements\": [\n    {\n      \"id\": \"4f0bf67d-b7e7-43e0-943f-877871192cf2\",\n      \"title\": \"本周四习题课改到 H3208\",\n      \"at\": \"2026-11-06T20:00:00.000Z\"\n    }\n  ],\n  \"mails\": [],\n  \"replays\": []\n}"
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "MATH120044.01"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"MATH120044.01\",\n    \"name\": \"线性代数\",\n    \"teachers\": [\n      {\n        \"name\": \"赵老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"assessments\": [\n      {\n        \"kind\": \"final\",\n        \"date\": \"2026-12-29T00:30:00.000Z\"\n      }\n    ]\n  },\n  \"assignments\": [\n    {\n      \"id\": \"b4d03751-cdca-4992-b20a-496eac536bc6\",\n      \"title\": \"线代 HW 7\",\n      \"dueAt\": \"2026-11-13T15:59:00.000Z\",\n      \"submitted\": false\n    },\n    {\n      \"id\": \"0a6bdb36-8da0-40f2-b7ee-c31f8061b18e\",\n      \"title\": \"线代 HW 6\",\n      \"dueAt\": \"2026-11-06T15:59:00.000Z\",\n      \"submitted\": true\n    }\n  ],\n  \"announcements\": [],\n  \"mails\": [],\n  \"replays\": []\n}"
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "ENGL110025.03"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"ENGL110025.03\",\n    \"name\": \"学术英语写作\",\n    \"teachers\": [\n      {\n        \"name\": \"Ms. Smith\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"assessments\": []\n  },\n  \"assignments\": [\n    {\n      \"id\": \"087cff3a-eb89-459e-8840-79fa3f087762\",\n      \"title\": \"Essay Draft 2\",\n      \"dueAt\": \"2026-11-12T15:59:00.000Z\",\n      \"submitted\": false\n    },\n    {\n      \"id\": \"38859c66-b036-4afa-916f-92144d1cdf4e\",\n      \"title\": \"Reading Response 4\",\n      \"dueAt\": \"2026-11-10T15:59:00.000Z\",\n      \"submitted\": false\n    }\n  ],\n  \"announcements\": [],\n  \"mails\": [],\n  \"replays\": []\n}"
+        },
+        {
+          "name": "fudan_courses__get_course",
+          "ok": true,
+          "args": {
+            "code": "PTSS110008.12"
+          },
+          "result": "{\n  \"course\": {\n    \"code\": \"PTSS110008.12\",\n    \"name\": \"中国近现代史纲要\",\n    \"teachers\": [\n      {\n        \"name\": \"孙老师\",\n        \"role\": \"teacher\"\n      }\n    ],\n    \"assessments\": [\n      {\n        \"kind\": \"final\",\n        \"date\": \"2026-12-31T00:30:00.000Z\"\n      }\n    ]\n  },\n  \"assignments\": [\n    {\n      \"id\": \"ac3df913-96d3-4f52-a958-7a4c87d1ec3c\",\n      \"title\": \"读书报告\",\n      \"dueAt\": \"2026-11-20T15:59:00.000Z\",\n      \"submitted\": false\n    }\n  ],\n  \"announcements\": [],\n  \"mails\": [],\n  \"replays\": []\n}"
+        },
+        {
+          "name": "fudaner_local__search_resources",
+          "ok": true,
+          "args": {
+            "query": "复习 讲义 提纲"
+          },
+          "result": "[\n  {\n    \"type\": \"resource\",\n    \"id\": \"2050c4e7-6226-494e-9c22-d4bd4cca9c5d\",\n    \"title\": \"数据结构-期中复习讲义\",\n    \"snippet\": \" 第 1 页\\n\\n## 数据结构 期中复习讲义（第 1–6 章）\\n\\n演示用虚构材料，内容为通用知识点整理，不对应任何真实课程讲义。\\n\\n第 1 章 绪论\\n\\n数据结构研究数据的逻辑结构、存储结构以及在其上定\"\n  },\n  {\n    \"type\": \"resource\",\n    \"id\": \"51231e64-0acf-4771-9350-f2d646ea26e2\",\n    \"title\": \"数据结构期中复习题（10 道，第 1–6 章）\",\n    \"snippet\": \"# 数据结构 期中复习题（10 道）\\n\\n范围：第 1–6 章（绪论、线性表、栈与队列、串、数组与广义表、树与二叉树）\\n\\n## 一、复杂度分析\\n\\n**1.** 将下列复杂度按从低到高排序：O(n log\"\n  }\n]"
+        },
+        {
+          "name": "fudaner_local__read_resource",
+          "ok": true,
+          "args": {
+            "id": "2050c4e7-6226-494e-9c22-d4bd4cca9c5d",
+            "length": 2500
+          },
+          "result": "{\n  \"id\": \"2050c4e7-6226-494e-9c22-d4bd4cca9c5d\",\n  \"title\": \"数据结构-期中复习讲义\",\n  \"total\": 1109,\n  \"text\": \"<external_data source=\\\"resource\\\">\\n> 第 1 页\\n\\n## 数据结构 期中复习讲义（第 1–6 章）\\n\\n演示用虚构材料，内容为通用知识点整理，不对应任何真实课程讲义。\\n\\n第 1 章 绪论\\n\\n数据结构研究数据的逻辑结构、存储结构以及在其上定义的运算。\\n\\n算法的五个特性：有穷性、确定性、可行性、输入、输出。\\n\\n时间复杂度用大 O 表示法描述增长趋势：O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2ⁿ)。\\n\\n第 2 章 线性表\\n\\n顺序表：随机访问 O(1)；插入、删除平均移动 n/2 个元素，O(n)。\\n\\n单链表：插入、删除只需修改指针，O(1)（已知前驱结点时）；按序号查找 O(n)。\\n\\n双向链表：每个结点有 prior 和 next 两个指针，删除结点 p 时要同时修改 p->prior->next 和 p->next->prior。\\n\\n头结点的作用：统一空表和非空表、首结点和其他结点的操作。\\n\\n第 3 章 栈与队列\\n\\n栈：后进先出（LIFO）。顺序栈判满条件 top == MaxSize - 1；链栈一般不会满。\\n\\n应用：括号匹配、表达式求值（中缀转后缀）、函数调用与递归。\\n\\n队列：先进先出（FIFO）。循环队列判空 front == rear，判满 (rear + 1) % MaxSize == front。\\n\\nn 个元素依次进栈，可能的出栈序列个数为卡特兰数 C(2n, n) / (n + 1)。\\n\\n第 4 章 串\\n\\n朴素模式匹配最坏时间复杂度 O(mn)。\\n\\nKMP 算法利用 next 数组避免主串指针回溯，时间复杂度 O(m + n)。\\n\\n第 5 章 数组与广义表\\n\\n二维数组按行优先存储时，a[i][j] 的地址 = 基址 + (i × 列数 + j) × 元素大小。\\n\\n对称矩阵、三角矩阵可压缩存储；稀疏矩阵用三元组表或十字链表。\\n\\n第 6 章 树与二叉树\\n\\n二叉树性质：第 i 层最多 2^(i-1) 个结点；深度为 k 的二叉树最多 2^k - 1 个结点；n0 = n2 + 1。\\n\\n遍历：先序、中序、后序（递归或借助栈）；层序遍历借助队列。\\n\\n由先序 + 中序或后序 + 中序可以唯一确定一棵二叉树；先序 + 后序不能。\\n\\n二叉搜索树（BST）：中序遍历得到有序序列；查找、插入平均 O(log n)，最坏退化为 O(n)。\\n\\n删除 BST 结点：叶子直接删；只有一个孩子用孩子替代；有两个孩子用中序后继（或前驱）替代。\\n\\n考前提醒\\n\\n期中考试范围：第 1–6 章。\\n\\n重点题型：复杂度分析、链表指针操作、循环队列判空判满、二叉树遍历序列还原、BST 插入删除。\\n</external_data>\"\n}"
+        },
+        {
+          "name": "fudaner_local__save_resource",
+          "ok": true,
+          "args": {
+            "title": "考试周前两周复习计划（2026 秋季学期）",
+            "content": "# 考试周前两周复习计划（2026 秋季学期）\n\n> 生成日期：2026-11-08（第 10 周，pre_exam 阶段）\n> 依据资料：eLearning 课程公告、课程总表 assessments（考试时间）、eLearning 作业列表与 DDL、资源库《数据结构-期中复习讲义》《数据结构期中复习题》。\n\n## 一、考试安排（来自课程总表 assessments，均为北京时间）\n\n| 课程 | 考试类型 | 时间 |\n|---|---|---|\n| 数据结构 | 期中 | 11-24（周二）14:00 |\n| 数学分析 III | 期末 | 12-25（周五）08:30 |\n| 大学物理 B | 期末 | 12-27（周日）08:30 |\n| 线性代数 | 期末 | 12-29（周二）08:30 |\n| 中国近现代史纲要 | 期末 | 12-31（周四）08:30 |\n| 学术英语写作 | 暂无已登记考试 | — |\n\n**关键节点：数据结构期中 11-24 14:00 是最近的一场考试**，因此「考试周前两周」的核心压力点应放在 11-10 ~ 11-23 这段；其余四门期末集中在 12-25 ~ 12-31，属于期中之后的第二轮冲刺。\n\n## 二、已知考试范围\n\n- **数据结构期中**：第 1–6 章（绪论、线性表、栈与队列、串、数组与广义表、树与二叉树）。重点题型：复杂度分析、链表指针操作、循环队列判空判满、二叉树遍历序列还原、BST 插入删除。来源：eLearning 公告《期中考试范围说明》+ 资源库《数据结构-期中复习讲义》。\n- 其余课程：**未查到明确的考试范围说明**（数分、大物、线代、近现代史、学术英语均无范围公告）。需向任课老师/助教确认，本计划中这些科目的复习内容按「作业与课堂内容覆盖的章节」安排，不臆测范围。\n\n## 三、待办作业（DDL，未提交）\n\n| 截止 | 作业 | 课程 |\n|---|---|---|\n| 11-10 12:00 | 大学物理 习题 8 | 大学物理 B |\n| 11-10 23:59 | Reading Response 4 | 学术英语写作 |\n| 11-11 18:00 | 数分作业 6 | 数学分析 III |\n| 11-12 23:59 | Essay Draft 2 | 学术英语写作 |\n| 11-13 23:59 | 线代 HW 7 | 线性代数 |\n| 11-17 12:00 | 大学物理 习题 9 | 大学物理 B |\n| 11-17 23:59 | Lab 6：二叉树 | 数据结构 |\n| 11-20 23:59 | 读书报告 | 中国近现代史纲要 |\n\n## 四、第一周（11-09 ~ 11-15）：清作业 + 启动数据结构期中\n\n原则：先保证本周 DDL 不欠账，同时每天固定 1 小时数据结构。\n\n- **11-09（周一）**：大物习题 8（次日中午截止）→ 数分作业 6 起步；晚 1h 数据结构第 1–2 章（复杂度、线性表）。\n- **11-10（周二）**：交大物习题 8；完成 Reading Response 4；数据结构第 2 章链表指针操作练习。\n- **11-11（周三）**：交数分作业 6；数据结构第 3 章（栈与队列，循环队列判空判满）。\n- **11-12（周四）**：交 Essay Draft 2；数据结构第 4 章（串、KMP next 数组）。\n- **11-13（周五）**：交线代 HW 7；数据结构第 5 章（数组与广义表、地址计算）。\n- **11-14（周六）**：数据结构第 6 章（二叉树性质、遍历、BST）大块时间 2–3h；大物习题 9 起步。\n- **11-15（周日）**：做《数据结构期中复习题（10 道）》第一遍，标记错题；大物习题 9 收尾。\n\n## 五、第二周（11-16 ~ 11-23）：数据结构期中冲刺 + 期末预热\n\n- **11-16（周一）**：交大物习题 9；数据结构错题回看（第 1–3 章）。\n- **11-17（周二）**：交 Lab 6：二叉树（与期中第 6 章直接相关，边做边复习）；数据结构第 4–5 章错题。\n- **11-18（周三）**：数据结构第 6 章专题：遍历序列还原 + BST 插入删除手写代码。\n- **11-19（周四）**：读书报告（11-20 截止）主体完成；数据结构复习题第二遍。\n- **11-20（周五）**：交读书报告；数据结构全真模拟一套（限时）。\n- **11-21（周六）**：模拟卷讲评 + 讲义「考前提醒」逐条自查；开始数分期末第一轮（作业 5、6 错题重做）。\n- **11-22（周日）**：数据结构轻量回顾（只看错题与公式），保证睡眠；数分期末第一轮继续。\n- **11-23（周一）**：考前最后梳理：复杂度排序、循环队列判满条件、n0=n2+1、卡特兰数、KMP 复杂度；早睡。\n\n## 六、期中之后的期末轮（11-25 ~ 12-24，概要）\n\n四门期末集中在 12-25 ~ 12-31，建议 11-25 起按「先难后易」推进：\n1. 11-25 ~ 12-06：数学分析 III 第一轮（按作业 5/6 覆盖章节 + 课堂笔记）。\n2. 12-07 ~ 12-14：大学物理 B 第一轮（习题 8/9 题型归纳）。\n3. 12-15 ~ 12-20：线性代数第一轮（HW 6/7 题型）。\n4. 12-21 ~ 12-24：中国近现代史纲要（读书报告素材可复用）+ 四门课错题总回顾。\n5. 学术英语写作无登记考试，按课程要求完成写作任务即可，暂不排复习块。\n\n## 七、信息缺口（需你确认）\n\n1. **教务处《关于 2026 秋季学期期中考试安排的通知》正文未能读取**：当前会话使用云端模型，邮件正文读取受隐私设置限制（仅能看到摘要）。摘要提示「请于 11 月 10 日前登录系统确认考试时间」，请自行登录教务系统核对，或到「设置 → 模型 → 隐私任务的云端授权」勾选授权并保存（或改用本地模型对话）后我再读取正文。\n2. 数分、大物、线代、近现代史、学术英语**均未查到考试范围公告**，需向任课老师/助教确认范围与题型。\n3. 学术英语写作是否安排考试未知。\n4. 待回复邮件 2 封（王老师组会时间调整、小李 Lab 5 分工），与本计划无直接冲突，但建议尽快回复。\n\n## 八、依据资料清单\n\n- eLearning 公告《期中考试范围说明》（11-07）：数据结构期中范围第 1–6 章，考试时间 11-24 14:00。\n- eLearning 公告《本周四习题课改到 H3208》（大物）。\n- 课程总表 assessments：数分 12-25、大物 12-27、线代 12-29、近现代史 12-31 期末；数据结构期中 11-24、期末 12-23。\n- eLearning 作业列表与 DDL（8 项未提交，见第三节）。\n- 资源库《数据结构-期中复习讲义》（第 1–6 章知识点与考前提醒）、《数据结构期中复习题（10 道，第 1–6 章）》。\n- 邮件摘要：教务处期中考试安排通知（正文受隐私设置限制未读取）。\n"
+          },
+          "result": "{\n  \"id\": \"cca4f521-d007-4e66-8d34-f6199ed6893d\",\n  \"title\": \"考试周前两周复习计划（2026 秋季学期）\"\n}"
+        }
+      ],
+      "posted": [
+        {
+          "content": "考试周快到了。要我按各门课的考试时间帮你排一份复习计划吗？",
+          "cards": [],
+          "actions": [
+            "好，帮我做",
+            "先不用"
+          ]
+        },
+        {
+          "content": "「考试周复习计划」整理好了，放在资源库里了。",
+          "cards": [
+            "resource:考试周前两周复习计划（2026 秋季学期）"
+          ],
+          "actions": []
+        }
+      ],
+      "resource": {
+        "title": "考试周前两周复习计划（2026 秋季学期）",
+        "text": "# 考试周前两周复习计划（2026 秋季学期）\n\n> 生成日期：2026-11-08（第 10 周，pre_exam 阶段）\n> 依据资料：eLearning 课程公告、课程总表 assessments（考试时间）、eLearning 作业列表与 DDL、资源库《数据结构-期中复习讲义》《数据结构期中复习题》。\n\n## 一、考试安排（来自课程总表 assessments，均为北京时间）\n\n| 课程 | 考试类型 | 时间 |\n|---|---|---|\n| 数据结构 | 期中 | 11-24（周二）14:00 |\n| 数学分析 III | 期末 | 12-25（周五）08:30 |\n| 大学物理 B | 期末 | 12-27（周日）08:30 |\n| 线性代数 | 期末 | 12-29（周二）08:30 |\n| 中国近现代史纲要 | 期末 | 12-31（周四）08:30 |\n| 学术英语写作 | 暂无已登记考试 | — |\n\n**关键节点：数据结构期中 11-24 14:00 是最近的一场考试**，因此「考试周前两周」的核心压力点应放在 11-10 ~ 11-23 这段；其余四门期末集中在 12-25 ~ 12-31，属于期中之后的第二轮冲刺。\n\n## 二、已知考试范围\n\n- **数据结构期中**：第 1–6 章（绪论、线性表、栈与队列、串、数组与广义表、树与二叉树）。重点题型：复杂度分析、链表指针操作、循环队列判空判满、二叉树遍历序列还原、BST 插入删除。来源：eLearning 公告《期中考试范围说明》+ 资源库《数据结构-期中复习讲义》。\n- 其余课程：**未查到明确的考试范围说明**（数分、大物、线代、近现代史、学术英语均无范围公告）。需向任课老师/助教确认，本计划中这些科目的复习内容按「作业与课堂内容覆盖的章节」安排，不臆测范围。\n\n## 三、待办作业（DDL，未提交）\n\n| 截止 | 作业 | 课程 |\n|---|---|---|\n| 11-10 12:00 | 大学物理 习题 8 | 大学物理 B |\n| 11-10 23:59 | Reading Response 4 | 学术英语写作 |\n| 11-11 18:00 | 数分作业 6 | 数学分析 III |\n| 11-12 23:59 | Essay Draft 2 | 学术英语写作 |\n| 11-13 23:59 | 线代 HW 7 | 线性代数 |\n| 11-17 12:00 | 大学物理 习题 9 | 大学物理 B |\n| 11-17 23:59 | Lab 6：二叉树 | 数据结构 |\n| 11-20 23:59 | 读书报告 | 中国近现代史纲要 |\n\n## 四、第一周（11-09 ~ 11-15）：清作业 + 启动数据结构期中\n\n原则：先保证本周 DDL 不欠账，同时每天固定 1 小时数据结构。\n\n- **11-09（周一）**：大物习题 8（次日中午截止）→ 数分作业 6 起步；晚 1h 数据结构第 1–2 章（复杂度、线性表）。\n- **11-10（周二）**：交大物习题 8；完成 Reading Response 4；数据结构第 2 章链表指针操作练习。\n- **11-11（周三）**：交数分作业 6；数据结构第 3 章（栈与队列，循环队列判空判满）。\n- **11-12（周四）**：交 Essay Draft 2；数据结构第 4 章（串、KMP next 数组）。\n- **11-13（周五）**：交线代 HW 7；数据结构第 5 章（数组与广义表、地址计算）。\n- **11-14（周六）**：数据结构第 6 章（二叉树性质、遍历、BST）大块时间 2–3h；大物习题 9 起步。\n- **11-15（周日）**：做《数据结构期中复习题（10 道）》第一遍，标记错题；大物习题 9 收尾。\n\n## 五、第二周（11-16 ~ 11-23）：数据结构期中冲刺 + 期末预热\n\n- **11-16（周一）**：交大物习题 9；数据结构错题回看（第 1–3 章）。\n- **11-17（周二）**：交 Lab 6：二叉树（与期中第 6 章直接相关，边做边复习）；数据结构第 4–5 章错题。\n- **11-18（周三）**：数据结构第 6 章专题：遍历序列还原 + BST 插入删除手写代码。\n- **11-19（周四）**：读书报告（11-20 截止）主体完成；数据结构复习题第二遍。\n- **11-20（周五）**：交读书报告；数据结构全真模拟一套（限时）。\n- **11-21（周六）**：模拟卷讲评 + 讲义「考前提醒」逐条自查；开始数分期末第一轮（作业 5、6 错题重做）。\n- **11-22（周日）**：数据结构轻量回顾（只看错题与公式），保证睡眠；数分期末第一轮继续。\n- **11-23（周一）**：考前最后梳理：复杂度排序、循环队列判满条件、n0=n2+1、卡特兰数、KMP 复杂度；早睡。\n\n## 六、期中之后的期末轮（11-25 ~ 12-24，概要）\n\n四门期末集中在 12-25 ~ 12-31，建议 11-25 起按「先难后易」推进：\n1. 11-25 ~ 12-06：数学分析 III 第一轮（按作业 5/6 覆盖章节 + 课堂笔记）。\n2. 12-07 ~ 12-14：大学物理 B 第一轮（习题 8/9 题型归纳）。\n3. 12-15 ~ 12-20：线性代数第一轮（HW 6/7 题型）。\n4. 12-21 ~ 12-24：中国近现代史纲要（读书报告素材可复用）+ 四门课错题总回顾。\n5. 学术英语写作无登记考试，按课程要求完成写作任务即可，暂不排复习块。\n\n## 七、信息缺口（需你确认）\n\n1. **教务处《关于 2026 秋季学期期中考试安排的通知》正文未能读取**：当前会话使用云端模型，邮件正文读取受隐私设置限制（仅能看到摘要）。摘要提示「请于 11 月 10 日前登录系统确认考试时间」，请自行登录教务系统核对，或到「设置 → 模型 → 隐私任务的云端授权」勾选授权并保存（或改用本地模型对话）后我再读取正文。\n2. 数分、大物、线代、近现代史、学术英语**均未查到考试范围公告**，需向任课老师/助教确认范围与题型。\n3. 学术英语写作是否安排考试未知。\n4. 待回复邮件 2 封（王老师组会时间调整、小李 Lab 5 分工），与本计划无直接冲突，但建议尽快回复。\n\n## 八、依据资料清单\n\n- eLearning 公告《期中考试范围说明》（11-07）：数据结构期中范围第 1–6 章，考试时间 11-24 14:00。\n- eLearning 公告《本周四习题课改到 H3208》（大物）。\n- 课程总表 assessments：数分 12-25、大物 12-27、线代 12-29、近现代史 12-31 期末；数据结构期中 11-24、期末 12-23。\n- eLearning 作业列表与 DDL（8 项未提交，见第三节）。\n- 资源库《数据结构-期中复习讲义》（第 1–6 章知识点与考前提醒）、《数据结构期中复习题（10 道，第 1–6 章）》。\n- 邮件摘要：教务处期中考试安排通知（正文受隐私设置限制未读取）。\n"
+      },
+      "note": "询问：考试周快到了。要我按各门课的考试时间帮你排一份复习计划吗？"
+    }
+  ],
+  "limitations": [
+    "Fictitious demo data in an in-memory database following docs/DEMO.md; no application settings, account data or real mail were read; the API key is not stored.",
+    "Sensitive tasks (mail classification, assessment, memory extraction) stay on rules because no local model is configured and allowSensitiveToCloud is false, matching a cloud-only demo setup.",
+    "Automatic checks verify tool calls, persistence and visible messages; wording quality still needs human review of replies and resources.",
+    "Not a rendered Electron UI check; one run per shot, model output varies between runs."
+  ]
+}
