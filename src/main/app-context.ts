@@ -23,7 +23,10 @@ import { demoFeeds, demoFetchText, demoNoticeSources } from './demo/demo-activit
 import { enabledNoticeSources, syncNotices } from './notices/sync';
 import { importExams, importTimetable, type CampusReader } from './sources/timetable-sync';
 import { readCardBalance, readLibrary, type LibraryStatus } from './sources/campus-life';
-import { demoCardBalance, demoExams, demoLibrary } from './demo/demo-campus';
+import { demoCardBalance, demoExams, demoLibrary, demoElectricity, demoTreehole, demoLiterature } from './demo/demo-campus';
+import type { LibrarySearch, LiteratureQuery } from './sources/library-search';
+import type { TreeholeApi, TreeholeClient } from './sources/treehole';
+import { readElectricity, type DormElectricity } from './sources/dorm';
 
 /**
  * 应用的组装根（参考 dsh-superagent 的 Runtime）：创建并连接所有部件，不包含业务规则。
@@ -42,6 +45,10 @@ export interface AppDeps {
   campusReader?: () => CampusReader | null;
   /** 公开接口的 POST 请求（图书馆人数） */
   postPublic?: (url: string) => Promise<{ status: number; text: string }>;
+  /** 图书馆文献检索（公开接口） */
+  library?: LibrarySearch;
+  /** 树洞与旦克（树洞账号令牌 + 直连 / WebVPN） */
+  treehole?: () => TreeholeClient | null;
 }
 
 export class AppContext {
@@ -105,6 +112,8 @@ export class AppContext {
     await this.hub.connect('fudan-courses', createCoursesServer(courses));
     await this.hub.connect('fudaner-local', createLocalServer(repo, this.deps.channels, 'chat', {
       importArticle: (url) => this.importArticle(url), library: () => this.library(), cardBalance: () => this.cardBalance(),
+      literature: { search: (q) => this.searchLiterature(q), get: (id) => this.getLiterature(id) },
+      treehole: () => this.treehole(), electricity: () => this.electricity(),
     }));
 
     await this.executorHub.connect('fudan-elearning', createElearningServer(elearningData));
@@ -230,6 +239,35 @@ export class AppContext {
     return readLibrary(this.deps.postPublic);
   }
 
+  /** 图书馆文献检索（演示模式下返回虚构文献） */
+  async searchLiterature(q: LiteratureQuery) {
+    if (this.repo.getSettings().demoMode) return demoLiterature(q.query);
+    if (!this.deps.library) throw new Error('当前环境不能访问图书馆检索。');
+    return this.deps.library.search(q);
+  }
+
+  getLiterature(recordId: string) {
+    if (this.repo.getSettings().demoMode) return demoLiterature('').records.find((r) => r.recordId === recordId);
+    return this.deps.library?.document(recordId);
+  }
+
+  /** 树洞与旦克：演示模式下用虚构内容；否则需要树洞账号 */
+  treehole(): TreeholeApi {
+    if (this.repo.getSettings().demoMode) return demoTreehole();
+    const client = this.deps.treehole?.();
+    if (!client) throw new Error('当前环境不能访问树洞。');
+    return client;
+  }
+
+  /** 宿舍电量（10 分钟内重复查询用缓存） */
+  async electricity(): Promise<DormElectricity & { at: string }> {
+    const cached = this.repo.getKv<(DormElectricity & { at: string }) | null>('dorm_electricity', null);
+    if (cached && Date.now() - Date.parse(cached.at) < 10 * 60_000) return cached;
+    const value = { ...(this.repo.getSettings().demoMode ? demoElectricity() : await readElectricity(this.reader())), at: new Date().toISOString() };
+    this.repo.setKv('dorm_electricity', value);
+    return value;
+  }
+
   /** 校园卡余额（10 分钟内重复查询用缓存） */
   async cardBalance(): Promise<{ balance: number; at: string }> {
     const cached = this.repo.getKv<{ balance: number; at: string } | null>('card_balance', null);
@@ -260,6 +298,12 @@ export class AppContext {
       const { balance } = await this.cardBalance();
       if (balance < 30) {
         this.repo.addTrigger({ source: 'clock', kind: 'card_low', sourceRef: localDate(now), threadKey: 'campus-card', payload: { balance, title: `校园卡余额 ¥${balance.toFixed(2)}` } });
+      }
+    });
+    await attempt('electricity', async () => {
+      const e = await this.electricity();
+      if (e.remainingKwh < 10) {
+        this.repo.addTrigger({ source: 'clock', kind: 'power_low', sourceRef: localDate(now), threadKey: 'dorm-power', payload: { remaining: e.remainingKwh, room: e.room, title: `宿舍电量剩 ${e.remainingKwh} 度` } });
       }
     });
     this.repo.setKv('campus_problems', problems);

@@ -66,7 +66,7 @@ export function ExternalSettings({ onDirty, onBusy }: PanelProps) {
       <section className={styles.section}>
         <h2>扩展服务</h2>
         <p className={styles.hint}>
-          接入复旦同学在 GitHub 上做好的 MCP 服务，旦旦就能在对话里直接用：查树洞和旦克课程评价、检索图书馆文献、看宿舍电量和场馆空闲。这些服务在你的电脑上单独运行，账号由它们自己保存，Fudaner 不经手；只开放查询类工具，预约、发帖这类会修改数据的工具不会开放。它们是社区项目，不是 Fudaner 或学校官方的服务。
+          接入复旦同学在 GitHub 上做好的其他 MCP 服务，旦旦就能在对话里直接用。树洞与旦克、图书馆文献检索、宿舍电量已经内置，不用在这里安装。这些服务在你的电脑上单独运行，账号由它们自己保存，Fudaner 不经手；只开放查询类工具，预约、发帖这类会修改数据的工具不会开放。它们是社区项目，不是 Fudaner 或学校官方的服务。
         </p>
       </section>
 

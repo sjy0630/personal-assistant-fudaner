@@ -71,6 +71,12 @@ export interface FudanerApi {
     importExams(): Promise<{ exams: number; added: number }>;
     library(): Promise<{ name: string; inside: number | null; remaining: number | null; openTime?: string }[]>;
     cardBalance(): Promise<{ balance: number; at: string }>;
+    electricity(): Promise<{ room: string; remainingKwh: number; usedKwh?: number; updatedAt?: string; at: string }>;
+  };
+  treehole: {
+    status(): Promise<{ loggedIn: boolean; demo: boolean }>;
+    login(email: string, password: string): Promise<void>;
+    logout(): Promise<void>;
   };
   external: {
     /** 预设服务的说明（名称、能做什么、准备步骤、仓库、协议） */

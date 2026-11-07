@@ -59,6 +59,28 @@ export class AuthManager implements FudanAuth {
     }
   }
 
+  /**
+   * 不做登录判断的原始请求（同一个登录会话，带 Cookie）。树洞、旦克走 WebVPN 时用。
+   * timeoutMs 用于直连探测，连不上时尽快放弃。
+   */
+  async rawFetch(url: string, init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number } = {}): Promise<{ status: number; url: string; contentType: string; text: string }> {
+    const res = await this.ses.fetch(url, {
+      method: init.method ?? 'GET', headers: init.headers, body: init.body, credentials: 'include', redirect: 'follow',
+      signal: AbortSignal.timeout(init.timeoutMs ?? 20_000),
+    } as RequestInit);
+    return { status: res.status, url: res.url || url, contentType: res.headers.get('content-type') ?? '', text: await res.text() };
+  }
+
+  /** 建立 WebVPN 会话：访问它的统一身份认证登录入口，复旦账号已登录时会自动完成 */
+  async ensureWebvpn(): Promise<void> {
+    const res = await this.ses.fetch('https://webvpn.fudan.edu.cn/login?cas_login=true', { credentials: 'include', redirect: 'follow', signal: AbortSignal.timeout(20_000) } as RequestInit);
+    await res.body?.cancel().catch(() => undefined);
+    if (isUisLoginUrl(res.url)) {
+      this.setStatus('elearning', 'need_login');
+      throw new NeedLoginError('elearning', '复旦账号登录已过期，WebVPN 连不上，请重新登录复旦账号');
+    }
+  }
+
   /** 用登录会话读一个页面的文字（教务系统等）。被带到登录页时抛出 NeedLoginError */
   async getText(platform: FudanPlatform, url: string, init?: RequestInit): Promise<{ url: string; status: number; text: string }> {
     const res = await this.fetch(platform, url, init);

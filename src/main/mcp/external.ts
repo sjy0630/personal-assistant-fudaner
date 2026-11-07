@@ -3,6 +3,7 @@ import type { ExternalMcpConfig, ExternalMcpPreset } from '../../shared/types';
 
 /**
  * 外部 MCP 服务：同学们在 GitHub 上做好的复旦校园服务，Fudaner 作为宿主接进来，旦旦可以直接调用。
+ * 图书馆文献检索、树洞与旦克、宿舍电量已经做成内置功能（不用另外安装），这里只保留还没内置的服务。
  *
  * 安全约束：
  * - 账号密码由各服务自己保存（它们各自的配置脚本、.env 或系统钥匙串），Fudaner 不读取、不保存；
@@ -28,41 +29,9 @@ export interface ExternalPreset {
 
 export const EXTERNAL_PRESETS: ExternalPreset[] = [
   {
-    preset: 'fudan-library',
-    name: '复旦图书馆文献检索',
-    summary: '检索复旦图书馆馆藏文献、读取摘要、全文索引检索。不需要复旦账号。',
-    repo: 'https://github.com/LvDAO/fudan-library-mcp',
-    license: 'MIT',
-    setup: ['安装 uv（https://docs.astral.sh/uv/ ，macOS 可用 Homebrew：brew install uv）。第一次启动会自动下载，稍等片刻。'],
-    needsDir: false,
-    allow: ['search_literature', 'search_fulltext', 'get_document', 'get_documents', 'library_status'],
-    launch: () => ({ command: 'uvx', args: ['--from', 'git+https://github.com/LvDAO/fudan-library-mcp.git@v0.1.1', 'fudan-library-mcp'] }),
-  },
-  {
-    preset: 'danta',
-    name: '旦挞：树洞与旦克课程评价',
-    summary: '搜索复旦树洞的帖子和回复、查旦克上的课程评价（给分、难度、老师口碑）。校外通过 WebVPN 访问。',
-    repo: 'https://github.com/likangxian1007/danta-mcp',
-    license: 'GPL-3.0',
-    setup: [
-      '克隆仓库并安装依赖：git clone https://github.com/likangxian1007/danta-mcp.git，然后在目录里 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt',
-      '运行 .venv/bin/python setup_credentials.py 保存账号（复旦 UIS 和树洞账号由它保存在系统钥匙串，Fudaner 不经手）',
-      '在下面填写 danta-mcp 文件夹的完整路径',
-    ],
-    needsDir: true,
-    dirHint: '/Users/你的用户名/danta-mcp',
-    // 只开放检索类工具；build_citation_report 会在本机写文件、打开浏览器，不开放
-    allow: ['search_holes', 'get_hole', 'browse_by_tag', 'list_hot_tags', 'browse_division', 'list_divisions', 'search_courses', 'get_course_reviews', 'check_connection'],
-    launch: (cfg, platform) => {
-      const dir = cfg.dir ?? '';
-      const python = platform === 'win32' ? join(dir, '.venv', 'Scripts', 'python.exe') : join(dir, '.venv', 'bin', 'python');
-      return { command: python, args: ['-E', join(dir, 'run_server.py')], cwd: dir };
-    },
-  },
-  {
     preset: 'ehall',
-    name: 'ehall：宿舍电量与场馆空闲',
-    summary: '查宿舍剩余电量和用电记录、体育场馆和台球室的空闲时段。预约、取消等写操作在 Fudaner 里禁用。',
+    name: 'ehall：体育场馆空闲时段',
+    summary: '查体育场馆和台球室的空闲时段（宿舍电量已内置）。预约、取消等写操作在 Fudaner 里禁用。',
     repo: 'https://github.com/H4S2O8/ehall',
     license: '未声明开源协议（只在本机运行，不随 Fudaner 分发）',
     setup: [
@@ -130,7 +99,7 @@ export function sanitizeExternal(input: unknown): ExternalMcpConfig[] {
   const out: ExternalMcpConfig[] = [];
   for (const raw of input.slice(0, 20)) {
     const c = raw as Partial<ExternalMcpConfig>;
-    const preset = (['fudan-library', 'danta', 'ehall', 'custom'] as const).find((p) => p === c.preset);
+    const preset = (['ehall', 'custom'] as const).find((p) => p === c.preset);
     const id = String(c.id ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 24);
     if (!preset || !id || out.some((x) => x.id === id)) continue;
     const text = (v: unknown, max = 500) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);

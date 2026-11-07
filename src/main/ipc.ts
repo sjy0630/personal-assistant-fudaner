@@ -22,6 +22,7 @@ import { resolveChatReference } from './chat/references';
  */
 export function registerIpc(ctx: AppContext, opts: {
   auth: AuthManager; window: () => BrowserWindow | null;
+  treehole?: { login(email: string, password: string): Promise<void>; logout(): void; loggedIn(): boolean };
   demo: { elearning: DemoElearningClient; mail: DemoMailClient };
   secrets: { setMailPassword(p: string): void; hasMailPassword(): boolean };
   restartScheduler(): void;
@@ -225,6 +226,15 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[], unknown>('campus.importExams', () => campusCall(async () => { const r = await ctx.importExams(); await ctx.engine.tick(); opts.onChanged?.('feed'); return r; }));
   handle<[], unknown>('campus.library', () => campusCall(() => ctx.library()));
   handle<[], unknown>('campus.cardBalance', () => campusCall(() => ctx.cardBalance()));
+  handle<[], unknown>('campus.electricity', () => campusCall(() => ctx.electricity()));
+  // 树洞账号：密码只用来换令牌，不保存
+  handle<[], unknown>('treehole.status', async () => ({ loggedIn: repo.getSettings().demoMode || !!opts.treehole?.loggedIn(), demo: repo.getSettings().demoMode }));
+  handle<[string, string], void>('treehole.login', (email, password) => campusCall(async () => {
+    if (!opts.treehole) throw new Error('请稍后重试：当前环境不能访问树洞。');
+    if (!email?.trim() || !password) throw new Error('请填写树洞账号（邮箱）和密码。');
+    await opts.treehole.login(email.trim(), password);
+  }));
+  handle<[], void>('treehole.logout', async () => opts.treehole?.logout());
 
   // 定时提醒 / 定时任务
   handle<[], unknown>('reminders.list', async () => repo.listReminders());
