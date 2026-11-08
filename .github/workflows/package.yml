@@ -1,0 +1,27 @@
+# 打包安装包：在 Actions 页面手动运行，或修改本文件时自动运行。
+# macOS 安装包只能在 Mac 上打，这里用 GitHub 提供的 Apple 芯片 Mac；产物在运行页面底部的 Artifacts 里下载。
+# 没有苹果开发者证书，用本地（ad-hoc）签名：第一次打开要在「系统设置 → 隐私与安全性」里点「仍要打开」。
+name: Package
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/package.yml']
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx electron-builder --mac --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fudaner-macOS-arm64
+          path: release/*.dmg
+          if-no-files-found: error
