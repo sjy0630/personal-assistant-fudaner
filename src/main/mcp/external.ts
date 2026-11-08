@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { posix, win32 } from 'node:path';
 import type { ExternalMcpConfig, ExternalMcpPreset } from '../../shared/types';
 
 /**
@@ -78,16 +78,22 @@ export function toolAllowed(cfg: ExternalMcpConfig, tool: { name: string; annota
  * 桌面应用从 Dock / 开始菜单启动时拿不到终端里的 PATH，
  * 补上 uv、Homebrew、pipx 等常见的安装位置。
  */
-export function childEnv(base: NodeJS.ProcessEnv = process.env, home = base.HOME ?? base.USERPROFILE ?? ''): Record<string, string> {
-  const sep = process.platform === 'win32' ? ';' : ':';
-  const extra = process.platform === 'win32'
+export function childEnv(base: NodeJS.ProcessEnv = process.env, home?: string, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  const windows = platform === 'win32';
+  home ??= windows ? base.USERPROFILE ?? base.HOME ?? '' : base.HOME ?? base.USERPROFILE ?? '';
+  const { join } = windows ? win32 : posix;
+  const sep = windows ? ';' : ':';
+  const extra = windows
     ? [join(home, '.local', 'bin'), join(home, '.cargo', 'bin')]
     : [join(home, '.local', 'bin'), join(home, '.cargo', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
-  const path = [...(base.PATH ?? '').split(sep).filter(Boolean), ...extra].filter((p, i, a) => a.indexOf(p) === i).join(sep);
+  const pathKey = windows ? Object.keys(base).find((key) => key.toUpperCase() === 'PATH') : 'PATH';
+  const path = [...(base[pathKey ?? 'PATH'] ?? '').split(sep).filter(Boolean), ...extra].filter((p, i, a) => a.indexOf(p) === i).join(sep);
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) if (typeof v === 'string') env[k] = v;
   // 不把模型 API Key 之类的应用内部变量传给外部程序
-  for (const k of Object.keys(env)) if (/^(FUDANER_|ELECTRON_|OPENAI_|ANTHROPIC_|DEEPSEEK_)/.test(k)) delete env[k];
+  for (const k of Object.keys(env)) {
+    if (/^(FUDANER_|ELECTRON_|OPENAI_|ANTHROPIC_|DEEPSEEK_)/i.test(k) || (windows && k.toUpperCase() === 'PATH')) delete env[k];
+  }
   env.PATH = path;
   env.PYTHONIOENCODING = 'utf-8';
   return env;

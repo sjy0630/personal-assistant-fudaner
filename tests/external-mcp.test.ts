@@ -57,13 +57,23 @@ describe('预设', () => {
     expect(EXTERNAL_PRESETS.every((p) => p.repo.startsWith('https://github.com/'))).toBe(true);
   });
 
-  it('子进程环境：补上常见安装路径，不传应用内部的密钥变量', () => {
-    const env = childEnv({ PATH: '/usr/bin', HOME: '/Users/me', OPENAI_API_KEY: 'sk-x', FUDANER_DEMO: '1', LANG: 'zh_CN.UTF-8' }, '/Users/me');
-    expect(env.PATH.split(':')).toContain('/Users/me/.local/bin');
-    expect(env.PATH.split(':')).toContain('/opt/homebrew/bin');
+  it('macOS 子进程环境保留已有路径、补充工具路径，不传应用密钥', () => {
+    const env = childEnv({ PATH: '/usr/bin', HOME: '/Users/me', OPENAI_API_KEY: 'sk-x', FUDANER_DEMO: '1', LANG: 'zh_CN.UTF-8' }, '/Users/me', 'darwin');
+    expect(env.PATH.split(':')).toEqual(['/usr/bin', '/Users/me/.local/bin', '/Users/me/.cargo/bin', '/opt/homebrew/bin', '/usr/local/bin', '/bin']);
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.FUDANER_DEMO).toBeUndefined();
     expect(env.LANG).toBe('zh_CN.UTF-8');
+  });
+
+  it('Windows 保留 Path 和盘符、使用分号、去重且只传一份 PATH', () => {
+    const base = { Path: 'C:\\Tools;C:\\Users\\me\\.local\\bin', USERPROFILE: 'C:\\Users\\me', SystemRoot: 'C:\\Windows', openai_api_key: 'secret', DeepSeek_API_KEY: 'secret' };
+    const env = childEnv(base, undefined, 'win32');
+    expect(env.PATH.split(';')).toEqual(['C:\\Tools', 'C:\\Users\\me\\.local\\bin', 'C:\\Users\\me\\.cargo\\bin']);
+    expect(Object.keys(env).filter((key) => key.toUpperCase() === 'PATH')).toEqual(['PATH']);
+    expect(env.SystemRoot).toBe('C:\\Windows');
+    expect(env.openai_api_key).toBeUndefined();
+    expect(env.DeepSeek_API_KEY).toBeUndefined();
+    expect(base.Path).toBe('C:\\Tools;C:\\Users\\me\\.local\\bin');
   });
 
   it('设置页传来的配置只保留认识的字段', () => {
