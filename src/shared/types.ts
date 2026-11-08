@@ -410,3 +410,13 @@ export interface TodayOverview {
 }
 
 export interface SearchHit { type: 'message' | 'feed' | 'goal' | 'task' | 'resource' | 'item' | 'memory'; id: string; title: string; snippet: string }
+export interface SpreadsheetPreview {
+  sheets: {
+    name: string;
+    startRow: number;
+    startColumn: number;
+    rows: { text: string; formula?: string }[][];
+    merges: { startRow: number; startColumn: number; rows: number; columns: number }[];
+    truncated: boolean;
+  }[];
+}

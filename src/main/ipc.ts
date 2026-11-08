@@ -15,6 +15,7 @@ import { parseFile, parseImageBytes, type ParsedFile } from './library/parse';
 import { buildToday } from './today';
 import { isLocalUrl, OpenAiCompatClient, OpenAiEmbedder } from './ai/llm';
 import { resolveChatReference, safeExternalUrl } from './chat/references';
+import { DocumentPreview } from './library/document-preview';
 
 /**
  * 把 FudanerApi（src/shared/ipc.ts）逐个映射到主进程实现。
@@ -174,6 +175,9 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[string, 'todo' | 'done' | 'skipped'], void>('goals.setTaskStatus', async (id, status) => repo.setTaskStatus(id, status));
 
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
+  const documentPreview = new DocumentPreview(repo);
+  handle<Parameters<Api['library']['preview']>, ReturnType<Api['library']['preview']>>('library.preview', (id) => documentPreview.read(id));
+  handle<Parameters<Api['library']['spreadsheet']>, ReturnType<Api['library']['spreadsheet']>>('library.spreadsheet', (id) => documentPreview.spreadsheet(id));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
   handle<Parameters<Api['library']['image']>, ReturnType<Api['library']['image']>>('library.image', (id) => ctx.images.read(id));
   handle<[string], void>('library.remove', async (id) => {

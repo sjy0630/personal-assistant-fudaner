@@ -132,7 +132,7 @@ function cellText(cell: XLSX.CellObject): string {
 type LocatedCell = { address: string; row: number; column: number; text: string };
 
 /** Extract XLSX / BIFF XLS as Markdown with original coordinates, without executing formulae or macros. */
-export function parseSpreadsheet(buffer: Buffer, extension: string): { mime: string; text: string } {
+function readSpreadsheet(buffer: Buffer, extension: string): XLSX.WorkBook {
   const ext = extension.toLowerCase();
   if (ext !== '.xlsx' && ext !== '.xls') throw new Error(`暂不支持的 Excel 文件类型：${extension}（支持 XLSX、XLS）。`);
   if (buffer.length > MAX_FILE_BYTES) throw new Error('Excel 文件过大（超过 25 MB），请拆分工作簿后再导入。');
@@ -155,6 +155,12 @@ export function parseSpreadsheet(buffer: Buffer, extension: string): { mime: str
     throw new Error(/password|encrypt|filepass/i.test(message) ? ENCRYPTED_FILE : INVALID_FILE);
   }
   if (!workbook.SheetNames?.length || !workbook.Sheets) throw new Error(INVALID_FILE);
+  return workbook;
+}
+
+export function parseSpreadsheet(buffer: Buffer, extension: string): { mime: string; text: string } {
+  const ext = extension.toLowerCase();
+  const workbook = readSpreadsheet(buffer, extension);
 
   const parts: string[] = [];
   let textLength = 0;
@@ -206,4 +212,30 @@ export function parseSpreadsheet(buffer: Buffer, extension: string): { mime: str
     mime: ext === '.xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/vnd.ms-excel',
     text: parts.join('\n').trim(),
   };
+}
+
+export function spreadsheetPreview(buffer: Buffer, extension: string): import('../../shared/types').SpreadsheetPreview {
+  const workbook = readSpreadsheet(buffer, extension);
+  return { sheets: workbook.SheetNames.map((name) => {
+    const sheet = workbook.Sheets[name];
+    if (!sheet?.['!ref']) return { name, startRow: 0, startColumn: 0, rows: [], merges: [], truncated: false };
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    const endRow = Math.min(range.e.r, range.s.r + 199);
+    const endColumn = Math.min(range.e.c, range.s.c + 49);
+    const rows = [];
+    for (let r = range.s.r; r <= endRow; r++) {
+      const row = [];
+      for (let c = range.s.c; c <= endColumn; c++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+        row.push({ text: cell ? String(cell.w ?? (cell.v != null ? XLSX.utils.format_cell(cell) : '')) : '', formula: cell?.f });
+      }
+      rows.push(row);
+    }
+    const merges = (sheet['!merges'] ?? []).filter((m) => m.s.r <= endRow && m.e.r >= range.s.r && m.s.c <= endColumn && m.e.c >= range.s.c)
+      .map((m) => ({ startRow: Math.max(range.s.r, m.s.r) - range.s.r, startColumn: Math.max(range.s.c, m.s.c) - range.s.c,
+        rows: Math.min(endRow, m.e.r) - Math.max(range.s.r, m.s.r) + 1,
+        columns: Math.min(endColumn, m.e.c) - Math.max(range.s.c, m.s.c) + 1 }));
+    return { name, startRow: range.s.r, startColumn: range.s.c, rows, merges,
+      truncated: endRow < range.e.r || endColumn < range.e.c };
+  }) };
 }
