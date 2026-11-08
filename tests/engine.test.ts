@@ -113,8 +113,8 @@ describe('注意力预算', () => {
 
     const evals = await engine.evaluatePending(noon);
     const decisions = evals.map((e) => e.decision);
-    // 每条对话消息成本 1.5：前 4 条用完 6 点预算，第 5 条降级为并入早安
-    expect(decisions).toEqual(['chat', 'chat', 'chat', 'chat', 'digest']);
+    // 对话 + 通知的成本是 3：前 2 条用完 6 点预算，之后的降级为并入早安
+    expect(decisions).toEqual(['chat_notify', 'chat_notify', 'digest', 'digest', 'digest']);
     expect(evals[4].reason).toContain('预算不足');
     expect(evals[4].attentionCost).toBeLessThan(1);
     expect(repo.takeDigest().map((d) => d.text).join()).toContain('需要回复的邮件 5');
@@ -199,7 +199,7 @@ describe('观察模式', () => {
 
     const [ev] = await engine.evaluatePending(noon);
     expect(ev.ruleMode).toBe('observe');
-    expect(ev.decision).toBe('chat');
+    expect(ev.decision).toBe('chat_notify');
     expect(ev.attentionCost).toBe(0);
     expect(ev.reason).toContain('观察模式');
     expect(posted).toHaveLength(0);
@@ -270,7 +270,7 @@ describe('写回', () => {
     await engine.evaluatePending(noon);
     expect(evalMessages()).toHaveLength(1);
     expect(repo.listFeed().map((c) => c.title)).toContain('关于下周组会时间调整');
-    expect(budgetOf(noon).spent).toBe(1.5);
+    expect(budgetOf(noon).spent).toBe(3); // 对话 + 系统通知
   });
 
   it('UIS 登录过期：主动提醒，并带「重新登录」按钮', async () => {

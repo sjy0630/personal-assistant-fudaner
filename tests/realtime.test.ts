@@ -32,6 +32,8 @@ async function setup() {
   const ctx = new AppContext({ dbPath: ':memory:', channels, elearning: () => null, mail: () => fake });
   cleanups.push(() => ctx.close());
   ctx.repo.setSettings({ quietHours: { start: '03:00', end: '03:01' } });
+  // 固定为平常周：提醒门槛随学期阶段变化，不固定的话结果取决于跑测试的日期
+  ctx.repo.setKv('phase_override', 'regular');
   await ctx.start();
   return { ctx, fake, notified };
 }
