@@ -46,6 +46,10 @@ export class McpHub {
     let stderr = '';
     transport.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString('utf8')).slice(-2000); });
     const client = new Client({ name: `fudaner-agent→${name}`, version: '0.1.0' });
+    // Windows 的命令查找失败发生在 spawn 之后；connect 最终只抛“连接关闭”。
+    // 保留 SDK 上报的原始 ENOENT，避免依赖本地化的 cmd.exe 错误输出。
+    let commandMissing = false;
+    client.onerror = (error) => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') commandMissing = true; };
     try {
       await client.connect(transport, { timeout: opts.timeoutMs ?? 120_000 });
       const { tools } = await client.listTools(undefined, { timeout: opts.timeoutMs ?? 120_000 });
@@ -58,7 +62,8 @@ export class McpHub {
     } catch (e) {
       await client.close().catch(() => undefined);
       const code = (e as NodeJS.ErrnoException).code;
-      const reason = code === 'ENOENT' ? `找不到命令「${launch.command}」，请确认已经安装，或填写完整路径` : (e as Error).message;
+      const reason = commandMissing || code === 'ENOENT' ? `找不到命令「${launch.command}」，请确认已经安装，或填写完整路径` : (e as Error).message;
+      if (commandMissing || code === 'ENOENT') throw new Error(reason);
       const tail = stderr.trim().split('\n').slice(-3).join(' / ');
       throw new Error(tail ? `${reason}（服务输出：${tail.slice(0, 300)}）` : reason);
     }

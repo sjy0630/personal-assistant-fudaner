@@ -74,7 +74,7 @@ const BASE: Record<Trigger['kind'], Rule> = {
   mail_new: (t, ctx) => {
     const cat = p(t, 'category');
     // 需要回复的邮件：在对话里说，同时弹系统通知（静默时段并入早安消息）
-    if (cat === 'reply') return { value: 0.65, urgency: 0.55, action: 'chat_notify', draft: `${p(t, 'from')} 来信「${p(t, 'subject')}」，需要你回复。`, reason: '需要回复的邮件' };
+    if (cat === 'reply') return { value: 0.7, urgency: 0.55, action: 'chat_notify', draft: `${p(t, 'from')} 来信「${p(t, 'subject')}」，需要你回复。`, reason: '需要回复的邮件' };
     if (t.payload.linkedTitle) return { value: 0.7, urgency: 0.55, action: 'chat', draft: `关于「${p(t, 'linkedTitle')}」：${p(t, 'summary') || p(t, 'subject')}`, reason: `${p(t, 'course') ? `「${p(t, 'course')}」` : ''}课程邮件，涉及你还没交的作业` };
     if (cat === 'course' || cat === 'action') return { value: 0.5, urgency: 0.4, action: 'card', draft: `${p(t, 'subject')}：${p(t, 'summary')}`, reason: cat === 'course' ? '课程相关邮件' : '需要处理的邮件' };
     if (cat === 'notice') {

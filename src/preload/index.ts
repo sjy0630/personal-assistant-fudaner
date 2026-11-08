@@ -23,7 +23,7 @@ const api: FudanerApi & { pathForFile(f: File): string } = {
   today: call('today') as FudanerApi['today'],
   feed: { list: call('feed.list'), dismiss: call('feed.dismiss'), act: call('feed.act'), refresh: call('feed.refresh') } as FudanerApi['feed'],
   goals: { list: call('goals.list'), setTaskStatus: call('goals.setTaskStatus') } as FudanerApi['goals'],
-  library: { list: call('library.list'), get: call('library.get'), image: call('library.image'), upload: call('library.upload'), uploadImage: call('library.uploadImage'), remove: call('library.remove') } as FudanerApi['library'],
+  library: { spreadsheet: call('library.spreadsheet'), preview: call('library.preview'), list: call('library.list'), get: call('library.get'), image: call('library.image'), upload: call('library.upload'), uploadImage: call('library.uploadImage'), remove: call('library.remove') } as FudanerApi['library'],
   search: call('search') as FudanerApi['search'],
   searchDetail: call('search.detail') as FudanerApi['searchDetail'],
   memory: { list: call('memory.list'), add: call('memory.add'), update: call('memory.update'), remove: call('memory.remove') } as FudanerApi['memory'],

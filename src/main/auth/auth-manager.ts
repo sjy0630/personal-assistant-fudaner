@@ -10,7 +10,8 @@ const PARTITION = 'persist:fudan';
  * - 应用不注入脚本、不读取表单、不保存密码；只复用登录后的会话。
  * - 登录成功后，在后台依次「激活」其他平台（访问入口，UIS 自动完成单点登录跳转）。
  *
- * TODO(B)：11/4 实测后确认：登录成功的判定 URL、iCourse 激活入口、校外是否需要 WebVPN。
+ * 登录是否成功以 eLearning 的身份接口核实（已在 macOS 上用真实账号验证）。
+ * iCourse 尚未接入，只保留激活入口；校外访问是否需要 WebVPN 未验证。
  */
 export class AuthManager implements FudanAuth {
   private readonly ses: Session = session.fromPartition(PARTITION);

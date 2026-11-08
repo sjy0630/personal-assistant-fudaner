@@ -3,6 +3,8 @@ import type { CardRef, Resource } from '../../../shared/types';
 import { api, fmtRelative } from '../api';
 import { MarkdownPreview } from '../components/MarkdownPreview';
 import { ResourceImagePreview } from '../components/ResourceImagePreview';
+import { DocumentPreview } from '../components/DocumentPreview';
+import { SpreadsheetView } from '../components/SpreadsheetView';
 import { ATTACHMENT_ACCEPT, ATTACHMENT_FORMATS_LABEL } from '../../../shared/attachment-formats';
 
 const KIND: Record<Resource['kind'], string> = { assistant_output: '旦旦做的', upload: '我上传的', replay_note: '回放笔记', courseware: '课件' };
@@ -18,6 +20,7 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
   const [failures, setFailures] = useState<string[]>([]);
   const [notice, setNotice] = useState('');
   const [source, setSource] = useState(false);
+  const [original, setOriginal] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const deleteDialog = useRef<HTMLDialogElement>(null);
@@ -115,6 +118,9 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'].includes(open?.mime ?? '');
   const canPreview = isMarkdown || isDocument;
+  const isSpreadsheet = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(open?.mime ?? '');
+  const hasOriginalPreview = isSpreadsheet || ['application/pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(open?.mime ?? '');
+  useEffect(() => { setOriginal(true); }, [open?.id]);
   useEffect(() => {
     if (focus && open?.id === focus.id) view.current?.focus({ preventScroll: true });
   }, [focus, open?.id]);
@@ -144,9 +150,14 @@ export function LibraryPage({ quote, focus }: { quote: (r: CardRef) => void; foc
               deleteDialog.current?.showModal();
             }}>删除</button>
           </div>
-          <div className="resource-preview-toolbar"><span className="muted small">{isImage ? '图片预览' : isMarkdown ? 'Markdown 文档' : isDocument ? '文档阅读预览' : '提取的文字内容'}</span>{canPreview && <button className="ghost" aria-pressed={source} onClick={() => setSource(!source)}>{source ? '查看预览' : '查看提取文本'}</button>}</div>
-          {isDocument && <p className="muted small">按提取结构展示，复杂分栏、合并单元格、公式和图片可能无法完整还原。早先上传的文件需重新上传以使用新版解析。</p>}
-          {isImage ? <ResourceImagePreview id={open.id} title={open.title} /> : !open.text.trim() ? <div className="empty">文件已保存，但没有提取到文字。如果是扫描版 PDF，请先识别文字后再上传。</div> : canPreview && !source ? <MarkdownPreview text={open.text} /> : <pre className="doc">{open.text}</pre>}
+          <div className="resource-preview-toolbar"><span className="muted small">{isImage ? '图片预览' : hasOriginalPreview && original ? '原版式预览' : isMarkdown ? 'Markdown 文档' : isDocument ? '文档阅读预览' : '提取的文字内容'}</span>
+            <div className="actions">
+              {hasOriginalPreview && <button aria-pressed={original} onClick={() => setOriginal(!original)}>{original ? '切换文字阅读' : '查看原版式'}</button>}
+              {canPreview && !(hasOriginalPreview && original) && <button className="ghost" aria-pressed={source} onClick={() => setSource(!source)}>{source ? '查看预览' : '查看提取文本'}</button>}
+            </div>
+          </div>
+          {isDocument && !(hasOriginalPreview && original) && <p className="muted small">按提取结构展示，复杂分栏、合并单元格、公式和图片可能无法完整还原。</p>}
+          {hasOriginalPreview && original ? isSpreadsheet ? <SpreadsheetView key={open.id} id={open.id} /> : <DocumentPreview key={open.id} id={open.id} title={open.title} mime={open.mime} /> : isImage ? <ResourceImagePreview id={open.id} title={open.title} /> : !open.text.trim() ? <div className="empty">文件已保存，但没有提取到文字。如果是扫描版 PDF，请先识别文字后再上传。</div> : canPreview && !source ? <MarkdownPreview text={open.text} /> : <pre className="doc">{open.text}</pre>}
         </> : <div className="empty">选择左侧的资源查看内容</div>}
       </div>
     </div>

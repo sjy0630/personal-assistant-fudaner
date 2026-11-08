@@ -81,7 +81,7 @@ function showWindow() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1240, height: 820, minWidth: 900, minHeight: 600, title: 'Fudaner', show: false, autoHideMenuBar: true, icon: iconPath,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false },
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false, plugins: true },
   });
   win.on('ready-to-show', () => win?.show());
   // 排查白屏用：界面进程崩溃、页面加载失败、界面里的报错，都打印到运行 npm run dev 的终端

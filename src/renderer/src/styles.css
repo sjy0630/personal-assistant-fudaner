@@ -316,3 +316,12 @@ h3 { font-size: 14px; margin: 12px 0 6px; }
 /* 动态页：整理按钮和联网开关 */
 .feed-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 14px; }
 .feed-tools label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.document-original-preview { display: block; width: 100%; height: max(560px, 68vh); border: 1px solid var(--border); border-radius: 8px; margin-top: 12px; background: #525659; }
+.spreadsheet-preview { margin-top: 16px; }
+.spreadsheet-scroll { overflow: auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 8px; }
+.spreadsheet-scroll table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+.spreadsheet-scroll th, .spreadsheet-scroll td { min-width: 110px; max-width: 360px; padding: 8px 12px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.spreadsheet-scroll th { background: var(--bg); color: var(--muted); font-size: 12px; }
+.spreadsheet-scroll thead th { position: sticky; top: 0; z-index: 2; }
+.spreadsheet-scroll tbody th { position: sticky; left: 0; z-index: 1; min-width: 44px; }
+.spreadsheet-scroll td { background: var(--panel); }
