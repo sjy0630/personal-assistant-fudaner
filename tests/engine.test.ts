@@ -113,8 +113,8 @@ describe('注意力预算', () => {
 
     const evals = await engine.evaluatePending(noon);
     const decisions = evals.map((e) => e.decision);
-    // 每条对话消息成本 1.5：前 4 条用完 6 点预算，第 5 条降级为并入早安
-    expect(decisions).toEqual(['chat', 'chat', 'chat', 'chat', 'digest']);
+    // 回复邮件带通知，每条成本 3：前 2 条用完 6 点预算，其余攒到早安。
+    expect(decisions).toEqual(['chat_notify', 'chat_notify', 'digest', 'digest', 'digest']);
     expect(evals[4].reason).toContain('预算不足');
     expect(evals[4].attentionCost).toBeLessThan(1);
     expect(repo.takeDigest().map((d) => d.text).join()).toContain('需要回复的邮件 5');
@@ -199,7 +199,7 @@ describe('观察模式', () => {
 
     const [ev] = await engine.evaluatePending(noon);
     expect(ev.ruleMode).toBe('observe');
-    expect(ev.decision).toBe('chat');
+    expect(ev.decision).toBe('chat_notify');
     expect(ev.attentionCost).toBe(0);
     expect(ev.reason).toContain('观察模式');
     expect(posted).toHaveLength(0);
@@ -264,13 +264,14 @@ describe('可验证的闭环', () => {
 
 describe('写回', () => {
   it('来自平台的重要事件进对话的同时也留在动态里，且不额外占用预算', async () => {
-    const { repo, engine, evalMessages, budgetOf } = setup();
+    const { repo, engine, evalMessages, budgetOf, notified } = setup();
     const noon = at('2026-11-10T12:00:00');
     addReplyMail(repo, 'm1', '关于下周组会时间调整', noon);
     await engine.evaluatePending(noon);
     expect(evalMessages()).toHaveLength(1);
     expect(repo.listFeed().map((c) => c.title)).toContain('关于下周组会时间调整');
-    expect(budgetOf(noon).spent).toBe(1.5);
+    expect(notified).toHaveLength(1);
+    expect(budgetOf(noon).spent).toBe(3);
   });
 
   it('UIS 登录过期：主动提醒，并带「重新登录」按钮', async () => {
