@@ -23,6 +23,12 @@ it('网格预览对巨大稀疏范围显示裁剪提示', () => {
   expect(result.sheets[0].truncated).toBe(true);
   expect(result.sheets[0].rows).toHaveLength(200);
   expect(result.sheets[0].rows[0]).toHaveLength(50);
+  const later = spreadsheetPreview(workbookBuffer('xlsx', [['稀疏', sheet]]), '.xlsx', 800, 650);
+  expect(later.sheets[0].startRow).toBe(800);
+  expect(later.sheets[0].startColumn).toBe(650);
+  const last = spreadsheetPreview(workbookBuffer('xlsx', [['稀疏', sheet]]), '.xlsx', 800, 700);
+  expect(last.sheets[0].rows[199][1].text).toBe('末尾');
+  expect(last.sheets[0].truncated).toBe(false);
 });
 
 function workbookBuffer(bookType: 'xlsx' | 'xls', sheets: Array<[string, XLSX.WorkSheet]>, compression = false): Buffer {

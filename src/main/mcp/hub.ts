@@ -58,7 +58,8 @@ export class McpHub {
     } catch (e) {
       await client.close().catch(() => undefined);
       const code = (e as NodeJS.ErrnoException).code;
-      const reason = code === 'ENOENT' ? `找不到命令「${launch.command}」，请确认已经安装，或填写完整路径` : (e as Error).message;
+      const missingCommand = code === 'ENOENT' || (process.platform === 'win32' && stderr.includes(launch.command) && /is not recognized as an internal or external command|不是内部或外部命令/i.test(stderr));
+      const reason = missingCommand ? `找不到命令「${launch.command}」，请确认已经安装，或填写完整路径` : (e as Error).message;
       const tail = stderr.trim().split('\n').slice(-3).join(' / ');
       throw new Error(tail ? `${reason}（服务输出：${tail.slice(0, 300)}）` : reason);
     }

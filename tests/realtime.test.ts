@@ -32,6 +32,8 @@ async function setup() {
   const ctx = new AppContext({ dbPath: ':memory:', channels, elearning: () => null, mail: () => fake });
   cleanups.push(() => ctx.close());
   ctx.repo.setSettings({ quietHours: { start: '03:00', end: '03:01' } });
+  // 固定允许该邮件触发通知的学期阶段，避免测试随真实校历变化而降级为对话提醒。
+  ctx.repo.setKv('phase_override', 'midterm');
   await ctx.start();
   return { ctx, fake, notified };
 }

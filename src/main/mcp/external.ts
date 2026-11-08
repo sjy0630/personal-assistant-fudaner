@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { posix, win32 } from 'node:path';
 import type { ExternalMcpConfig, ExternalMcpPreset } from '../../shared/types';
 
 /**
@@ -78,9 +78,11 @@ export function toolAllowed(cfg: ExternalMcpConfig, tool: { name: string; annota
  * 桌面应用从 Dock / 开始菜单启动时拿不到终端里的 PATH，
  * 补上 uv、Homebrew、pipx 等常见的安装位置。
  */
-export function childEnv(base: NodeJS.ProcessEnv = process.env, home = base.HOME ?? base.USERPROFILE ?? ''): Record<string, string> {
-  const sep = process.platform === 'win32' ? ';' : ':';
-  const extra = process.platform === 'win32'
+export function childEnv(base: NodeJS.ProcessEnv = process.env, home = base.HOME ?? base.USERPROFILE ?? '', platform: NodeJS.Platform = process.platform): Record<string, string> {
+  const windows = platform === 'win32';
+  const sep = windows ? ';' : ':';
+  const { join } = windows ? win32 : posix;
+  const extra = windows
     ? [join(home, '.local', 'bin'), join(home, '.cargo', 'bin')]
     : [join(home, '.local', 'bin'), join(home, '.cargo', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
   const path = [...(base.PATH ?? '').split(sep).filter(Boolean), ...extra].filter((p, i, a) => a.indexOf(p) === i).join(sep);

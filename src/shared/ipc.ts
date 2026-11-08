@@ -35,7 +35,7 @@ export interface FudanerApi {
   };
   library: {
     preview(id: string): Promise<Uint8Array>;
-    spreadsheet(id: string): Promise<import('./types').SpreadsheetPreview>;
+    spreadsheet(id: string, rowOffset?: number, columnOffset?: number): Promise<import('./types').SpreadsheetPreview>;
     list(courseId?: string): Promise<Resource[]>;
     get(id: string): Promise<Resource | null>;
     image(id: string): Promise<import('./types').ResourceImage | null>;

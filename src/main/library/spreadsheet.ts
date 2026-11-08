@@ -214,12 +214,17 @@ export function parseSpreadsheet(buffer: Buffer, extension: string): { mime: str
   };
 }
 
-export function spreadsheetPreview(buffer: Buffer, extension: string): import('../../shared/types').SpreadsheetPreview {
+export function spreadsheetPreview(buffer: Buffer, extension: string, rowOffset = 0, columnOffset = 0): import('../../shared/types').SpreadsheetPreview {
+  if (!Number.isInteger(rowOffset) || !Number.isInteger(columnOffset) || rowOffset < 0 || columnOffset < 0 || rowOffset > 1_048_575 || columnOffset > 16_383) throw new Error('工作表预览范围无效。');
   const workbook = readSpreadsheet(buffer, extension);
   return { sheets: workbook.SheetNames.map((name) => {
     const sheet = workbook.Sheets[name];
     if (!sheet?.['!ref']) return { name, startRow: 0, startColumn: 0, rows: [], merges: [], truncated: false };
     const range = XLSX.utils.decode_range(sheet['!ref']);
+    const totalRows = range.e.r - range.s.r + 1;
+    const totalColumns = range.e.c - range.s.c + 1;
+    range.s.r = Math.min(range.e.r, range.s.r + rowOffset);
+    range.s.c = Math.min(range.e.c, range.s.c + columnOffset);
     const endRow = Math.min(range.e.r, range.s.r + 199);
     const endColumn = Math.min(range.e.c, range.s.c + 49);
     const rows = [];
@@ -235,7 +240,7 @@ export function spreadsheetPreview(buffer: Buffer, extension: string): import('.
       .map((m) => ({ startRow: Math.max(range.s.r, m.s.r) - range.s.r, startColumn: Math.max(range.s.c, m.s.c) - range.s.c,
         rows: Math.min(endRow, m.e.r) - Math.max(range.s.r, m.s.r) + 1,
         columns: Math.min(endColumn, m.e.c) - Math.max(range.s.c, m.s.c) + 1 }));
-    return { name, startRow: range.s.r, startColumn: range.s.c, rows, merges,
+    return { name, startRow: range.s.r, startColumn: range.s.c, rows, merges, totalRows, totalColumns,
       truncated: endRow < range.e.r || endColumn < range.e.c };
   }) };
 }

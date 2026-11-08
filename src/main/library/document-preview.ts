@@ -8,7 +8,7 @@ const supported = new Set(['application/pdf', 'application/vnd.openxmlformats-of
 export class DocumentPreview {
   constructor(private readonly repo: Repo) {}
 
-  async spreadsheet(id: string) {
+  async spreadsheet(id: string, rowOffset = 0, columnOffset = 0) {
     const resource = this.repo.getResource(id);
     const path = this.repo.getResourceFilePath(id);
     if (!resource || !path) throw new Error('原文件不可用，请重新上传。');
@@ -17,7 +17,7 @@ export class DocumentPreview {
     const info = await stat(path).catch(() => null);
     if (!info?.isFile()) throw new Error('原文件已移动或删除，请重新上传。');
     if (info.size > 25 * 1024 * 1024) throw new Error('预览文件不能超过 25 MB。');
-    return spreadsheetPreview(await readFile(path), extension);
+    return spreadsheetPreview(await readFile(path), extension, rowOffset, columnOffset);
   }
 
   async read(id: string): Promise<Uint8Array> {

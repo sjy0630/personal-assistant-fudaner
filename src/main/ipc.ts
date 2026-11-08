@@ -177,7 +177,7 @@ export function registerIpc(ctx: AppContext, opts: {
   handle<[string?], unknown>('library.list', async (courseId) => repo.listResources(courseId));
   const documentPreview = new DocumentPreview(repo);
   handle<Parameters<Api['library']['preview']>, ReturnType<Api['library']['preview']>>('library.preview', (id) => documentPreview.read(id));
-  handle<Parameters<Api['library']['spreadsheet']>, ReturnType<Api['library']['spreadsheet']>>('library.spreadsheet', (id) => documentPreview.spreadsheet(id));
+  handle<Parameters<Api['library']['spreadsheet']>, ReturnType<Api['library']['spreadsheet']>>('library.spreadsheet', (id, rowOffset, columnOffset) => documentPreview.spreadsheet(id, rowOffset, columnOffset));
   handle<[string], unknown>('library.get', async (id) => repo.getResource(id) ?? null);
   handle<Parameters<Api['library']['image']>, ReturnType<Api['library']['image']>>('library.image', (id) => ctx.images.read(id));
   handle<[string], void>('library.remove', async (id) => {

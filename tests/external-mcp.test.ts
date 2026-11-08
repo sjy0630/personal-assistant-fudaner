@@ -58,12 +58,19 @@ describe('预设', () => {
   });
 
   it('子进程环境：补上常见安装路径，不传应用内部的密钥变量', () => {
-    const env = childEnv({ PATH: '/usr/bin', HOME: '/Users/me', OPENAI_API_KEY: 'sk-x', FUDANER_DEMO: '1', LANG: 'zh_CN.UTF-8' }, '/Users/me');
+    const env = childEnv({ PATH: '/usr/bin', HOME: '/Users/me', OPENAI_API_KEY: 'sk-x', FUDANER_DEMO: '1', LANG: 'zh_CN.UTF-8' }, '/Users/me', 'darwin');
     expect(env.PATH.split(':')).toContain('/Users/me/.local/bin');
     expect(env.PATH.split(':')).toContain('/opt/homebrew/bin');
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.FUDANER_DEMO).toBeUndefined();
     expect(env.LANG).toBe('zh_CN.UTF-8');
+  });
+
+  it('Windows 环境使用分号和 Windows 安装路径', () => {
+    const env = childEnv({ PATH: 'C:\\Windows;C:\\Tools', USERPROFILE: 'C:\\Users\\me' }, 'C:\\Users\\me', 'win32');
+    expect(env.PATH.split(';')).toContain('C:\\Users\\me\\.local\\bin');
+    expect(env.PATH.split(';')).toContain('C:\\Tools');
+    expect(env.PATH).not.toContain('/opt/homebrew');
   });
 
   it('设置页传来的配置只保留认识的字段', () => {

@@ -418,5 +418,7 @@ export interface SpreadsheetPreview {
     rows: { text: string; formula?: string }[][];
     merges: { startRow: number; startColumn: number; rows: number; columns: number }[];
     truncated: boolean;
+    totalRows?: number;
+    totalColumns?: number;
   }[];
 }
