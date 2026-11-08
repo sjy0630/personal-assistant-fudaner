@@ -7,8 +7,19 @@ on:
   push:
     paths: ['.github/workflows/package.yml']
 jobs:
+  # 先在 Linux 上跑一遍检查，确认 Actions 正常
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
   mac:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
