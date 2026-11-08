@@ -1,6 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseSpreadsheet } from '../src/main/library/spreadsheet';
+import { parseSpreadsheet, spreadsheetPreview } from '../src/main/library/spreadsheet';
+
+it('网格预览保留工作表、合并范围、公式和空单元格', () => {
+  const sheet = XLSX.utils.aoa_to_sheet([['标题', null, null], ['项目', '数量', '合计'], ['任务', 2, 6]]);
+  sheet['!merges'] = [XLSX.utils.decode_range('A1:C1')];
+  sheet.C3.f = 'B3*3';
+  for (const ext of ['xlsx', 'xls'] as const) {
+    const preview = spreadsheetPreview(workbookBuffer(ext, [['任务', sheet], ['空表', {}]]), `.${ext}`);
+    expect(preview.sheets.map((s) => s.name)).toEqual(['任务', '空表']);
+    expect(preview.sheets[0].merges[0]).toEqual({ startRow: 0, startColumn: 0, rows: 1, columns: 3 });
+    expect(preview.sheets[0].rows[2][2].text).toBe('6');
+    if (ext === 'xlsx') expect(preview.sheets[0].rows[2][2].formula).toBe('B3*3');
+    expect(preview.sheets[0].rows[0][1].text).toBe('');
+  }
+});
+
+it('网格预览对巨大稀疏范围显示裁剪提示', () => {
+  const sheet = XLSX.utils.aoa_to_sheet([['开始']]);
+  sheet.ZZ1000 = { t: 's', v: '末尾' }; sheet['!ref'] = 'A1:ZZ1000';
+  const result = spreadsheetPreview(workbookBuffer('xlsx', [['稀疏', sheet]]), '.xlsx');
+  expect(result.sheets[0].truncated).toBe(true);
+  expect(result.sheets[0].rows).toHaveLength(200);
+  expect(result.sheets[0].rows[0]).toHaveLength(50);
+  const later = spreadsheetPreview(workbookBuffer('xlsx', [['稀疏', sheet]]), '.xlsx', 800, 650);
+  expect(later.sheets[0].startRow).toBe(800);
+  expect(later.sheets[0].startColumn).toBe(650);
+  const last = spreadsheetPreview(workbookBuffer('xlsx', [['稀疏', sheet]]), '.xlsx', 800, 700);
+  expect(last.sheets[0].rows[199][1].text).toBe('末尾');
+  expect(last.sheets[0].truncated).toBe(false);
+});
 
 function workbookBuffer(bookType: 'xlsx' | 'xls', sheets: Array<[string, XLSX.WorkSheet]>, compression = false): Buffer {
   const workbook = XLSX.utils.book_new();

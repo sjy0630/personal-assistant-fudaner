@@ -55,7 +55,7 @@ npm run dev
 | 命令 | 作用 |
 |---|---|
 | `npm run dev` / `npm run dev:demo` | 开发模式启动（真实 / 演示） |
-| `npm test` | 运行测试（主动引擎、课程匹配、对话、同步、演示端到端流程等；截至 2026-11-08 共 679 项，全部通过） |
+| `npm test` | 运行测试（主动引擎、课程匹配、对话、同步、演示端到端流程等；截至 2026-11-08 共 692 项，全部通过） |
 | `npm run typecheck` | 类型检查 |
 | `npm run check` | 类型检查 + 测试 + 构建 |
 | `npm run dist` | 打包 Windows 安装包（需在 Windows 上运行） |
