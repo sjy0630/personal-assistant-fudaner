@@ -4,6 +4,7 @@
   "private": true,
   "description": "Fudaner：懂复旦的 AI 私人助理（学生自制，非官方产品）",
   "author": "Fudaner Team",
+  "license": "MIT",
   "main": "out/main/index.js",
   "workspaces": [
     "packages/*"
